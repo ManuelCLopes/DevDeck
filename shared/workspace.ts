@@ -1,0 +1,125 @@
+export type WorkspaceProjectStatus = "healthy" | "warning" | "critical";
+export type WorkspaceReviewStatus = "active" | "stale";
+export type WorkspaceActivityType = "commit" | "checkout" | "repo";
+export type WorkspacePullRequestStatus =
+  | "open"
+  | "draft"
+  | "approved"
+  | "changes_requested"
+  | "review_required";
+export type WorkspacePullRequestReviewState =
+  | "unreviewed"
+  | "reviewed"
+  | "reviewed_by_you";
+
+export interface MonitoredProject {
+  id: string;
+  isRoot?: boolean;
+  localPath?: string;
+  name: string;
+  relativePath?: string;
+  repositoryCount: number | null;
+}
+
+export interface WorkspaceSelection {
+  projects: MonitoredProject[];
+  rootName: string;
+  rootPath?: string;
+}
+
+export interface WorkspaceDiscoveryResult {
+  candidates: MonitoredProject[];
+  discoveredRepositoryCount: number;
+  rootName: string;
+  rootPath?: string;
+}
+
+export interface WorkspaceProject {
+  branchCount: number;
+  contributorCount7d: number;
+  currentBranch: string;
+  defaultBranch: string;
+  description: string;
+  id: string;
+  language: string;
+  lastActivityMessage: string | null;
+  lastUpdated: string;
+  localPath: string;
+  name: string;
+  remoteUrl: string | null;
+  relativePath?: string;
+  status: WorkspaceProjectStatus;
+  team: string;
+}
+
+export interface WorkspaceReviewItem {
+  author: string | null;
+  branch: string;
+  id: string;
+  repo: string;
+  status: WorkspaceReviewStatus;
+  summary: string;
+  updatedAt: string;
+}
+
+export interface WorkspaceActivityItem {
+  author: string | null;
+  description: string;
+  id: string;
+  repo: string;
+  timestamp: string;
+  title: string;
+  type: WorkspaceActivityType;
+}
+
+export interface WorkspacePullRequestItem {
+  author: string | null;
+  authoredByViewer: boolean;
+  baseBranch: string;
+  headBranch: string;
+  id: string;
+  number: number;
+  projectId: string;
+  repo: string;
+  reviewCount: number;
+  reviewState: WorkspacePullRequestReviewState;
+  reviewedByOthersCount: number;
+  reviewedByViewer: boolean;
+  reviewerLogins: string[];
+  status: WorkspacePullRequestStatus;
+  title: string;
+  updatedAt: string;
+  url: string;
+}
+
+export interface WorkspaceGitHubStatus {
+  authenticated: boolean;
+  connectedRepositoryCount: number;
+  message: string | null;
+  viewerLogin: string | null;
+}
+
+export interface WorkspaceInsight {
+  description: string;
+  title: string;
+}
+
+export interface WorkspaceSnapshot {
+  activities: WorkspaceActivityItem[];
+  generatedAt: string;
+  githubStatus: WorkspaceGitHubStatus;
+  insights: {
+    needsAttention: WorkspaceInsight[];
+    recentHighlights: WorkspaceInsight[];
+  };
+  pullRequests: WorkspacePullRequestItem[];
+  projects: WorkspaceProject[];
+  reviews: WorkspaceReviewItem[];
+  summary: {
+    healthyRepositories: number;
+    localBranches: number;
+    openPullRequests: number;
+    repositories: number;
+    staleBranches: number;
+  };
+}

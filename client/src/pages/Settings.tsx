@@ -1,8 +1,11 @@
-import { useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
-import { FolderGit2, Github, CheckCircle2, HardDrive, Shield, Lock, RotateCcw } from "lucide-react";
+import { Github, CheckCircle2, HardDrive, Shield, RotateCcw } from "lucide-react";
+import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { useLocation } from "wouter";
 import { clearCompletedOnboarding } from "@/lib/onboarding-state";
+import { openAddProjectsDialog } from "@/lib/project-import-events";
+import { queryClient } from "@/lib/queryClient";
+import { clearWorkspaceHandle } from "@/lib/workspace-handle";
 import {
   clearWorkspaceSelection,
   getMonitoredDirectoryLabels,
@@ -10,14 +13,18 @@ import {
 } from "@/lib/workspace-selection";
 
 export default function Settings() {
-  const [connected, setConnected] = useState(false);
   const [, setLocation] = useLocation();
+  const { data: snapshot } = useWorkspaceSnapshot();
   const workspaceSelection = getWorkspaceSelection();
   const monitoredDirectories = getMonitoredDirectoryLabels(workspaceSelection);
+  const githubStatus = snapshot?.githubStatus;
+  const connected = githubStatus?.authenticated ?? false;
 
   const handleResetOnboarding = () => {
     clearCompletedOnboarding();
     clearWorkspaceSelection();
+    void clearWorkspaceHandle();
+    void queryClient.removeQueries({ queryKey: ["workspace", "snapshot"] });
     setLocation('/onboarding');
   };
 
@@ -50,10 +57,10 @@ export default function Settings() {
                     <HardDrive className="w-5 h-5 text-foreground/70" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-sm">Monitored Directories</h3>
+                    <h3 className="font-semibold text-sm">Managed Projects</h3>
                     <p className="text-xs text-muted-foreground mt-1">
                       {workspaceSelection
-                        ? `Projects selected from ${workspaceSelection.rootName}.`
+                        ? `Projects selected from ${workspaceSelection.rootPath ?? workspaceSelection.rootName}.`
                         : "Select folders where your git repositories live."}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -68,8 +75,12 @@ export default function Settings() {
                     </div>
                   </div>
                 </div>
-                <button className="px-3 py-1.5 rounded-md text-xs font-medium bg-secondary text-secondary-foreground border border-border hover:bg-black/5 whitespace-nowrap shadow-sm transition-colors">
-                  Add Directory...
+                <button
+                  type="button"
+                  onClick={openAddProjectsDialog}
+                  className="px-3 py-1.5 rounded-md text-xs font-medium bg-secondary text-secondary-foreground border border-border hover:bg-black/5 whitespace-nowrap shadow-sm transition-colors"
+                >
+                  Add Projects...
                 </button>
               </div>
             </div>
@@ -87,19 +98,23 @@ export default function Settings() {
                       GitHub Access
                       {connected && <span className="text-[9px] bg-chart-1/10 text-chart-1 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1 border border-chart-1/20"><CheckCircle2 className="w-3 h-3" /> Connected</span>}
                     </h3>
-                    <p className="text-xs text-muted-foreground mt-1">Authenticate to fetch PR status and issue tracking. Keys are stored safely in macOS Keychain.</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      DevDeck reads GitHub authentication from GitHub CLI. Use <span className="font-mono">gh auth login</span> in your terminal to enable live pull request sync.
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {githubStatus?.message ?? "GitHub status will appear after the first workspace scan."}
+                    </p>
                   </div>
                 </div>
-                <button 
-                  onClick={() => setConnected(!connected)}
+                <div
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all shadow-sm whitespace-nowrap ${
-                    connected 
-                      ? "bg-white text-foreground border border-border hover:bg-secondary/50" 
-                      : "bg-primary text-primary-foreground border border-primary hover:bg-primary/90"
+                    connected
+                      ? "bg-white text-foreground border border-border"
+                      : "bg-secondary text-secondary-foreground border border-border"
                   }`}
                 >
-                  {connected ? "Manage Connection" : "Sign In with GitHub"}
-                </button>
+                  {connected ? "Connected via GitHub CLI" : "Awaiting gh auth login"}
+                </div>
               </div>
             </div>
           </div>

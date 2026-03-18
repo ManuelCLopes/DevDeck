@@ -12,14 +12,23 @@ import Activity from "@/pages/Activity";
 import Projects from "@/pages/Projects";
 import Onboarding from "@/pages/Onboarding";
 import { hasCompletedOnboarding } from "@/lib/onboarding-state";
+import { getDesktopApi } from "@/lib/desktop";
+import {
+  getWorkspaceSelection,
+  hasValidWorkspaceSelection,
+} from "@/lib/workspace-selection";
 
 function Router() {
   const [location, setLocation] = useLocation();
   const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
+    const isDesktopApp = Boolean(getDesktopApi());
+    const hasValidDesktopWorkspace =
+      !isDesktopApp || hasValidWorkspaceSelection(getWorkspaceSelection());
+
     // Only redirect to onboarding if they haven't completed it AND they aren't already there
-    if (!hasCompletedOnboarding() && location !== '/onboarding') {
+    if ((!hasCompletedOnboarding() || !hasValidDesktopWorkspace) && location !== '/onboarding') {
       setLocation('/onboarding');
     }
     

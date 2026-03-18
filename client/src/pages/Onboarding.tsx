@@ -1,7 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { setCompletedOnboarding } from "@/lib/onboarding-state";
-import { setWorkspaceSelection, type MonitoredProject } from "@/lib/workspace-selection";
+import { queryClient } from "@/lib/queryClient";
+import { getDesktopApi } from "@/lib/desktop";
+import {
+  getWorkspaceSelection,
+  mergeWorkspaceSelection,
+  setWorkspaceSelection,
+  type MonitoredProject,
+} from "@/lib/workspace-selection";
+import {
+  setWorkspaceHandle,
+  clearWorkspaceHandle,
+  type AppFileSystemDirectoryHandle,
+  type AppFileSystemHandle,
+} from "@/lib/workspace-handle";
+import WindowControls from "@/components/layout/WindowControls";
 import { 
   FolderGit2, 
   ShieldCheck, 
@@ -19,16 +33,11 @@ type FilePickerFile = File & {
 };
 
 type DirectoryPickerWindow = Window & {
-  showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
+  showDirectoryPicker?: () => Promise<AppFileSystemDirectoryHandle>;
 };
 
-type FileSystemDirectoryHandle = {
-  kind: "directory";
-  name: string;
-  values(): AsyncIterable<FileSystemHandle>;
-};
-
-type FileSystemHandle = FileSystemDirectoryHandle | { kind: "file"; name: string };
+type FileSystemDirectoryHandle = AppFileSystemDirectoryHandle;
+type FileSystemHandle = AppFileSystemHandle;
 type ProjectCandidate = MonitoredProject;
 
 const IGNORED_DIRECTORY_NAMES = new Set([
@@ -59,6 +68,7 @@ function createWorkspaceRootCandidate(rootName: string): ProjectCandidate {
   return {
     id: `${rootName}/.`,
     isRoot: true,
+    localPath: undefined,
     name: rootName,
     repositoryCount: 0,
   };
@@ -163,15 +173,41 @@ function getDefaultSelectedProjectIds(candidates: ProjectCandidate[]) {
 }
 
 export default function Onboarding() {
+  const search = useSearch();
+  const searchParams = new URLSearchParams(search);
+  const isAppendMode = searchParams.get("mode") === "append";
+  const returnTo = searchParams.get("returnTo") ?? "/";
   const [, setLocation] = useLocation();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(isAppendMode ? 3 : 1);
   const [isScanning, setIsScanning] = useState(false);
   const [selectedDir, setSelectedDir] = useState<string | null>(null);
+  const [selectedRootName, setSelectedRootName] = useState<string | null>(null);
+  const [selectedRootPath, setSelectedRootPath] = useState<string | null>(null);
   const [discoveredRepositoryCount, setDiscoveredRepositoryCount] = useState(0);
   const [projectCandidates, setProjectCandidates] = useState<ProjectCandidate[]>([]);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const applyWorkspaceDiscovery = ({
+    candidates,
+    discoveredRepositoryCount,
+    rootName,
+    rootPath,
+  }: {
+    candidates: ProjectCandidate[];
+    discoveredRepositoryCount: number;
+    rootName: string;
+    rootPath?: string;
+  }) => {
+    setSelectionError(null);
+    setSelectedRootName(rootName);
+    setSelectedRootPath(rootPath ?? null);
+    setSelectedDir(rootPath ?? rootName);
+    setDiscoveredRepositoryCount(discoveredRepositoryCount);
+    setProjectCandidates(candidates);
+    setSelectedProjectIds(getDefaultSelectedProjectIds(candidates));
+  };
 
   const handleNext = () => {
     if (step !== 3) {
@@ -201,22 +237,30 @@ export default function Onboarding() {
       projectCandidates.filter((candidate) => selectedProjectIds.includes(candidate.id)) ||
       [];
 
-    setWorkspaceSelection({
-      rootName: selectedDir,
+    const nextSelection = {
+      rootName: selectedRootName ?? selectedDir,
+      rootPath: selectedRootPath ?? selectedDir ?? selectedRootName,
       projects:
         selectedProjects.length > 0
           ? selectedProjects
           : [
               {
-                id: `${selectedDir}/.`,
+                id: `${selectedRootName ?? selectedDir}/.`,
                 isRoot: true,
-                name: selectedDir,
+                localPath: selectedRootPath ?? selectedDir ?? selectedRootName ?? undefined,
+                name: selectedRootName ?? selectedDir,
                 repositoryCount: null,
               },
             ],
-    });
+    };
+    setWorkspaceSelection(
+      isAppendMode
+        ? mergeWorkspaceSelection(getWorkspaceSelection(), nextSelection)
+        : nextSelection,
+    );
+    void queryClient.invalidateQueries({ queryKey: ["workspace", "snapshot"] });
     setCompletedOnboarding();
-    setLocation("/");
+    setLocation(returnTo);
   };
 
   const handleDirectoryFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -229,11 +273,8 @@ export default function Onboarding() {
       return;
     }
 
-    setSelectionError(null);
-    setSelectedDir(rootName);
-    setDiscoveredRepositoryCount(discoveredRepositoryCount);
-    setProjectCandidates(candidates);
-    setSelectedProjectIds(getDefaultSelectedProjectIds(candidates));
+    void clearWorkspaceHandle();
+    applyWorkspaceDiscovery({ candidates, discoveredRepositoryCount, rootName });
     event.target.value = "";
   };
 
@@ -245,16 +286,34 @@ export default function Onboarding() {
     setProjectCandidates([]);
     setSelectedProjectIds([]);
     const directoryWindow = window as DirectoryPickerWindow;
+    const desktopApi = getDesktopApi();
+
+    if (desktopApi) {
+      try {
+        const result = await desktopApi.pickWorkspaceDirectory();
+        if (!result) {
+          return;
+        }
+
+        void clearWorkspaceHandle();
+        applyWorkspaceDiscovery(result);
+        return;
+      } catch {
+        setSelectionError(
+          "DevDeck could not finish scanning that folder. Try a narrower workspace root.",
+        );
+      } finally {
+        setIsScanning(false);
+      }
+    }
 
     if (typeof directoryWindow.showDirectoryPicker === "function") {
       try {
         const directory = await directoryWindow.showDirectoryPicker();
         const { candidates, discoveredRepositoryCount, rootName } =
           await discoverProjectCandidates(directory);
-        setSelectedDir(rootName);
-        setDiscoveredRepositoryCount(discoveredRepositoryCount);
-        setProjectCandidates(candidates);
-        setSelectedProjectIds(getDefaultSelectedProjectIds(candidates));
+        await setWorkspaceHandle(directory);
+        applyWorkspaceDiscovery({ candidates, discoveredRepositoryCount, rootName });
         return;
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -297,6 +356,8 @@ export default function Onboarding() {
   useEffect(() => {
     if (selectedDir && discoveredRepositoryCount === 0 && projectCandidates.length > 1) {
       setSelectedDir(null);
+      setSelectedRootName(null);
+      setSelectedRootPath(null);
       setProjectCandidates([]);
       setSelectedProjectIds([]);
       setSelectionError("Workspace scan data was refreshed. Choose the folder again.");
@@ -313,17 +374,15 @@ export default function Onboarding() {
         
         {/* Titlebar */}
         <div className="h-[40px] titlebar-drag-region flex items-center justify-center relative border-b border-black/5 bg-white/50">
-          <div className="absolute left-4 mac-window-controls flex items-center gap-2">
-            <div className="mac-btn mac-btn-close opacity-50"></div>
-            <div className="mac-btn mac-btn-minimize opacity-50"></div>
-            <div className="mac-btn mac-btn-maximize opacity-50"></div>
+          <div className="absolute left-4">
+            <WindowControls dimmed />
           </div>
           <span className="font-semibold text-xs text-muted-foreground">Welcome to DevDeck</span>
         </div>
 
         {/* Content Area */}
         <div
-          className={`p-10 flex-1 min-h-0 flex flex-col items-center overflow-y-auto ${
+          className={`no-drag p-10 flex-1 min-h-0 flex flex-col items-center overflow-y-auto ${
             isProjectSelectionStep ? "justify-start" : "justify-center"
           }`}
         >
@@ -461,7 +520,7 @@ export default function Onboarding() {
                           </div>
                         </div>
 
-                        <div className="space-y-2 max-h-[min(42vh,320px)] overflow-y-auto pr-2 overscroll-contain">
+                        <div className="no-drag space-y-2 max-h-[min(42vh,320px)] overflow-y-auto pr-2 overscroll-contain">
                           {projectCandidates.map((candidate) => {
                             const isSelected = selectedProjectIds.includes(candidate.id);
                             return (

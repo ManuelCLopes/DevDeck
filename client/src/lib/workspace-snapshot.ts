@@ -1,3 +1,4 @@
+import { getDesktopApi } from "@/lib/desktop";
 import { getWorkspaceSelection, type MonitoredProject } from "@/lib/workspace-selection";
 import {
   ensureWorkspaceHandlePermission,
@@ -6,70 +7,15 @@ import {
   type AppFileSystemFileHandle,
   type AppFileSystemHandle,
 } from "@/lib/workspace-handle";
-
-export type WorkspaceProjectStatus = "healthy" | "warning" | "critical";
-export type WorkspaceReviewStatus = "active" | "stale";
-export type WorkspaceActivityType = "commit" | "checkout" | "repo";
-
-export interface WorkspaceProject {
-  branchCount: number;
-  contributorCount7d: number;
-  currentBranch: string;
-  defaultBranch: string;
-  description: string;
-  id: string;
-  language: string;
-  lastActivityMessage: string | null;
-  lastUpdated: string;
-  localPath: string;
-  name: string;
-  remoteUrl: string | null;
-  relativePath?: string;
-  status: WorkspaceProjectStatus;
-  team: string;
-}
-
-export interface WorkspaceReviewItem {
-  author: string | null;
-  branch: string;
-  id: string;
-  repo: string;
-  status: WorkspaceReviewStatus;
-  summary: string;
-  updatedAt: string;
-}
-
-export interface WorkspaceActivityItem {
-  author: string | null;
-  description: string;
-  id: string;
-  repo: string;
-  timestamp: string;
-  title: string;
-  type: WorkspaceActivityType;
-}
-
-export interface WorkspaceInsight {
-  description: string;
-  title: string;
-}
-
-export interface WorkspaceSnapshot {
-  activities: WorkspaceActivityItem[];
-  generatedAt: string;
-  insights: {
-    needsAttention: WorkspaceInsight[];
-    recentHighlights: WorkspaceInsight[];
-  };
-  projects: WorkspaceProject[];
-  reviews: WorkspaceReviewItem[];
-  summary: {
-    healthyRepositories: number;
-    localBranches: number;
-    repositories: number;
-    staleBranches: number;
-  };
-}
+import type {
+  WorkspaceActivityItem,
+  WorkspaceGitHubStatus,
+  WorkspaceProject,
+  WorkspaceProjectStatus,
+  WorkspacePullRequestItem,
+  WorkspaceReviewItem,
+  WorkspaceSnapshot,
+} from "@shared/workspace";
 
 const CACHED_SNAPSHOT_KEY = "devdeck_workspace_snapshot";
 const DIRECTORY_NAMES_TO_IGNORE = new Set([
@@ -123,6 +69,7 @@ interface RepositoryScanResult {
   activities: WorkspaceActivityItem[];
   branches: string[];
   project: WorkspaceProject;
+  pullRequests: WorkspacePullRequestItem[];
   reviews: WorkspaceReviewItem[];
 }
 
@@ -507,9 +454,11 @@ async function scanRepository(
     language,
     lastActivityMessage: lastHeadEntry?.message ?? null,
     lastUpdated,
-    localPath: monitoredProject.isRoot
-      ? rootName
-      : `${rootName}/${monitoredProject.relativePath ?? monitoredProject.name}`,
+    localPath:
+      monitoredProject.localPath ??
+      (monitoredProject.isRoot
+        ? rootName
+        : `${rootName}/${monitoredProject.relativePath ?? monitoredProject.name}`),
     name: monitoredProject.name,
     remoteUrl,
     relativePath: monitoredProject.relativePath,
@@ -544,6 +493,7 @@ async function scanRepository(
     activities,
     branches,
     project,
+    pullRequests: [],
     reviews: branchReviews.filter(isWorkspaceReviewItem),
   } satisfies RepositoryScanResult;
 }
@@ -577,6 +527,12 @@ function createInsights(projects: WorkspaceProject[]) {
 
 function buildWorkspaceSnapshot(results: RepositoryScanResult[]) {
   const projects = results.map((result) => result.project);
+  const githubStatus: WorkspaceGitHubStatus = {
+    authenticated: false,
+    connectedRepositoryCount: projects.filter((project) => Boolean(project.remoteUrl)).length,
+    message: "Live pull request sync is available in the desktop app through GitHub CLI.",
+    viewerLogin: null,
+  };
   const reviews = results
     .flatMap((result) => result.reviews)
     .sort(
@@ -593,7 +549,9 @@ function buildWorkspaceSnapshot(results: RepositoryScanResult[]) {
   return {
     activities,
     generatedAt: new Date().toISOString(),
+    githubStatus,
     insights: createInsights(projects),
+    pullRequests: [],
     projects,
     reviews,
     summary: {
@@ -603,6 +561,7 @@ function buildWorkspaceSnapshot(results: RepositoryScanResult[]) {
         (total, result) => total + Math.max(result.branches.length, 1),
         0,
       ),
+      openPullRequests: 0,
       repositories: projects.length,
       staleBranches: reviews.filter((review) => review.status === "stale").length,
     },
@@ -614,6 +573,13 @@ export async function loadWorkspaceSnapshot() {
   if (!workspaceSelection) {
     cacheWorkspaceSnapshot(null);
     return null;
+  }
+
+  const desktopApi = getDesktopApi();
+  if (desktopApi) {
+    const snapshot = await desktopApi.loadWorkspaceSnapshot(workspaceSelection);
+    cacheWorkspaceSnapshot(snapshot);
+    return snapshot;
   }
 
   const workspaceHandle = await getWorkspaceHandle();

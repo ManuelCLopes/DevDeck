@@ -1,12 +1,21 @@
 {
-  "name": "rest-express",
+  "name": "devdeck",
   "version": "1.0.0",
   "type": "module",
+  "main": "dist-electron/main.cjs",
   "license": "MIT",
   "scripts": {
-    "dev:client": "vite dev --port 5000",
-    "dev": "NODE_ENV=development tsx server/index.ts",
-    "build": "tsx script/build.ts",
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron:watch\" \"npm:dev:electron\"",
+    "dev:client": "vite dev --host 127.0.0.1 --port 5000",
+    "dev:electron": "wait-on tcp:127.0.0.1:5000 file:dist-electron/main.cjs file:dist-electron/preload.cjs && DEVDECK_RENDERER_URL=http://127.0.0.1:5000 electron dist-electron/main.cjs",
+    "dev:electron:watch": "tsx script/build-electron.ts --watch",
+    "dev:renderer": "npm run dev:client",
+    "dev:web": "NODE_ENV=development tsx server/index.ts",
+    "build": "npm run build:web && npm run build:electron",
+    "build:electron": "tsx script/build-electron.ts",
+    "build:web": "tsx script/build.ts",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "pack:mac": "npm run build && electron-builder --mac dir",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:push": "drizzle-kit push"
@@ -89,15 +98,38 @@
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
+    "concurrently": "^9.2.1",
     "drizzle-kit": "^0.31.4",
+    "electron": "^37.3.1",
+    "electron-builder": "^26.0.12",
     "esbuild": "^0.25.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.20.5",
     "typescript": "5.6.3",
-    "vite": "^7.1.9"
+    "vite": "^7.1.9",
+    "wait-on": "^8.0.5"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
+  },
+  "build": {
+    "appId": "com.manuelclopes.devdeck",
+    "productName": "DevDeck",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "dist/public/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
   }
 }

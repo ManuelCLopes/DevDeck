@@ -1,26 +1,25 @@
 # DevDeck
 
-DevDeck is a local-first desktop-style workspace for keeping an eye on repositories, pull requests, and development activity from one interface.
+DevDeck is a local-first macOS workspace for keeping an eye on repositories, branch review queues, and development activity from one interface.
 
-The current project is a local web app built with React, Vite, Express, and TypeScript. It runs entirely on your machine and does not require any external services for the default experience.
+The app now runs through Electron on top of the existing React and Vite UI, so it can use native folder picking and real filesystem access instead of browser-only mocks.
 
 ## What the app does
 
 - Shows a project overview dashboard for local repositories
-- Surfaces a code review inbox and activity feed
+- Surfaces a branch review inbox and activity feed from local Git data
 - Includes a local-first onboarding flow and preferences screen
-- Runs as a single local server that serves both the UI and API shell
+- Packages as a native macOS app bundle
 
 ## Current state
 
-This repository is currently a product prototype:
+This repository is still a prototype:
 
-- Repository discovery in onboarding is mocked
 - GitHub connection in settings is mocked
-- Main dashboards are powered by local mock data
 - No production API routes are implemented yet
+- The review and activity views are currently derived from local Git metadata only
 
-That means you can run and use the app locally today, but it is not yet scanning real folders or syncing with GitHub.
+That means DevDeck now scans real local repositories, but it does not yet sync hosted pull request state from GitHub.
 
 ## Requirements
 
@@ -35,24 +34,23 @@ npm install
 
 ## Run in development
 
-Start the full app locally:
+Start the Electron app locally:
 
 ```bash
 npm run dev
 ```
 
-Then open:
+This starts:
 
-```text
-http://127.0.0.1:5000
+- the Vite renderer on `http://127.0.0.1:5000`
+- the Electron main and preload bundles
+- the native DevDeck desktop window
+
+If you want the old browser/server shell instead, run:
+
+```bash
+npm run dev:web
 ```
-
-Notes:
-
-- The Express server serves both the frontend and backend shell on port `5000` by default
-- In development, the server binds to `127.0.0.1` by default for local desktop usage
-- You can override the port with `PORT`, for example `PORT=3000 npm run dev`
-- You can override the host with `HOST`, for example `HOST=0.0.0.0 npm run dev`
 
 ## Use the app
 
@@ -60,34 +58,44 @@ When you first open DevDeck:
 
 1. Go through the onboarding flow
 2. Choose the workspace folder that contains your local projects
-3. Select the project folders inside that workspace that DevDeck should monitor
+3. If DevDeck finds multiple repositories, select which ones to monitor
 4. Launch the app into the main dashboard
 
 From there you can use:
 
-- `Overview` to see repository health, pull request counts, and project cards
-- `Code Reviews` to inspect the review queue and approval states
+- `Overview` to see repository health, branch counts, and recent workspace signals
+- `Code Reviews` to inspect active and stale local branches derived from Git reflogs
 - `Local Projects` to browse repositories and inspect project details
-- `Activity Inbox` to review notifications and alerts
+- `Activity Inbox` to review recent local Git activity
 - `Preferences` to revisit onboarding and toggle local behavior settings
 
 If you want to see onboarding again, open `Preferences` and use `Reset Onboarding`.
 
-## Production build
+## Build and package
 
-Build the app:
+Build the web and Electron bundles:
 
 ```bash
 npm run build
 ```
 
-Start the production server:
+Create a local unsigned macOS app bundle:
 
 ```bash
-npm start
+npm run pack:mac
 ```
 
-By default, production also listens on port `5000` unless `PORT` is set.
+That produces:
+
+```text
+release/mac-arm64/DevDeck.app
+```
+
+To create distributable archives instead of just the unpacked app bundle:
+
+```bash
+npm run dist:mac
+```
 
 ## Type check
 
@@ -111,16 +119,19 @@ That command requires `DATABASE_URL` to be set.
 
 DevDeck is intended to be used locally:
 
-- App state is stored in the browser for onboarding completion
+- Workspace selection is stored locally on your machine
+- Repository scanning reads local files and Git metadata directly
 - The current experience runs without cloud services
-- The UI messaging is designed around local repository monitoring and private workflows
+- GitHub connectivity is not required for the default local workflow
 
 ## Project scripts
 
 ```bash
-npm run dev        # run the local development server
-npm run build      # build client and server bundles
-npm start          # run the built production server
-npm run check      # run TypeScript type checking
-npm run db:push    # push Drizzle schema changes, requires DATABASE_URL
+npm run dev            # run the Electron app in development
+npm run dev:web        # run the older Express/Vite browser shell
+npm run build          # build client, server, and Electron bundles
+npm run pack:mac       # create an unpacked macOS app bundle
+npm run dist:mac       # create macOS distributables
+npm run check          # run TypeScript type checking
+npm run db:push        # push Drizzle schema changes, requires DATABASE_URL
 ```

@@ -1,9 +1,17 @@
-import { ReactNode } from "react";
-import { Link, useLocation } from "wouter";
-import { getMonitoredDirectoryLabels, getWorkspaceSelection } from "@/lib/workspace-selection";
+import { ReactNode, useEffect, useState } from "react";
+import { Link, useLocation, useSearch } from "wouter";
+import AddProjectsDialog from "@/components/workspace/AddProjectsDialog";
+import WindowControls from "@/components/layout/WindowControls";
+import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
+import {
+  goBackInApp,
+  goForwardInApp,
+  useAppNavigation,
+} from "@/lib/app-navigation";
+import { getOpenAddProjectsDialogEvent } from "@/lib/project-import-events";
+import { getMonitoredProjects, getWorkspaceSelection } from "@/lib/workspace-selection";
 import { 
   Settings, 
-  GitPullRequest, 
   Activity, 
   FolderGit2,
   Bell,
@@ -21,29 +29,44 @@ interface AppLayoutProps {
 }
 
 export default function AppLayout({ children }: AppLayoutProps) {
-  const [location] = useLocation();
-  const monitoredDirectories = getMonitoredDirectoryLabels(getWorkspaceSelection());
+  const [location, setLocation] = useLocation();
+  const search = useSearch();
+  const [isAddProjectsOpen, setIsAddProjectsOpen] = useState(false);
+  const monitoredProjects = getMonitoredProjects(getWorkspaceSelection());
+  const selectedProjectId = new URLSearchParams(search).get("project");
+  const { data: snapshot } = useWorkspaceSnapshot();
+  const reviewCount = snapshot?.pullRequests.length ?? 0;
+  const activityCount = snapshot?.activities.length ?? 0;
+  const routeKey = `${location}${search}`;
+  const { canGoBack, canGoForward } = useAppNavigation(routeKey);
 
   const navItems = [
     { href: "/", icon: LayoutGrid, label: "Overview" },
-    { href: "/reviews", icon: MessageSquare, label: "Code Reviews" },
+    { href: "/reviews", icon: MessageSquare, label: "Pull Requests" },
     { href: "/projects", icon: FolderGit2, label: "Local Projects" },
     { href: "/activity", icon: Activity, label: "Activity Inbox" },
   ];
 
+  useEffect(() => {
+    const eventName = getOpenAddProjectsDialogEvent();
+    const handleOpen = () => {
+      setIsAddProjectsOpen(true);
+    };
+
+    window.addEventListener(eventName, handleOpen);
+    return () => window.removeEventListener(eventName, handleOpen);
+  }, []);
+
   return (
-    <div className="flex h-screen bg-[#ececec] overflow-hidden text-[13px] font-sans">
+    <>
+      <div className="flex h-screen bg-[#ececec] overflow-hidden text-[13px] font-sans">
       <div className="flex w-full h-full border border-black/10 rounded-lg shadow-2xl overflow-hidden bg-white/50 backdrop-blur-3xl m-0 sm:m-4 sm:rounded-xl">
         
         {/* Sidebar - macOS visual style */}
         <aside className="w-[240px] bg-[#f5f5f5]/80 border-r border-black/10 flex flex-col flex-shrink-0">
           {/* Traffic Lights & Titlebar Drag Area */}
           <div className="h-[52px] titlebar-drag-region flex items-center px-4 gap-2">
-            <div className="mac-window-controls flex items-center gap-2 group">
-              <div className="mac-btn mac-btn-close"></div>
-              <div className="mac-btn mac-btn-minimize"></div>
-              <div className="mac-btn mac-btn-maximize"></div>
-            </div>
+            <WindowControls />
           </div>
           
           <nav className="flex-1 px-3 pb-4 space-y-[2px] overflow-y-auto">
@@ -61,14 +84,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   }`}>
                     <item.icon className={`w-4 h-4 ${active ? "opacity-100" : "opacity-70 text-primary"}`} />
                     {item.label}
-                    {item.label === "Code Reviews" && (
+                    {item.label === "Pull Requests" && (
                       <span className="ml-auto text-[10px] font-bold bg-primary-foreground/20 px-1.5 rounded-sm">
-                        3
+                        {reviewCount}
                       </span>
                     )}
                     {item.label === "Activity Inbox" && (
                       <span className="ml-auto text-[10px] font-bold bg-primary-foreground/20 px-1.5 rounded-sm">
-                        12
+                        {activityCount}
                       </span>
                     )}
                   </a>
@@ -77,17 +100,33 @@ export default function AppLayout({ children }: AppLayoutProps) {
             })}
             
             <div className="mt-6 mb-2 px-2 flex items-center justify-between">
-              <p className="text-[11px] font-semibold text-muted-foreground/80">DIRECTORIES</p>
-              <button className="text-muted-foreground/50 hover:text-foreground/80">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <p className="text-[11px] font-semibold text-muted-foreground/80">PROJECTS</p>
+              <button
+                type="button"
+                onClick={() => setIsAddProjectsOpen(true)}
+                className="text-muted-foreground/50 hover:text-foreground/80 no-drag"
+              >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               </button>
             </div>
             <div className="space-y-[2px]">
-              {monitoredDirectories.map((team) => (
-                <a key={team} href="#" className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-foreground/80 hover:bg-black/5 transition-colors group">
-                  <HardDrive className="w-3.5 h-3.5 opacity-60 text-primary group-hover:opacity-100 transition-opacity" />
-                  <span className="truncate">{team}</span>
-                </a>
+              {monitoredProjects.map((project) => (
+                <Link
+                  key={project.localPath ?? project.id}
+                  href={`/?project=${encodeURIComponent(project.id)}`}
+                >
+                  <a
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-colors group ${
+                      selectedProjectId === project.id && location === "/"
+                        ? "bg-black/7 text-foreground font-medium"
+                        : "text-foreground/80 hover:bg-black/5"
+                    }`}
+                    title={project.localPath ?? project.name}
+                  >
+                    <HardDrive className="w-3.5 h-3.5 opacity-60 text-primary group-hover:opacity-100 transition-opacity" />
+                    <span className="truncate">{project.name}</span>
+                  </a>
+                </Link>
               ))}
             </div>
           </nav>
@@ -122,10 +161,22 @@ export default function AppLayout({ children }: AppLayoutProps) {
           <header className="h-[52px] border-b border-black/10 flex items-center justify-between px-4 titlebar-drag-region bg-white/60 backdrop-blur-md sticky top-0 z-50">
             <div className="flex items-center gap-4 no-drag">
               <div className="flex items-center gap-1">
-                <button className="p-1 rounded text-muted-foreground hover:bg-secondary disabled:opacity-50">
+                <button
+                  type="button"
+                  onClick={() => goBackInApp(setLocation)}
+                  disabled={!canGoBack}
+                  className="p-1 rounded text-muted-foreground hover:bg-secondary disabled:opacity-50 disabled:hover:bg-transparent"
+                  aria-label="Go back"
+                >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                <button className="p-1 rounded text-muted-foreground hover:bg-secondary disabled:opacity-50" disabled>
+                <button
+                  type="button"
+                  onClick={() => goForwardInApp(setLocation)}
+                  disabled={!canGoForward}
+                  className="p-1 rounded text-muted-foreground hover:bg-secondary disabled:opacity-50 disabled:hover:bg-transparent"
+                  aria-label="Go forward"
+                >
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
@@ -145,7 +196,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <Link href="/activity">
                 <a className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-secondary relative">
                   <Bell className="w-4 h-4" />
-                  <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary border-2 border-background"></span>
+                  {activityCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary border-2 border-background"></span>
+                  )}
                 </a>
               </Link>
             </div>
@@ -165,6 +218,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
           -webkit-app-region: no-drag;
         }
       `}</style>
-    </div>
+      </div>
+      <AddProjectsDialog open={isAddProjectsOpen} onOpenChange={setIsAddProjectsOpen} />
+    </>
   );
 }
