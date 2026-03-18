@@ -1,6 +1,7 @@
 import { useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import { mockProjects, mockInsights } from "@/lib/mock-data";
+import { getWorkspaceSelection } from "@/lib/workspace-selection";
 import ProjectCard from "@/components/dashboard/ProjectCard";
 import ProjectRow from "@/components/dashboard/ProjectRow";
 import { 
@@ -16,6 +17,7 @@ import {
 export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [filterTeam, setFilterTeam] = useState<string | 'All'>('All');
+  const workspaceSelection = getWorkspaceSelection();
   
   const teams = ['All', ...Array.from(new Set(mockProjects.map(p => p.team)))];
   const filteredProjects = filterTeam === 'All' 
@@ -35,7 +37,10 @@ export default function Dashboard() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Project Overview</h1>
             <p className="text-muted-foreground text-sm flex items-center gap-1.5">
-              <HardDrive className="w-3.5 h-3.5" /> DevDeck is monitoring ~/Developer
+              <HardDrive className="w-3.5 h-3.5" /> DevDeck is monitoring{" "}
+              {workspaceSelection
+                ? `${workspaceSelection.rootName}${workspaceSelection.projects.length ? ` · ${workspaceSelection.projects.length} selected` : ""}`
+                : "~/Developer"}
             </p>
           </div>
           

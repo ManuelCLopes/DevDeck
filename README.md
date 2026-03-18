@@ -44,21 +44,24 @@ npm run dev
 Then open:
 
 ```text
-http://localhost:5000
+http://127.0.0.1:5000
 ```
 
 Notes:
 
 - The Express server serves both the frontend and backend shell on port `5000` by default
+- In development, the server binds to `127.0.0.1` by default for local desktop usage
 - You can override the port with `PORT`, for example `PORT=3000 npm run dev`
+- You can override the host with `HOST`, for example `HOST=0.0.0.0 npm run dev`
 
 ## Use the app
 
 When you first open DevDeck:
 
 1. Go through the onboarding flow
-2. Choose the mocked workspace directory prompt
-3. Launch the app into the main dashboard
+2. Choose the workspace folder that contains your local projects
+3. Select the project folders inside that workspace that DevDeck should monitor
+4. Launch the app into the main dashboard
 
 From there you can use:
 

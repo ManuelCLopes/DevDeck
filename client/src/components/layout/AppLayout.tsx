@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
+import { getMonitoredDirectoryLabels, getWorkspaceSelection } from "@/lib/workspace-selection";
 import { 
   Settings, 
   GitPullRequest, 
@@ -21,6 +22,7 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const [location] = useLocation();
+  const monitoredDirectories = getMonitoredDirectoryLabels(getWorkspaceSelection());
 
   const navItems = [
     { href: "/", icon: LayoutGrid, label: "Overview" },
@@ -81,7 +83,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               </button>
             </div>
             <div className="space-y-[2px]">
-              {["~/Developer/frontend", "~/Developer/backend", "~/Developer/mobile", "~/Developer/data"].map((team) => (
+              {monitoredDirectories.map((team) => (
                 <a key={team} href="#" className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-foreground/80 hover:bg-black/5 transition-colors group">
                   <HardDrive className="w-3.5 h-3.5 opacity-60 text-primary group-hover:opacity-100 transition-opacity" />
                   <span className="truncate">{team}</span>

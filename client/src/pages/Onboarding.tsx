@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { setCompletedOnboarding } from "@/lib/onboarding-state";
+import { setWorkspaceSelection, type MonitoredProject } from "@/lib/workspace-selection";
 import { 
   FolderGit2, 
   ShieldCheck, 
@@ -13,40 +14,302 @@ import {
   ChevronLeft
 } from "lucide-react";
 
+type FilePickerFile = File & {
+  webkitRelativePath?: string;
+};
+
+type DirectoryPickerWindow = Window & {
+  showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
+};
+
+type FileSystemDirectoryHandle = {
+  kind: "directory";
+  name: string;
+  values(): AsyncIterable<FileSystemHandle>;
+};
+
+type FileSystemHandle = FileSystemDirectoryHandle | { kind: "file"; name: string };
+type ProjectCandidate = MonitoredProject;
+
+const IGNORED_DIRECTORY_NAMES = new Set([
+  ".git",
+  ".next",
+  ".turbo",
+  ".yarn",
+  "build",
+  "coverage",
+  "dist",
+  "node_modules",
+]);
+
+function createRepositoryCandidate(rootName: string, relativePath = ""): ProjectCandidate {
+  const isRoot = relativePath.length === 0;
+  const pathSegments = relativePath.split("/").filter(Boolean);
+
+  return {
+    id: `${rootName}/${relativePath || "."}`,
+    isRoot,
+    name: isRoot ? rootName : pathSegments[pathSegments.length - 1] ?? rootName,
+    relativePath: isRoot ? undefined : relativePath,
+    repositoryCount: 1,
+  };
+}
+
+function createWorkspaceRootCandidate(rootName: string): ProjectCandidate {
+  return {
+    id: `${rootName}/.`,
+    isRoot: true,
+    name: rootName,
+    repositoryCount: 0,
+  };
+}
+
+async function collectRepositoryCandidates(
+  directory: FileSystemDirectoryHandle,
+  rootName: string,
+  relativePath = "",
+): Promise<ProjectCandidate[]> {
+  let containsGitDirectory = false;
+  const childDirectories: FileSystemDirectoryHandle[] = [];
+
+  for await (const entry of directory.values()) {
+    if (entry.kind !== "directory") {
+      continue;
+    }
+
+    if (IGNORED_DIRECTORY_NAMES.has(entry.name)) {
+      if (entry.name === ".git") {
+        containsGitDirectory = true;
+      }
+      continue;
+    }
+
+    childDirectories.push(entry);
+  }
+
+  if (containsGitDirectory) {
+    return [createRepositoryCandidate(rootName, relativePath)];
+  }
+
+  const candidates: ProjectCandidate[] = [];
+  for (const childDirectory of childDirectories) {
+    const childRelativePath = relativePath
+      ? `${relativePath}/${childDirectory.name}`
+      : childDirectory.name;
+    candidates.push(
+      ...(await collectRepositoryCandidates(childDirectory, rootName, childRelativePath)),
+    );
+  }
+
+  return candidates;
+}
+
+async function discoverProjectCandidates(directory: FileSystemDirectoryHandle) {
+  const rootName = directory.name;
+  const discoveredRepositories = await collectRepositoryCandidates(directory, rootName);
+  const candidates =
+    discoveredRepositories.length > 0
+      ? discoveredRepositories
+      : [createWorkspaceRootCandidate(rootName)];
+
+  return {
+    candidates,
+    discoveredRepositoryCount: discoveredRepositories.length,
+    rootName,
+  };
+}
+
+function discoverProjectCandidatesFromFiles(files: FilePickerFile[]) {
+  const repositoryPaths = new Set<string>();
+  let rootName: string | null = null;
+
+  for (const file of files) {
+    const segments = file.webkitRelativePath?.split("/").filter(Boolean) ?? [];
+    if (segments.length === 0) {
+      continue;
+    }
+
+    rootName ??= segments[0];
+
+    const gitDirectoryIndex = segments.indexOf(".git");
+    if (gitDirectoryIndex >= 1) {
+      const relativePath = segments.slice(1, gitDirectoryIndex).join("/");
+      repositoryPaths.add(relativePath);
+    }
+  }
+
+  const discoveredRepositories = rootName
+    ? Array.from(repositoryPaths)
+        .sort((left, right) => left.localeCompare(right))
+        .map((relativePath) =>
+          createRepositoryCandidate(rootName, relativePath === "." ? "" : relativePath),
+        )
+    : [];
+
+  const candidates =
+    rootName && discoveredRepositories.length === 0
+      ? [createWorkspaceRootCandidate(rootName)]
+      : discoveredRepositories;
+
+  return {
+    candidates,
+    discoveredRepositoryCount: discoveredRepositories.length,
+    rootName,
+  };
+}
+
+function getDefaultSelectedProjectIds(candidates: ProjectCandidate[]) {
+  return candidates.map((candidate) => candidate.id);
+}
+
 export default function Onboarding() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState(1);
   const [isScanning, setIsScanning] = useState(false);
   const [selectedDir, setSelectedDir] = useState<string | null>(null);
+  const [discoveredRepositoryCount, setDiscoveredRepositoryCount] = useState(0);
+  const [projectCandidates, setProjectCandidates] = useState<ProjectCandidate[]>([]);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleNext = () => {
-    if (step === 3 && selectedDir) {
-      setIsScanning(true);
-      setTimeout(() => {
-        setIsScanning(false);
-        setStep(4);
-      }, 2000);
-    } else {
+    if (step !== 3) {
       setStep(prev => prev + 1);
+      return;
     }
+
+    if (!selectedDir) {
+      setSelectionError("Choose a workspace folder to continue.");
+      return;
+    }
+
+    if (discoveredRepositoryCount > 1 && selectedProjectIds.length === 0) {
+      setSelectionError("Choose at least one repository to monitor.");
+      return;
+    }
+
+    setStep(4);
   };
 
   const handleComplete = () => {
+    if (!selectedDir) {
+      return;
+    }
+
+    const selectedProjects =
+      projectCandidates.filter((candidate) => selectedProjectIds.includes(candidate.id)) ||
+      [];
+
+    setWorkspaceSelection({
+      rootName: selectedDir,
+      projects:
+        selectedProjects.length > 0
+          ? selectedProjects
+          : [
+              {
+                id: `${selectedDir}/.`,
+                isRoot: true,
+                name: selectedDir,
+                repositoryCount: null,
+              },
+            ],
+    });
     setCompletedOnboarding();
     setLocation("/");
   };
 
-  const selectDirectory = () => {
-    // Mocking a directory selection dialog
-    setTimeout(() => {
-      setSelectedDir("~/Developer");
-    }, 500);
+  const handleDirectoryFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []) as FilePickerFile[];
+    const { candidates, discoveredRepositoryCount, rootName } =
+      discoverProjectCandidatesFromFiles(files);
+
+    if (!rootName) {
+      setSelectionError("No folder was selected.");
+      return;
+    }
+
+    setSelectionError(null);
+    setSelectedDir(rootName);
+    setDiscoveredRepositoryCount(discoveredRepositoryCount);
+    setProjectCandidates(candidates);
+    setSelectedProjectIds(getDefaultSelectedProjectIds(candidates));
+    event.target.value = "";
   };
+
+  const selectDirectory = async () => {
+    setSelectionError(null);
+    setIsScanning(true);
+    setSelectedDir(null);
+    setDiscoveredRepositoryCount(0);
+    setProjectCandidates([]);
+    setSelectedProjectIds([]);
+    const directoryWindow = window as DirectoryPickerWindow;
+
+    if (typeof directoryWindow.showDirectoryPicker === "function") {
+      try {
+        const directory = await directoryWindow.showDirectoryPicker();
+        const { candidates, discoveredRepositoryCount, rootName } =
+          await discoverProjectCandidates(directory);
+        setSelectedDir(rootName);
+        setDiscoveredRepositoryCount(discoveredRepositoryCount);
+        setProjectCandidates(candidates);
+        setSelectedProjectIds(getDefaultSelectedProjectIds(candidates));
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        setSelectionError("Folder access was blocked. Try again or use the browser fallback.");
+      } finally {
+        setIsScanning(false);
+      }
+    }
+
+    setIsScanning(false);
+    fileInputRef.current?.click();
+  };
+
+  const selectedProjects = projectCandidates.filter((candidate) =>
+    selectedProjectIds.includes(candidate.id),
+  );
+  const requiresRepositorySelection = discoveredRepositoryCount > 1;
+  const isProjectSelectionStep = step === 3 && requiresRepositorySelection;
+  const selectedRepositoryCount = selectedProjects.every(
+    (candidate) => candidate.repositoryCount !== null,
+  )
+    ? selectedProjects.reduce(
+        (total, candidate) => total + (candidate.repositoryCount ?? 0),
+        0,
+      )
+    : null;
+
+  const toggleProjectSelection = (projectId: string) => {
+    setSelectionError(null);
+    setSelectedProjectIds((currentProjectIds) =>
+      currentProjectIds.includes(projectId)
+        ? currentProjectIds.filter((currentId) => currentId !== projectId)
+        : [...currentProjectIds, projectId],
+    );
+  };
+
+  useEffect(() => {
+    if (selectedDir && discoveredRepositoryCount === 0 && projectCandidates.length > 1) {
+      setSelectedDir(null);
+      setProjectCandidates([]);
+      setSelectedProjectIds([]);
+      setSelectionError("Workspace scan data was refreshed. Choose the folder again.");
+    }
+  }, [discoveredRepositoryCount, projectCandidates.length, selectedDir]);
+
+  const getCandidateLabel = (candidate: ProjectCandidate) =>
+    candidate.isRoot ? candidate.name : candidate.relativePath ?? candidate.name;
 
   return (
     <div className="flex h-screen bg-[#ececec] overflow-hidden text-[13px] font-sans items-center justify-center p-4">
       {/* Mac Window Wrapper */}
-      <div className="w-full max-w-2xl bg-white/90 backdrop-blur-3xl border border-black/10 rounded-xl shadow-2xl overflow-hidden flex flex-col relative animate-in fade-in zoom-in-95 duration-500">
+      <div className="w-full max-w-2xl max-h-[calc(100vh-2rem)] bg-white/90 backdrop-blur-3xl border border-black/10 rounded-xl shadow-2xl overflow-hidden flex flex-col relative animate-in fade-in zoom-in-95 duration-500">
         
         {/* Titlebar */}
         <div className="h-[40px] titlebar-drag-region flex items-center justify-center relative border-b border-black/5 bg-white/50">
@@ -59,7 +322,11 @@ export default function Onboarding() {
         </div>
 
         {/* Content Area */}
-        <div className="p-10 flex-1 flex flex-col items-center justify-center min-h-[400px]">
+        <div
+          className={`p-10 flex-1 min-h-0 flex flex-col items-center overflow-y-auto ${
+            isProjectSelectionStep ? "justify-start" : "justify-center"
+          }`}
+        >
           
           {step === 1 && (
             <div className="text-center max-w-md space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
@@ -115,7 +382,7 @@ export default function Onboarding() {
           )}
 
           {step === 3 && (
-            <div className="text-center max-w-md animate-in fade-in slide-in-from-right-8 duration-500 w-full">
+            <div className="text-center max-w-lg animate-in fade-in slide-in-from-right-8 duration-500 w-full">
               <div className="w-16 h-16 bg-secondary rounded-full mx-auto flex items-center justify-center mb-6">
                 <HardDrive className="w-8 h-8 text-foreground/70" />
               </div>
@@ -134,20 +401,128 @@ export default function Onboarding() {
                 
                 <button 
                   onClick={selectDirectory}
+                  disabled={isScanning}
                   className={`w-full py-2.5 px-4 rounded-lg font-medium transition-all ${
                     selectedDir 
                       ? 'bg-secondary text-foreground border border-border' 
                       : 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
                   }`}
                 >
-                  {selectedDir ? "Change Directory..." : "Choose Directory..."}
+                  {isScanning ? "Analyzing Workspace..." : selectedDir ? "Change Directory..." : "Choose Directory..."}
                 </button>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  onChange={handleDirectoryFilesSelected}
+                  // Browser fallback when showDirectoryPicker is unavailable.
+                  {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
+                />
 
                 {selectedDir && (
                   <div className="mt-4 flex items-center justify-center gap-2 text-sm font-mono text-foreground bg-white border border-border px-3 py-2 rounded-md shadow-sm">
                     <FolderGit2 className="w-4 h-4 text-primary" />
                     {selectedDir}
                   </div>
+                )}
+
+                {selectedDir && projectCandidates.length > 0 && (
+                  <div className="mt-5 text-left">
+                    {requiresRepositorySelection ? (
+                      <>
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                              Choose Repositories
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              DevDeck found multiple repositories inside {selectedDir}. Choose the ones you want to monitor.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedProjectIds(projectCandidates.map((candidate) => candidate.id))
+                              }
+                              className="text-primary hover:text-primary/80 font-medium"
+                            >
+                              Select all
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedProjectIds([])}
+                              className="text-muted-foreground hover:text-foreground font-medium"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 max-h-[min(42vh,320px)] overflow-y-auto pr-2 overscroll-contain">
+                          {projectCandidates.map((candidate) => {
+                            const isSelected = selectedProjectIds.includes(candidate.id);
+                            return (
+                              <label
+                                key={candidate.id}
+                                className={`flex items-start gap-3 rounded-lg border px-3 py-3 cursor-pointer transition-colors ${
+                                  isSelected
+                                    ? "border-primary/30 bg-primary/[0.04]"
+                                    : "border-border/60 bg-white hover:border-black/15"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleProjectSelection(candidate.id)}
+                                  className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="text-sm font-medium text-foreground truncate">
+                                      {getCandidateLabel(candidate)}
+                                    </span>
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-secondary px-2 py-1 rounded-full border border-border/60 whitespace-nowrap">
+                                      repo
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {candidate.isRoot
+                                      ? "This folder is itself a Git repository."
+                                      : "Repository discovered inside the selected workspace."}
+                                  </p>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : discoveredRepositoryCount === 1 && selectedProjects[0] ? (
+                      <div className="rounded-lg border border-primary/20 bg-primary/[0.04] px-4 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          Repository Detected
+                        </p>
+                        <p className="text-sm text-foreground mt-1">
+                          DevDeck found one repository and will monitor <strong>{getCandidateLabel(selectedProjects[0])}</strong>.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-border/60 bg-white px-4 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          No Git Repository Found
+                        </p>
+                        <p className="text-sm text-foreground mt-1">
+                          DevDeck did not detect a Git repository inside this folder yet, so it will monitor the selected workspace directly.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectionError && (
+                  <p className="mt-4 text-xs text-chart-3">{selectionError}</p>
                 )}
               </div>
             </div>
@@ -160,8 +535,28 @@ export default function Onboarding() {
               </div>
               <h2 className="text-xl font-bold text-foreground mb-3">You're All Set!</h2>
               <p className="text-sm text-muted-foreground mb-8">
-                DevDeck found 6 repositories in <strong>{selectedDir}</strong>. <br/>
-                We'll continue monitoring them locally in the background.
+                {discoveredRepositoryCount > 1 ? (
+                  <>
+                    DevDeck will monitor {selectedProjects.length} {selectedProjects.length === 1 ? "repository" : "repositories"} inside <strong>{selectedDir}</strong>.
+                    {selectedRepositoryCount !== null && (
+                      <>
+                        {" "}We detected {selectedRepositoryCount} Git {selectedRepositoryCount === 1 ? "repository" : "repositories"} across your selection.
+                      </>
+                    )}
+                    <br/>
+                    You can change this selection later from Preferences.
+                  </>
+                ) : discoveredRepositoryCount === 1 && selectedProjects[0] ? (
+                  <>
+                    DevDeck found 1 Git repository in <strong>{selectedDir}</strong>: <strong>{getCandidateLabel(selectedProjects[0])}</strong>. <br/>
+                    We&apos;ll continue monitoring it locally in the background.
+                  </>
+                ) : (
+                  <>
+                    DevDeck connected to <strong>{selectedDir}</strong>. <br/>
+                    We&apos;ll continue monitoring this folder locally in the background.
+                  </>
+                )}
               </p>
             </div>
           )}
@@ -194,10 +589,15 @@ export default function Onboarding() {
           {step < 4 ? (
             <button 
               onClick={handleNext}
-              disabled={isScanning || (step === 3 && !selectedDir)}
+              disabled={
+                isScanning ||
+                (step === 3 &&
+                  (!selectedDir ||
+                    (discoveredRepositoryCount > 1 && selectedProjectIds.length === 0)))
+              }
               className="px-5 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
             >
-              {isScanning ? "Scanning..." : "Continue"} {!isScanning && <ChevronRight className="w-4 h-4" />}
+              Continue <ChevronRight className="w-4 h-4" />
             </button>
           ) : (
             <button 

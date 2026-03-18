@@ -3,13 +3,21 @@ import AppLayout from "@/components/layout/AppLayout";
 import { FolderGit2, Github, CheckCircle2, HardDrive, Shield, Lock, RotateCcw } from "lucide-react";
 import { useLocation } from "wouter";
 import { clearCompletedOnboarding } from "@/lib/onboarding-state";
+import {
+  clearWorkspaceSelection,
+  getMonitoredDirectoryLabels,
+  getWorkspaceSelection,
+} from "@/lib/workspace-selection";
 
 export default function Settings() {
   const [connected, setConnected] = useState(false);
   const [, setLocation] = useLocation();
+  const workspaceSelection = getWorkspaceSelection();
+  const monitoredDirectories = getMonitoredDirectoryLabels(workspaceSelection);
 
   const handleResetOnboarding = () => {
     clearCompletedOnboarding();
+    clearWorkspaceSelection();
     setLocation('/onboarding');
   };
 
@@ -43,10 +51,20 @@ export default function Settings() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-sm">Monitored Directories</h3>
-                    <p className="text-xs text-muted-foreground mt-1">Select folders where your git repositories live.</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {workspaceSelection
+                        ? `Projects selected from ${workspaceSelection.rootName}.`
+                        : "Select folders where your git repositories live."}
+                    </p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <span className="text-[11px] font-mono bg-secondary px-2 py-1 rounded border border-border/50 text-foreground/80">~/Developer/frontend</span>
-                      <span className="text-[11px] font-mono bg-secondary px-2 py-1 rounded border border-border/50 text-foreground/80">~/Developer/backend</span>
+                      {monitoredDirectories.map((directory) => (
+                        <span
+                          key={directory}
+                          className="text-[11px] font-mono bg-secondary px-2 py-1 rounded border border-border/50 text-foreground/80"
+                        >
+                          {directory}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 </div>
