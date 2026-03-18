@@ -1,4 +1,5 @@
 import type { WorkspaceProject } from "@shared/workspace";
+import ProjectQuickActions from "@/components/projects/ProjectQuickActions";
 import { getCiStatusMeta, getProjectAttentionSummary } from "@/lib/project-health";
 import {
   GitBranch,
@@ -8,13 +9,14 @@ import {
   MessageSquare,
   Users,
 } from "lucide-react";
-import { Link } from "wouter";
+import { useLocation } from "wouter";
 
 interface ProjectCardProps {
   project: WorkspaceProject;
 }
 
 export default function ProjectCard({ project }: ProjectCardProps) {
+  const [, setLocation] = useLocation();
   const statusColors = {
     healthy: "bg-chart-1/10 text-chart-1 border-chart-1/20",
     warning: "bg-chart-2/10 text-chart-2 border-chart-2/20",
@@ -25,11 +27,19 @@ export default function ProjectCard({ project }: ProjectCardProps) {
   const attentionSummary = getProjectAttentionSummary(project);
 
   return (
-    <Link href={projectHref}>
-      <a
-        className="group block bg-white border border-border/60 hover:border-black/20 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-xl transition-all duration-200 overflow-hidden flex flex-col relative"
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => setLocation(projectHref)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setLocation(projectHref);
+        }
+      }}
+      className="group block bg-white border border-border/60 hover:border-black/20 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-xl transition-all duration-200 overflow-hidden flex flex-col relative cursor-pointer"
         aria-label={`Open ${project.name} overview`}
-      >
+    >
         <div className="p-4 flex flex-col gap-4 flex-1">
           {/* Header */}
           <div className="flex justify-between items-start gap-4">
@@ -39,9 +49,17 @@ export default function ProjectCard({ project }: ProjectCardProps) {
                 <span className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-[1px] rounded-sm border ${statusColors[project.status]}`}>
                   {project.status}
                 </span>
+                <span className="text-[9px] text-muted-foreground/80 font-semibold bg-secondary/80 px-1.5 py-[1px] rounded-sm border border-border/50 uppercase tracking-wider">
+                  {project.team}
+                </span>
               </div>
               <p className="text-xs text-muted-foreground line-clamp-1">{project.description}</p>
             </div>
+            <ProjectQuickActions
+              projectId={project.id}
+              projectName={project.name}
+              projectPath={project.localPath}
+            />
           </div>
 
           {/* Local Path */}
@@ -124,14 +142,6 @@ export default function ProjectCard({ project }: ProjectCardProps) {
             </div>
           </div>
         </div>
-        
-        {/* Top right team badge */}
-        <div className="absolute top-4 right-4">
-          <div className="text-[10px] text-muted-foreground/80 font-semibold bg-secondary/80 px-2 py-0.5 rounded-sm border border-border/50 uppercase tracking-wider">
-            {project.team}
-          </div>
-        </div>
-      </a>
-    </Link>
+      </div>
   );
 }

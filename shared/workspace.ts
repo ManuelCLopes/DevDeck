@@ -96,6 +96,7 @@ export interface WorkspacePullRequestItem {
   author: string | null;
   authoredByViewer: boolean;
   baseBranch: string;
+  ciStatus: WorkspaceCiStatus;
   headBranch: string;
   id: string;
   isViewerRequestedReviewer: boolean;
@@ -104,6 +105,7 @@ export interface WorkspacePullRequestItem {
   repo: string;
   reviewCount: number;
   reviewState: WorkspacePullRequestReviewState;
+  reviewTimeline: WorkspacePullRequestReviewEvent[];
   requestedReviewerLogins: string[];
   reviewedByOthersCount: number;
   reviewedByViewer: boolean;
@@ -112,6 +114,13 @@ export interface WorkspacePullRequestItem {
   title: string;
   updatedAt: string;
   url: string;
+}
+
+export interface WorkspacePullRequestReviewEvent {
+  id: string;
+  reviewerLogin: string | null;
+  state: string;
+  submittedAt: string | null;
 }
 
 export interface WorkspaceGitHubStatus {

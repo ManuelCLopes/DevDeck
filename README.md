@@ -46,6 +46,12 @@ Available variables:
 - `DEVDECK_GITHUB_CLIENT_ID`
   Enables GitHub device-flow sign-in inside the desktop app.
   If you leave this unset, DevDeck still lets you paste a GitHub token manually in `Preferences > GitHub Access`.
+- `CSC_LINK` and `CSC_KEY_PASSWORD`
+  Optional for release builds. Provide a Developer ID Application certificate in base64 `.p12` form plus its password so `electron-builder` can sign the macOS app.
+- `APPLE_NOTARY_PROFILE`
+  Optional but recommended for notarization. If you already stored an App Store Connect profile in Keychain with `xcrun notarytool store-credentials`, DevDeck will use it.
+- `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`
+  Optional notarization fallback when you are not using `APPLE_NOTARY_PROFILE`.
 - `DATABASE_URL`
   Only needed for the old Drizzle/database tooling. The desktop app itself does not require a database.
 
@@ -128,6 +134,13 @@ To create distributable archives instead of just the unpacked app bundle:
 ```bash
 npm run dist:mac
 ```
+
+For a signed and notarized build, export either:
+
+- `APPLE_NOTARY_PROFILE`
+- or `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`
+
+If you also want the produced `.app` and `.dmg` signed, provide `CSC_LINK` and `CSC_KEY_PASSWORD` before running `npm run dist:mac`.
 
 ## Type check
 

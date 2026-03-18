@@ -2,7 +2,11 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, shell } f
 import { execFile } from "child_process";
 import path from "path";
 import { promisify } from "util";
-import type { WorkspaceSelection } from "../shared/workspace";
+import type { WorkspaceSelection, WorkspaceSnapshot } from "../shared/workspace";
+import {
+  collectWorkspaceNotifications,
+  type WorkspaceMonitorPreferences,
+} from "../shared/workspace-monitor";
 import {
   clearStoredGitHubToken,
   getGitHubAuthCapabilities,
@@ -17,6 +21,44 @@ import {
 } from "./workspace";
 
 const execFileAsync = promisify(execFile);
+const DEFAULT_WORKSPACE_MONITOR_PREFERENCES = {
+  alertFailingBuilds: true,
+  autoRefreshEnabled: true,
+  autoRefreshIntervalSeconds: 30,
+  notifyApproved: true,
+  notifyChangesRequested: true,
+  notifyReviewRequired: true,
+  refreshOnWindowFocus: true,
+} satisfies WorkspaceMonitorPreferences & {
+  autoRefreshEnabled: boolean;
+  autoRefreshIntervalSeconds: number;
+  refreshOnWindowFocus: boolean;
+};
+
+interface WorkspaceMonitorSettings extends WorkspaceMonitorPreferences {
+  autoRefreshEnabled: boolean;
+  autoRefreshIntervalSeconds: number;
+  refreshOnWindowFocus: boolean;
+}
+
+interface WorkspaceMonitorState {
+  intervalId: NodeJS.Timeout | null;
+  isRefreshing: boolean;
+  latestSnapshot: WorkspaceSnapshot | null;
+  preferences: WorkspaceMonitorSettings;
+  selection: WorkspaceSelection | null;
+  selectionKey: string | null;
+}
+
+let mainWindow: BrowserWindow | null = null;
+const workspaceMonitorState: WorkspaceMonitorState = {
+  intervalId: null,
+  isRefreshing: false,
+  latestSnapshot: null,
+  preferences: DEFAULT_WORKSPACE_MONITOR_PREFERENCES,
+  selection: null,
+  selectionKey: null,
+};
 
 function getPreloadPath() {
   return path.join(__dirname, "preload.cjs");
@@ -35,7 +77,7 @@ function shouldOpenDevTools() {
 }
 
 function createMainWindow() {
-  const mainWindow = new BrowserWindow({
+  const nextMainWindow = new BrowserWindow({
     backgroundColor: "#ececec",
     frame: false,
     height: 920,
@@ -53,21 +95,136 @@ function createMainWindow() {
     width: 1440,
   });
 
-  mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+  nextMainWindow.once("ready-to-show", () => {
+    nextMainWindow.show();
+  });
+  nextMainWindow.on("focus", () => {
+    if (!workspaceMonitorState.preferences.refreshOnWindowFocus) {
+      return;
+    }
+
+    void refreshWorkspaceSnapshot("focus");
+  });
+  nextMainWindow.on("closed", () => {
+    if (mainWindow === nextMainWindow) {
+      mainWindow = null;
+    }
   });
 
   const rendererUrl = getRendererUrl();
   if (rendererUrl) {
-    void mainWindow.loadURL(rendererUrl);
+    void nextMainWindow.loadURL(rendererUrl);
     if (shouldOpenDevTools()) {
-      mainWindow.webContents.openDevTools({ mode: "detach" });
+      nextMainWindow.webContents.openDevTools({ mode: "detach" });
     }
-    return mainWindow;
+    mainWindow = nextMainWindow;
+    return nextMainWindow;
   }
 
-  void mainWindow.loadFile(getRendererPath());
-  return mainWindow;
+  void nextMainWindow.loadFile(getRendererPath());
+  mainWindow = nextMainWindow;
+  return nextMainWindow;
+}
+
+function broadcastWorkspaceSnapshot(snapshot: WorkspaceSnapshot) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed()) {
+      continue;
+    }
+
+    window.webContents.send("devdeck:workspace-snapshot-updated", snapshot);
+  }
+}
+
+function showDesktopNotification(payload: { body?: string; title: string }) {
+  if (!Notification.isSupported()) {
+    return;
+  }
+
+  new Notification({
+    body: payload.body,
+    title: payload.title,
+  }).show();
+}
+
+function clearWorkspaceMonitorInterval() {
+  if (workspaceMonitorState.intervalId) {
+    clearInterval(workspaceMonitorState.intervalId);
+    workspaceMonitorState.intervalId = null;
+  }
+}
+
+function syncWorkspaceMonitorSchedule() {
+  clearWorkspaceMonitorInterval();
+
+  if (
+    !workspaceMonitorState.selection ||
+    !workspaceMonitorState.preferences.autoRefreshEnabled
+  ) {
+    return;
+  }
+
+  workspaceMonitorState.intervalId = setInterval(() => {
+    void refreshWorkspaceSnapshot("interval");
+  }, workspaceMonitorState.preferences.autoRefreshIntervalSeconds * 1000);
+}
+
+async function refreshWorkspaceSnapshot(
+  _reason: "focus" | "interval" | "selection" | "settings",
+) {
+  if (!workspaceMonitorState.selection || workspaceMonitorState.isRefreshing) {
+    return workspaceMonitorState.latestSnapshot;
+  }
+
+  workspaceMonitorState.isRefreshing = true;
+  try {
+    const nextSnapshot = await loadWorkspaceSnapshot(workspaceMonitorState.selection);
+    const previousSnapshot = workspaceMonitorState.latestSnapshot;
+    workspaceMonitorState.latestSnapshot = nextSnapshot;
+
+    if (previousSnapshot) {
+      const notifications = collectWorkspaceNotifications(
+        previousSnapshot,
+        nextSnapshot,
+        workspaceMonitorState.preferences,
+      );
+      for (const notification of notifications) {
+        showDesktopNotification(notification);
+      }
+    }
+
+    broadcastWorkspaceSnapshot(nextSnapshot);
+    return nextSnapshot;
+  } finally {
+    workspaceMonitorState.isRefreshing = false;
+  }
+}
+
+function applyWorkspaceMonitorState(nextState: {
+  preferences: WorkspaceMonitorSettings;
+  selection: WorkspaceSelection | null;
+}) {
+  const nextSelectionKey = JSON.stringify(nextState.selection ?? null);
+  const selectionChanged = workspaceMonitorState.selectionKey !== nextSelectionKey;
+
+  workspaceMonitorState.preferences = {
+    ...DEFAULT_WORKSPACE_MONITOR_PREFERENCES,
+    ...nextState.preferences,
+  };
+  workspaceMonitorState.selection = nextState.selection;
+  workspaceMonitorState.selectionKey = nextSelectionKey;
+
+  if (selectionChanged) {
+    workspaceMonitorState.latestSnapshot = null;
+  }
+
+  syncWorkspaceMonitorSchedule();
+
+  if (workspaceMonitorState.selection) {
+    void refreshWorkspaceSnapshot(selectionChanged ? "selection" : "settings");
+  } else {
+    workspaceMonitorState.latestSnapshot = null;
+  }
 }
 
 ipcMain.handle("devdeck:pick-workspace", async () => {
@@ -86,7 +243,13 @@ ipcMain.handle("devdeck:pick-workspace", async () => {
 
 ipcMain.handle(
   "devdeck:load-workspace-snapshot",
-  async (_event, selection: WorkspaceSelection) => loadWorkspaceSnapshot(selection),
+  async (_event, selection: WorkspaceSelection) => {
+    const snapshot = await loadWorkspaceSnapshot(selection);
+    if (workspaceMonitorState.selectionKey === JSON.stringify(selection)) {
+      workspaceMonitorState.latestSnapshot = snapshot;
+    }
+    return snapshot;
+  },
 );
 
 ipcMain.handle("devdeck:show-item-in-finder", async (_event, targetPath: string) => {
@@ -122,14 +285,7 @@ ipcMain.handle("devdeck:copy-to-clipboard", async (_event, value: string) => {
 ipcMain.handle(
   "devdeck:show-notification",
   async (_event, payload: { body?: string; title: string }) => {
-    if (!Notification.isSupported()) {
-      return;
-    }
-
-    new Notification({
-      body: payload.body,
-      title: payload.title,
-    }).show();
+    showDesktopNotification(payload);
   },
 );
 
@@ -164,6 +320,19 @@ ipcMain.handle("devdeck:poll-github-device-auth", async (_event, deviceCode: str
 ipcMain.handle("devdeck:set-launch-at-login", async (_event, enabled: boolean) => {
   app.setLoginItemSettings({ openAtLogin: enabled });
 });
+
+ipcMain.handle(
+  "devdeck:sync-workspace-monitor-state",
+  async (
+    _event,
+    state: {
+      preferences: WorkspaceMonitorSettings;
+      selection: WorkspaceSelection | null;
+    },
+  ) => {
+    applyWorkspaceMonitorState(state);
+  },
+);
 
 ipcMain.handle(
   "devdeck:window-control",
@@ -202,6 +371,7 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  clearWorkspaceMonitorInterval();
   if (process.platform !== "darwin") {
     app.quit();
   }

@@ -10,6 +10,7 @@ import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
 import { getCiStatusMeta } from "@/lib/project-health";
 import {
+  getPullRequestCiStatusMeta,
   getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
@@ -469,6 +470,7 @@ export default function Dashboard() {
 
                   <div className="space-y-3">
                     {focusedPullRequestsPagination.paginatedItems.map((pullRequest) => {
+                      const ciStatusMeta = getPullRequestCiStatusMeta(pullRequest.ciStatus);
                       const followUpMeta = getPullRequestFollowUpMeta(pullRequest);
                       const reviewSummary = getPullRequestReviewSummary(pullRequest);
                       const statusMeta = getPullRequestStatusMeta(pullRequest.status);
@@ -499,6 +501,9 @@ export default function Dashboard() {
                             </span>
                             <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${followUpMeta.className}`}>
                               {followUpMeta.label}
+                            </span>
+                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${ciStatusMeta.className}`}>
+                              {ciStatusMeta.label}
                             </span>
                             {pullRequest.authoredByViewer && (
                               <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap bg-secondary text-muted-foreground border-border/60">
@@ -600,6 +605,7 @@ export default function Dashboard() {
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                 <div className="space-y-3">
                     {overviewPullRequestsPagination.paginatedItems.map((pullRequest) => {
+                      const ciStatusMeta = getPullRequestCiStatusMeta(pullRequest.ciStatus);
                       const followUpMeta = getPullRequestFollowUpMeta(pullRequest);
                       const reviewSummary = getPullRequestReviewSummary(pullRequest);
                       const statusMeta = getPullRequestStatusMeta(pullRequest.status);
@@ -630,6 +636,9 @@ export default function Dashboard() {
                             </span>
                             <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${followUpMeta.className}`}>
                               {followUpMeta.label}
+                            </span>
+                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${ciStatusMeta.className}`}>
+                              {ciStatusMeta.label}
                             </span>
                             {pullRequest.authoredByViewer && (
                               <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap bg-secondary text-muted-foreground border-border/60">

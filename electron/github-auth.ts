@@ -1,5 +1,5 @@
 import { execFile } from "child_process";
-import { app } from "electron";
+import { homedir } from "os";
 import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import path from "path";
 import { promisify } from "util";
@@ -54,11 +54,43 @@ export interface GitHubTokenSaveResult {
 }
 
 function getGitHubTokenFallbackPath() {
-  return path.join(app.getPath("userData"), "github-token.json");
+  const explicitPath = process.env.DEVDECK_GITHUB_TOKEN_PATH?.trim();
+  if (explicitPath) {
+    return explicitPath;
+  }
+
+  return path.join(getDevDeckUserDataPath(), "github-token.json");
 }
 
 function getGitHubOAuthClientId() {
   return process.env.DEVDECK_GITHUB_CLIENT_ID?.trim() || null;
+}
+
+function getDevDeckUserDataPath() {
+  const explicitPath = process.env.DEVDECK_USER_DATA_PATH?.trim();
+  if (explicitPath) {
+    return explicitPath;
+  }
+
+  const homeDirectory = homedir();
+  if (process.platform === "darwin") {
+    return path.join(homeDirectory, "Library", "Application Support", "DevDeck");
+  }
+
+  return path.join(homeDirectory, ".devdeck");
+}
+
+function shouldUseKeychainStorage() {
+  const storageMode = process.env.DEVDECK_GITHUB_STORAGE?.trim().toLowerCase();
+  if (storageMode === "file") {
+    return false;
+  }
+
+  if (storageMode === "keychain") {
+    return true;
+  }
+
+  return process.platform === "darwin";
 }
 
 async function githubOAuthRequest<T>(
@@ -153,7 +185,7 @@ async function clearStoredGitHubTokenFromFile() {
 }
 
 export async function readStoredGitHubToken() {
-  if (process.platform === "darwin") {
+  if (shouldUseKeychainStorage()) {
     return readStoredGitHubTokenFromKeychain();
   }
 
@@ -161,7 +193,7 @@ export async function readStoredGitHubToken() {
 }
 
 export async function saveStoredGitHubToken(token: string) {
-  if (process.platform === "darwin") {
+  if (shouldUseKeychainStorage()) {
     await saveStoredGitHubTokenToKeychain(token);
     return;
   }
@@ -170,7 +202,7 @@ export async function saveStoredGitHubToken(token: string) {
 }
 
 export async function clearStoredGitHubToken() {
-  if (process.platform === "darwin") {
+  if (shouldUseKeychainStorage()) {
     await clearStoredGitHubTokenFromKeychain();
     return;
   }

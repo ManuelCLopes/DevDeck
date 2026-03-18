@@ -1,14 +1,16 @@
 import type { WorkspaceProject } from "@shared/workspace";
+import ProjectQuickActions from "@/components/projects/ProjectQuickActions";
 import { getCiStatusMeta, getProjectAttentionSummary } from "@/lib/project-health";
 import { formatDistanceToNow } from "date-fns";
 import { GitBranch, Globe, HardDrive, Link2Off, MessageSquare, Users } from "lucide-react";
-import { Link } from "wouter";
+import { useLocation } from "wouter";
 
 interface ProjectRowProps {
   project: WorkspaceProject;
 }
 
 export default function ProjectRow({ project }: ProjectRowProps) {
+  const [, setLocation] = useLocation();
   const statusColors = {
     healthy: "bg-chart-1 flex-shrink-0 shadow-[0_0_8px_rgba(39,201,63,0.5)]",
     warning: "bg-chart-2 flex-shrink-0 shadow-[0_0_8px_rgba(255,189,46,0.5)]",
@@ -19,11 +21,19 @@ export default function ProjectRow({ project }: ProjectRowProps) {
   const attentionSummary = getProjectAttentionSummary(project);
 
   return (
-    <Link href={projectHref}>
-      <a
-        className="group flex items-center gap-4 py-2.5 px-4 -mx-4 hover:bg-black/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-md transition-colors border-b border-border/40 last:border-0 cursor-pointer"
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => setLocation(projectHref)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setLocation(projectHref);
+        }
+      }}
+      className="group flex items-center gap-4 py-2.5 px-4 -mx-4 hover:bg-black/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-md transition-colors border-b border-border/40 last:border-0 cursor-pointer"
         aria-label={`Open ${project.name} overview`}
-      >
+    >
         <div className={`w-1.5 h-1.5 rounded-full ${statusColors[project.status]}`} />
 
         <div className="flex-1 min-w-0 grid grid-cols-12 gap-4 items-center">
@@ -91,7 +101,12 @@ export default function ProjectRow({ project }: ProjectRowProps) {
             <span className="text-[10px]">{attentionSummary}</span>
           </div>
         </div>
-      </a>
-    </Link>
+        <ProjectQuickActions
+          compact
+          projectId={project.id}
+          projectName={project.name}
+          projectPath={project.localPath}
+        />
+      </div>
   );
 }

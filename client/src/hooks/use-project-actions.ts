@@ -1,0 +1,59 @@
+import { useLocation } from "wouter";
+import { getDesktopApi } from "@/lib/desktop";
+import { queryClient } from "@/lib/queryClient";
+import { clearWorkspaceHandle } from "@/lib/workspace-handle";
+import {
+  clearWorkspaceSelection,
+  removeManagedProject,
+  setWorkspaceSelection,
+} from "@/lib/workspace-selection";
+import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
+
+export function useProjectActions() {
+  const [, setLocation] = useLocation();
+  const workspaceSelection = useWorkspaceSelection();
+  const desktopApi = getDesktopApi();
+
+  const copyPath = async (projectPath: string) => {
+    if (desktopApi?.copyToClipboard) {
+      await desktopApi.copyToClipboard(projectPath);
+      return;
+    }
+
+    await navigator.clipboard.writeText(projectPath);
+  };
+
+  const openInCode = async (projectPath: string) => {
+    await desktopApi?.openInCode?.(projectPath);
+  };
+
+  const revealInFinder = async (projectPath: string) => {
+    await desktopApi?.showItemInFinder?.(projectPath);
+  };
+
+  const removeProject = async (projectId: string) => {
+    const nextSelection = removeManagedProject(workspaceSelection, projectId);
+    if (!nextSelection) {
+      clearWorkspaceSelection();
+      await clearWorkspaceHandle();
+      void queryClient.removeQueries({ queryKey: ["workspace", "snapshot"] });
+      setLocation("/onboarding");
+      return;
+    }
+
+    setWorkspaceSelection(nextSelection);
+    void queryClient.invalidateQueries({ queryKey: ["workspace", "snapshot"] });
+    const currentSearch =
+      typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    if (window.location.pathname === "/" && currentSearch?.get("project") === projectId) {
+      setLocation("/");
+    }
+  };
+
+  return {
+    copyPath,
+    openInCode,
+    removeProject,
+    revealInFinder,
+  };
+}

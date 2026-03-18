@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   filterPullRequestsByFocus,
+  getPullRequestCiStatusMeta,
   getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
@@ -42,6 +43,11 @@ test("getPullRequestReviewSummary prioritizes viewer reviews", () => {
 test("getPullRequestStatusMeta exposes readable labels", () => {
   assert.equal(getPullRequestStatusMeta("changes_requested").label, "changes requested");
   assert.equal(getPullRequestStatusMeta("approved").label, "approved");
+});
+
+test("getPullRequestCiStatusMeta exposes readable CI labels", () => {
+  assert.equal(getPullRequestCiStatusMeta("passing").label, "checks passing");
+  assert.equal(getPullRequestCiStatusMeta("failing").label, "checks failing");
 });
 
 test("pullRequestNeedsViewerReview prefers direct review responsibility", () => {
@@ -105,6 +111,25 @@ test("filterPullRequestsByFocus narrows authored pull requests", () => {
     filterPullRequestsByFocus(
       pullRequests as never,
       "authored_by_me",
+    ).length,
+    1,
+  );
+});
+
+test("filterPullRequestsByFocus narrows changes requested pull requests", () => {
+  const pullRequests = [
+    {
+      status: "changes_requested",
+    },
+    {
+      status: "approved",
+    },
+  ];
+
+  assert.equal(
+    filterPullRequestsByFocus(
+      pullRequests as never,
+      "changes_requested",
     ).length,
     1,
   );

@@ -20,7 +20,7 @@
     "pack:mac": "node script/generate-icon.cjs && npm run build && electron-builder --mac dir",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "test": "tsx --test client/src/lib/*.test.ts",
+    "test": "tsx --test client/src/lib/*.test.ts shared/*.test.ts electron/*.test.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
@@ -131,13 +131,29 @@
       "package.json"
     ],
     "dmg": {
+      "backgroundColor": "#eff4fb",
+      "contents": [
+        {
+          "type": "file",
+          "x": 150,
+          "y": 185
+        },
+        {
+          "path": "/Applications",
+          "type": "link",
+          "x": 390,
+          "y": 185
+        }
+      ],
+      "iconSize": 140,
       "window": {
-        "width": 540,
-        "height": 380
+        "width": 560,
+        "height": 400
       }
     },
     "mac": {
       "category": "public.app-category.developer-tools",
+      "darkModeSupport": true,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "gatekeeperAssess": false,

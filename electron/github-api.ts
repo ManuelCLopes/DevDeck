@@ -15,7 +15,10 @@ export interface GitHubApiPullRequestReview {
 export interface GitHubApiPullRequest {
   base: { ref: string };
   draft: boolean;
-  head: { ref: string };
+  head: {
+    ref: string;
+    sha: string;
+  };
   html_url: string;
   number: number;
   requested_reviewers: Array<{ login: string }>;

@@ -4,6 +4,16 @@ import type {
   WorkspaceSelection,
   WorkspaceSnapshot,
 } from "../shared/workspace";
+import type { WorkspaceMonitorPreferences } from "../shared/workspace-monitor";
+
+interface WorkspaceMonitorState {
+  preferences: WorkspaceMonitorPreferences & {
+    autoRefreshEnabled: boolean;
+    autoRefreshIntervalSeconds: number;
+    refreshOnWindowFocus: boolean;
+  };
+  selection: WorkspaceSelection | null;
+}
 
 const devdeck = {
   clearGitHubToken(): Promise<void> {
@@ -11,6 +21,18 @@ const devdeck = {
   },
   loadWorkspaceSnapshot(selection: WorkspaceSelection): Promise<WorkspaceSnapshot> {
     return ipcRenderer.invoke("devdeck:load-workspace-snapshot", selection);
+  },
+  onWorkspaceSnapshotUpdated(
+    listener: (snapshot: WorkspaceSnapshot) => void,
+  ) {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      snapshot: WorkspaceSnapshot,
+    ) => listener(snapshot);
+    ipcRenderer.on("devdeck:workspace-snapshot-updated", wrappedListener);
+    return () => {
+      ipcRenderer.removeListener("devdeck:workspace-snapshot-updated", wrappedListener);
+    };
   },
   copyToClipboard(value: string): Promise<void> {
     return ipcRenderer.invoke("devdeck:copy-to-clipboard", value);
@@ -44,6 +66,9 @@ const devdeck = {
   },
   startGitHubDeviceAuth() {
     return ipcRenderer.invoke("devdeck:start-github-device-auth");
+  },
+  syncWorkspaceMonitorState(state: WorkspaceMonitorState) {
+    return ipcRenderer.invoke("devdeck:sync-workspace-monitor-state", state);
   },
   setLaunchAtLogin(enabled: boolean): Promise<void> {
     return ipcRenderer.invoke("devdeck:set-launch-at-login", enabled);

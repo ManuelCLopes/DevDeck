@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useAppPreferences } from "@/lib/app-preferences";
+import { getDesktopApi } from "@/lib/desktop";
 import { queryClient } from "@/lib/queryClient";
 import { getWorkspaceSelection } from "@/lib/workspace-selection";
 
@@ -11,6 +12,10 @@ export function useWorkspaceAutoRefresh() {
   const lastRefreshAtRef = useRef(0);
 
   useEffect(() => {
+    if (getDesktopApi()) {
+      return;
+    }
+
     const refreshSnapshot = (reason: "focus" | "interval" | "online") => {
       if (!getWorkspaceSelection()) {
         return;

@@ -19,6 +19,7 @@ import type {
   WorkspaceGitHubState,
   WorkspaceGitHubStatus,
   WorkspaceProject,
+  WorkspacePullRequestReviewEvent,
   WorkspaceProjectStatus,
   WorkspacePullRequestItem,
   WorkspacePullRequestReviewState,
@@ -51,6 +52,7 @@ interface RepositorySyncStatus {
 interface GitHubPullRequestRecord {
   author: { login: string } | null;
   baseRefName: string;
+  headSha: string;
   headRefName: string;
   isDraft: boolean;
   latestReviews: GitHubPullRequestReviewRecord[];
@@ -65,7 +67,7 @@ interface GitHubPullRequestRecord {
 interface GitHubPullRequestReviewRecord {
   author: { login: string } | null;
   state: string;
-  submittedAt?: string;
+  submittedAt: string | null;
 }
 
 interface GitHubAuthStatus {
@@ -430,11 +432,17 @@ function normalizePullRequestRecord(
   reviews: GitHubApiPullRequestReview[],
 ) {
   const latestReviewerState = new Map<string, { state: string; submittedAt: number }>();
-  const normalizedReviews = reviews.map((review) => ({
-    author: review.user ? { login: review.user.login } : null,
-    state: review.state,
-    submittedAt: review.submitted_at ?? undefined,
-  }));
+  const normalizedReviews = reviews
+    .map((review) => ({
+      author: review.user ? { login: review.user.login } : null,
+      state: review.state,
+      submittedAt: review.submitted_at,
+    }))
+    .sort((left, right) => {
+      const leftTime = left.submittedAt ? new Date(left.submittedAt).getTime() : 0;
+      const rightTime = right.submittedAt ? new Date(right.submittedAt).getTime() : 0;
+      return rightTime - leftTime;
+    });
 
   for (const review of reviews) {
     const reviewerLogin = review.user?.login ?? null;
@@ -457,6 +465,14 @@ function normalizePullRequestRecord(
   const latestStates = Array.from(latestReviewerState.values()).map(
     (review) => review.state,
   );
+  const latestReviews = Array.from(latestReviewerState.entries()).map(
+    ([reviewerLogin, review]) => ({
+      author: { login: reviewerLogin },
+      state: review.state,
+      submittedAt:
+        review.submittedAt > 0 ? new Date(review.submittedAt).toISOString() : null,
+    }),
+  );
   let reviewDecision: GitHubPullRequestRecord["reviewDecision"] = null;
   if (latestStates.includes("CHANGES_REQUESTED")) {
     reviewDecision = "CHANGES_REQUESTED";
@@ -472,9 +488,10 @@ function normalizePullRequestRecord(
   return {
     author: pullRequest.user ? { login: pullRequest.user.login } : null,
     baseRefName: pullRequest.base.ref,
+    headSha: pullRequest.head.sha,
     headRefName: pullRequest.head.ref,
     isDraft: pullRequest.draft,
-    latestReviews: normalizedReviews,
+    latestReviews,
     number: pullRequest.number,
     reviewDecision,
     reviews: normalizedReviews,
@@ -634,9 +651,19 @@ async function fetchPullRequests(
         ),
       ),
     );
+    const pullRequestCiStatuses = await Promise.all(
+      pullRequests.map((pullRequest) =>
+        fetchDefaultBranchCiStatus(
+          githubRepository.slug,
+          pullRequest.head.sha,
+          githubAuthStatus,
+        ),
+      ),
+    );
 
     const workspacePullRequests = pullRequests.map((pullRequest, index) => {
       const reviews = pullRequestReviews[index];
+      const ciStatus = pullRequestCiStatuses[index] ?? "unknown";
       const normalizedPullRequest = normalizePullRequestRecord(
         pullRequest,
         reviews,
@@ -662,6 +689,7 @@ async function fetchPullRequests(
           Boolean(githubAuthStatus.viewerLogin) &&
           authorLogin === githubAuthStatus.viewerLogin,
         baseBranch: normalizedPullRequest.baseRefName,
+        ciStatus,
         headBranch: normalizedPullRequest.headRefName,
         id: `${githubRepository.slug}#${normalizedPullRequest.number}`,
         isViewerRequestedReviewer,
@@ -672,6 +700,11 @@ async function fetchPullRequests(
         reviewState: getPullRequestReviewState(
           reviewedByViewer,
           reviewerLogins.length,
+        ),
+        reviewTimeline: createPullRequestReviewTimeline(
+          githubRepository.slug,
+          normalizedPullRequest.number,
+          normalizedPullRequest.reviews,
         ),
         requestedReviewerLogins,
         reviewedByOthersCount,
@@ -743,20 +776,19 @@ function mapGitHubCommitStateToCiStatus(commitState: string | null) {
 }
 
 async function fetchDefaultBranchCiStatus(
-  remoteUrl: string | null,
-  defaultBranch: string,
+  repositorySlug: string | null,
+  ref: string,
   githubAuthStatus: GitHubAuthStatus,
 ) {
-  const githubRepository = parseGitHubRepository(remoteUrl);
   if (
-    !githubRepository ||
+    !repositorySlug ||
     !githubAuthStatus.authenticated ||
     !githubAuthStatus.token
   ) {
     return "unknown" satisfies WorkspaceCiStatus;
   }
 
-  const cacheKey = `${githubRepository.slug}#${defaultBranch}`;
+  const cacheKey = `${repositorySlug}#${ref}`;
   const cachedStatus = ciStatusCache.get(cacheKey);
   if (cachedStatus && cachedStatus.expiresAt > Date.now()) {
     return cachedStatus.status;
@@ -764,8 +796,8 @@ async function fetchDefaultBranchCiStatus(
 
   try {
     const commitState = await fetchGitHubCommitStatus(
-      githubRepository.slug,
-      defaultBranch,
+      repositorySlug,
+      ref,
       githubAuthStatus.token,
     );
     const ciStatus = mapGitHubCommitStateToCiStatus(commitState);
@@ -779,6 +811,21 @@ async function fetchDefaultBranchCiStatus(
   } catch {
     return "unknown" satisfies WorkspaceCiStatus;
   }
+}
+
+function createPullRequestReviewTimeline(
+  repositorySlug: string,
+  pullRequestNumber: number,
+  reviews: GitHubPullRequestReviewRecord[],
+) {
+  return reviews.map((review, index) => ({
+    id: `${repositorySlug}#${pullRequestNumber}:review:${index}:${
+      review.submittedAt ?? review.author?.login ?? "unknown"
+    }`,
+    reviewerLogin: review.author?.login ?? null,
+    state: review.state,
+    submittedAt: review.submittedAt,
+  })) satisfies WorkspacePullRequestReviewEvent[];
 }
 
 async function collectExtensionCounts(
@@ -936,11 +983,12 @@ async function scanRepository(
 
     const description = await inferDescription(repositoryPath, language, monitoredProject.name);
     const remoteUrl = parseConfigOriginUrl(configText);
+    const githubRepository = parseGitHubRepository(remoteUrl);
     const staleBranchCount = branchReviews.filter(
       (review) => review?.status === "stale",
     ).length;
     const defaultBranchCiStatus = await fetchDefaultBranchCiStatus(
-      remoteUrl,
+      githubRepository?.slug ?? null,
       defaultBranch,
       githubAuthStatus,
     );

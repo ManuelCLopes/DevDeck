@@ -1,4 +1,5 @@
 import type {
+  WorkspaceCiStatus,
   WorkspacePullRequestItem,
   WorkspacePullRequestStatus,
 } from "@shared/workspace";
@@ -8,6 +9,7 @@ export type PullRequestFocus =
   | "needs_my_review"
   | "needs_my_follow_up"
   | "authored_by_me"
+  | "changes_requested"
   | "reviewed_by_me"
   | "waiting_on_others";
 
@@ -86,6 +88,61 @@ export function getPullRequestReviewSummary(
   };
 }
 
+export function getPullRequestCiStatusMeta(status: WorkspaceCiStatus) {
+  switch (status) {
+    case "passing":
+      return {
+        className: "bg-chart-1/10 text-chart-1 border-chart-1/20",
+        label: "checks passing",
+      };
+    case "failing":
+      return {
+        className: "bg-chart-3/10 text-chart-3 border-chart-3/20",
+        label: "checks failing",
+      };
+    case "pending":
+      return {
+        className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
+        label: "checks pending",
+      };
+    default:
+      return {
+        className: "bg-secondary text-muted-foreground border-border/60",
+        label: "checks unknown",
+      };
+  }
+}
+
+export function getPullRequestReviewEventMeta(state: string) {
+  switch (state) {
+    case "APPROVED":
+      return {
+        className: "bg-chart-1/10 text-chart-1 border-chart-1/20",
+        label: "approved",
+      };
+    case "CHANGES_REQUESTED":
+      return {
+        className: "bg-chart-3/10 text-chart-3 border-chart-3/20",
+        label: "changes requested",
+      };
+    case "COMMENTED":
+      return {
+        className: "bg-secondary text-foreground border-border/60",
+        label: "commented",
+      };
+    case "DISMISSED":
+      return {
+        className: "bg-secondary text-muted-foreground border-border/60",
+        label: "dismissed",
+      };
+    default:
+      return {
+        className: "bg-secondary text-muted-foreground border-border/60",
+        label: state.toLowerCase().replaceAll("_", " "),
+      };
+  }
+}
+
 export function pullRequestNeedsViewerReview(
   pullRequest: Pick<
     WorkspacePullRequestItem,
@@ -144,6 +201,10 @@ export function filterPullRequestsByFocus(
       return pullRequests.filter(pullRequestNeedsAuthorFollowUp);
     case "authored_by_me":
       return pullRequests.filter((pullRequest) => pullRequest.authoredByViewer);
+    case "changes_requested":
+      return pullRequests.filter(
+        (pullRequest) => pullRequest.status === "changes_requested",
+      );
     case "reviewed_by_me":
       return pullRequests.filter((pullRequest) => pullRequest.reviewedByViewer);
     case "waiting_on_others":

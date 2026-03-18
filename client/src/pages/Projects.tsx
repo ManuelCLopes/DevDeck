@@ -7,6 +7,7 @@ import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
 import { getCiStatusMeta } from "@/lib/project-health";
 import {
+  getPullRequestCiStatusMeta,
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
 } from "@/lib/pull-request-utils";
@@ -315,6 +316,7 @@ export default function Projects() {
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Open Pull Requests</h3>
                   <div className="space-y-2">
                     {selectedProjectPullRequestsPagination.paginatedItems.map((pullRequest) => {
+                      const ciStatusMeta = getPullRequestCiStatusMeta(pullRequest.ciStatus);
                       const statusMeta = getPullRequestStatusMeta(pullRequest.status);
                       const reviewSummary = getPullRequestReviewSummary(pullRequest);
 
@@ -334,6 +336,9 @@ export default function Projects() {
                             </span>
                             <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${reviewSummary.className}`}>
                               {reviewSummary.label}
+                            </span>
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${ciStatusMeta.className}`}>
+                              {ciStatusMeta.label}
                             </span>
                           </div>
                         </button>

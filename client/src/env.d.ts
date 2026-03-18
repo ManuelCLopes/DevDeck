@@ -3,12 +3,25 @@ import type {
   WorkspaceSelection,
   WorkspaceSnapshot,
 } from "@shared/workspace";
+import type { WorkspaceMonitorPreferences } from "@shared/workspace-monitor";
+
+interface WorkspaceMonitorState {
+  preferences: WorkspaceMonitorPreferences & {
+    autoRefreshEnabled: boolean;
+    autoRefreshIntervalSeconds: number;
+    refreshOnWindowFocus: boolean;
+  };
+  selection: WorkspaceSelection | null;
+}
 
 interface DevDeckDesktopApi {
   clearGitHubToken(): Promise<void>;
   copyToClipboard(value: string): Promise<void>;
   getGitHubAuthCapabilities(): Promise<{ deviceFlowAvailable: boolean }>;
   loadWorkspaceSnapshot(selection: WorkspaceSelection): Promise<WorkspaceSnapshot>;
+  onWorkspaceSnapshotUpdated(
+    listener: (snapshot: WorkspaceSnapshot) => void,
+  ): () => void;
   openExternal(targetUrl: string): Promise<void>;
   openInCode(targetPath: string): Promise<void>;
   openInTerminal(targetPath: string): Promise<void>;
@@ -30,6 +43,7 @@ interface DevDeckDesktopApi {
     userCode: string;
     verificationUri: string;
   }>;
+  syncWorkspaceMonitorState(state: WorkspaceMonitorState): Promise<void>;
   windowControls: {
     close(): Promise<void>;
     minimize(): Promise<void>;

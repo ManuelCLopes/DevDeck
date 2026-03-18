@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import WindowControls from "@/components/layout/WindowControls";
+import ProjectQuickActions from "@/components/projects/ProjectQuickActions";
 import {
   CommandDialog,
   CommandEmpty,
@@ -21,6 +22,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { useWorkspaceAutoRefresh } from "@/hooks/use-workspace-auto-refresh";
+import { useDesktopWorkspaceMonitor } from "@/hooks/use-desktop-workspace-monitor";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { useAppPreferences } from "@/lib/app-preferences";
 import {
@@ -75,6 +77,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   useWorkspaceAlerts(snapshot, preferences);
   useWorkspaceAutoRefresh();
+  useDesktopWorkspaceMonitor(workspaceSelection, preferences);
 
   const searchResults = useMemo(() => {
     if (!snapshot) {
@@ -241,22 +244,34 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     </div>
                   )}
                   {collection.projects.map((project) => (
-                    <Link
+                    <div
                       key={project.localPath ?? project.id}
-                      href={`/?project=${encodeURIComponent(project.id)}`}
+                      className={`group flex items-center gap-2 rounded-md px-2 py-1 transition-colors ${
+                        selectedProjectId === project.id && location === "/"
+                          ? "bg-black/7 text-foreground font-medium"
+                          : "text-foreground/80 hover:bg-black/5"
+                      }`}
                     >
-                      <a
-                        className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-colors group ${
-                          selectedProjectId === project.id && location === "/"
-                            ? "bg-black/7 text-foreground font-medium"
-                            : "text-foreground/80 hover:bg-black/5"
-                        }`}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLocation(`/?project=${encodeURIComponent(project.id)}`)
+                        }
+                        className="flex min-w-0 flex-1 items-center gap-2 px-0.5 py-0.5 text-left"
                         title={project.localPath ?? project.name}
                       >
                         <HardDrive className="w-3.5 h-3.5 opacity-60 text-primary group-hover:opacity-100 transition-opacity" />
                         <span className="truncate">{project.name}</span>
-                      </a>
-                    </Link>
+                      </button>
+                      {project.localPath ? (
+                        <ProjectQuickActions
+                          compact
+                          projectId={project.id}
+                          projectName={project.name}
+                          projectPath={project.localPath}
+                        />
+                      ) : null}
+                    </div>
                   ))}
                 </div>
               ))}

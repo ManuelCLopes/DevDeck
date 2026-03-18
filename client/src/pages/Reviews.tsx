@@ -7,6 +7,7 @@ import { getDesktopApi } from "@/lib/desktop";
 import { getGitHubStatusMeta } from "@/lib/github-status";
 import {
   filterPullRequestsByFocus,
+  getPullRequestCiStatusMeta,
   getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
@@ -14,6 +15,7 @@ import {
   pullRequestNeedsViewerReview,
   type PullRequestFocus,
 } from "@/lib/pull-request-utils";
+import { REVIEW_FOCUS_STORAGE_KEY } from "@/lib/review-focus";
 import { formatDistanceToNow } from "date-fns";
 import {
   AlertCircle,
@@ -35,7 +37,7 @@ export default function Reviews() {
   const [location, setLocation] = useLocation();
   const search = useSearch();
   const [focusFilter, setFocusFilter] = usePersistentState<PullRequestFocus>(
-    "devdeck:reviews:focus-filter",
+    REVIEW_FOCUS_STORAGE_KEY,
     "all",
   );
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
@@ -96,6 +98,13 @@ export default function Reviews() {
     { count: needsViewerReviewCount, id: "needs_my_review", label: "Needs My Review" },
     { count: needsAuthorFollowUpCount, id: "needs_my_follow_up", label: "Needs My Follow-Up" },
     { count: authoredByViewerCount, id: "authored_by_me", label: "Authored By Me" },
+    {
+      count: pullRequests.filter(
+        (pullRequest) => pullRequest.status === "changes_requested",
+      ).length,
+      id: "changes_requested",
+      label: "Changes Requested",
+    },
     { count: reviewedByViewerCount, id: "reviewed_by_me", label: "Reviewed By Me" },
     {
       count: filterPullRequestsByFocus(pullRequests, "waiting_on_others").length,
@@ -107,6 +116,7 @@ export default function Reviews() {
   const emptyPullRequestMessageByFilter: Record<PullRequestFocus, string> = {
     all: "No open pull requests were found for the connected repositories.",
     authored_by_me: "You do not currently have open pull requests in this workspace.",
+    changes_requested: "No pull requests are currently waiting on requested changes.",
     needs_my_follow_up: "Nothing currently needs your follow-up.",
     needs_my_review: "You do not currently have a review queue here.",
     reviewed_by_me: "You have not reviewed any of the current open pull requests yet.",
@@ -257,6 +267,11 @@ export default function Reviews() {
                               className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestFollowUpMeta(pullRequest).className}`}
                             >
                               {getPullRequestFollowUpMeta(pullRequest).label}
+                            </span>
+                            <span
+                              className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestCiStatusMeta(pullRequest.ciStatus).className}`}
+                            >
+                              {getPullRequestCiStatusMeta(pullRequest.ciStatus).label}
                             </span>
                           </div>
                           <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0">

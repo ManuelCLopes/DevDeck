@@ -12,6 +12,8 @@ export interface ManagedProjectCollection {
 
 const WORKSPACE_SELECTION_KEY = "devdeck_workspace_selection";
 const WORKSPACE_SELECTION_EVENT = "devdeck:workspace-selection-updated";
+let cachedWorkspaceSelectionRaw: string | null = null;
+let cachedWorkspaceSelection: WorkspaceSelection | null = null;
 
 export const DEFAULT_MONITORED_DIRECTORIES = [
   "~/Developer/frontend",
@@ -224,12 +226,24 @@ export function getWorkspaceSelection(): WorkspaceSelection | null {
 
   const rawSelection = localStorage.getItem(WORKSPACE_SELECTION_KEY);
   if (!rawSelection) {
+    cachedWorkspaceSelectionRaw = null;
+    cachedWorkspaceSelection = null;
     return null;
   }
 
+  if (rawSelection === cachedWorkspaceSelectionRaw) {
+    return cachedWorkspaceSelection;
+  }
+
   try {
-    return normalizeWorkspaceSelection(JSON.parse(rawSelection) as WorkspaceSelection);
+    cachedWorkspaceSelectionRaw = rawSelection;
+    cachedWorkspaceSelection = normalizeWorkspaceSelection(
+      JSON.parse(rawSelection) as WorkspaceSelection,
+    );
+    return cachedWorkspaceSelection;
   } catch {
+    cachedWorkspaceSelectionRaw = null;
+    cachedWorkspaceSelection = null;
     return null;
   }
 }
@@ -241,7 +255,10 @@ export function setWorkspaceSelection(selection: WorkspaceSelection) {
     return;
   }
 
-  localStorage.setItem(WORKSPACE_SELECTION_KEY, JSON.stringify(normalizedSelection));
+  const rawSelection = JSON.stringify(normalizedSelection);
+  cachedWorkspaceSelectionRaw = rawSelection;
+  cachedWorkspaceSelection = normalizedSelection;
+  localStorage.setItem(WORKSPACE_SELECTION_KEY, rawSelection);
   dispatchWorkspaceSelectionChanged();
 }
 
@@ -299,6 +316,8 @@ export function mergeWorkspaceSelection(
 }
 
 export function clearWorkspaceSelection() {
+  cachedWorkspaceSelectionRaw = null;
+  cachedWorkspaceSelection = null;
   localStorage.removeItem(WORKSPACE_SELECTION_KEY);
   dispatchWorkspaceSelectionChanged();
 }
