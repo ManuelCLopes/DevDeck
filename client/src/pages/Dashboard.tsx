@@ -35,7 +35,7 @@ export default function Dashboard() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Project Overview</h1>
             <p className="text-muted-foreground text-sm flex items-center gap-1.5">
-              <HardDrive className="w-3.5 h-3.5" /> Monitoring ~/Developer
+              <HardDrive className="w-3.5 h-3.5" /> DevDeck is monitoring ~/Developer
             </p>
           </div>
           

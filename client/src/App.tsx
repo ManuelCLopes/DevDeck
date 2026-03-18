@@ -11,16 +11,15 @@ import Reviews from "@/pages/Reviews";
 import Activity from "@/pages/Activity";
 import Projects from "@/pages/Projects";
 import Onboarding from "@/pages/Onboarding";
+import { hasCompletedOnboarding } from "@/lib/onboarding-state";
 
 function Router() {
   const [location, setLocation] = useLocation();
   const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
-    const hasCompletedOnboarding = localStorage.getItem('oversight_onboarding_completed');
-    
     // Only redirect to onboarding if they haven't completed it AND they aren't already there
-    if (!hasCompletedOnboarding && location !== '/onboarding') {
+    if (!hasCompletedOnboarding() && location !== '/onboarding') {
       setLocation('/onboarding');
     }
     

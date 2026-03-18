@@ -77,7 +77,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <div className="mt-6 mb-2 px-2 flex items-center justify-between">
               <p className="text-[11px] font-semibold text-muted-foreground/80">DIRECTORIES</p>
               <button className="text-muted-foreground/50 hover:text-foreground/80">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinelinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               </button>
             </div>
             <div className="space-y-[2px]">
@@ -107,7 +107,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <ShieldCheck className="w-3.5 h-3.5 text-chart-1" />
               <div className="flex flex-col">
                 <span className="text-[10px] font-medium leading-tight">Local Execution</span>
-                <span className="text-[9px] text-muted-foreground leading-tight">Secure, zero telemetry</span>
+                <span className="text-[9px] text-muted-foreground leading-tight">Private, local-first by design</span>
               </div>
             </div>
           </div>
@@ -127,7 +127,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
-              <h1 className="font-semibold text-sm">Oversight</h1>
+              <h1 className="font-semibold text-sm">DevDeck</h1>
             </div>
 
             <div className="flex items-center gap-3 no-drag">

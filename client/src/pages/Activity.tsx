@@ -42,7 +42,7 @@ export default function Activity() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Activity Inbox</h1>
-            <p className="text-muted-foreground text-sm">Notifications, alerts, and mentions across your local repositories.</p>
+            <p className="text-muted-foreground text-sm">Notifications, alerts, and mentions across repositories tracked by DevDeck.</p>
           </div>
           
           <div className="flex gap-2">

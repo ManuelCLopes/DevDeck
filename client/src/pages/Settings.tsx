@@ -2,13 +2,14 @@ import { useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import { FolderGit2, Github, CheckCircle2, HardDrive, Shield, Lock, RotateCcw } from "lucide-react";
 import { useLocation } from "wouter";
+import { clearCompletedOnboarding } from "@/lib/onboarding-state";
 
 export default function Settings() {
   const [connected, setConnected] = useState(false);
   const [, setLocation] = useLocation();
 
   const handleResetOnboarding = () => {
-    localStorage.removeItem('oversight_onboarding_completed');
+    clearCompletedOnboarding();
     setLocation('/onboarding');
   };
 
@@ -17,7 +18,7 @@ export default function Settings() {
       <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div>
           <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Preferences</h1>
-          <p className="text-muted-foreground text-sm">Configure local directories and remote connections.</p>
+          <p className="text-muted-foreground text-sm">Configure DevDeck's local directories and remote connections.</p>
         </div>
 
         <div className="bg-white border border-border/60 rounded-xl overflow-hidden shadow-sm">
@@ -26,7 +27,7 @@ export default function Settings() {
             <div>
               <h2 className="text-sm font-semibold tracking-tight text-foreground">Local-First Trust Model</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Oversight runs directly on your machine. We analyze your git repositories locally and do not upload your source code to any external servers. This makes it perfect for enterprise compliance.
+                DevDeck runs directly on your machine. It analyzes your Git repositories locally and does not upload source code to external servers, which keeps the workflow compliance-friendly.
               </p>
             </div>
           </div>
@@ -96,7 +97,7 @@ export default function Settings() {
               {[
                 { id: "stale-prs", label: "Highlight Stale PRs", desc: "Flag pull requests that have no activity for > 5 days." },
                 { id: "failing-builds", label: "Alert on Failing Builds", desc: "Show native desktop notifications for default branch failures." },
-                { id: "launch-login", label: "Launch at Login", desc: "Start Oversight automatically in the menu bar." }
+                { id: "launch-login", label: "Launch at Login", desc: "Start DevDeck automatically in the menu bar." }
               ].map(setting => (
                 <div key={setting.id} className="flex items-center justify-between gap-4 p-3 rounded-md hover:bg-secondary/30 transition-colors">
                   <div>

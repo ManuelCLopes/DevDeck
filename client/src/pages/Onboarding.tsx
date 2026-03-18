@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { setCompletedOnboarding } from "@/lib/onboarding-state";
 import { 
   FolderGit2, 
   ShieldCheck, 
@@ -31,7 +32,7 @@ export default function Onboarding() {
   };
 
   const handleComplete = () => {
-    localStorage.setItem('oversight_onboarding_completed', 'true');
+    setCompletedOnboarding();
     setLocation("/");
   };
 
@@ -54,7 +55,7 @@ export default function Onboarding() {
             <div className="mac-btn mac-btn-minimize opacity-50"></div>
             <div className="mac-btn mac-btn-maximize opacity-50"></div>
           </div>
-          <span className="font-semibold text-xs text-muted-foreground">Welcome to Oversight</span>
+          <span className="font-semibold text-xs text-muted-foreground">Welcome to DevDeck</span>
         </div>
 
         {/* Content Area */}
@@ -66,9 +67,9 @@ export default function Onboarding() {
                 <LayoutGrid className="w-10 h-10" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-foreground mb-3">Welcome to Oversight</h1>
+                <h1 className="text-2xl font-bold text-foreground mb-3">Welcome to DevDeck</h1>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  The professional, desktop-first cockpit for software engineers. <br/>
+                  DevDeck is the desktop-first cockpit for software engineers. <br/>
                   Gain high-signal visibility into your projects, manage code reviews efficiently, and track local repository health.
                 </p>
               </div>
@@ -120,7 +121,7 @@ export default function Onboarding() {
               </div>
               <h2 className="text-xl font-bold text-foreground mb-3">Select Workspace</h2>
               <p className="text-sm text-muted-foreground mb-8">
-                Choose the root folder where your code lives. Oversight will automatically scan for Git repositories inside it.
+                Choose the root folder where your code lives. DevDeck will automatically scan for Git repositories inside it.
               </p>
               
               <div className="bg-secondary/20 border border-border/60 rounded-xl p-6 mb-6">
@@ -159,7 +160,7 @@ export default function Onboarding() {
               </div>
               <h2 className="text-xl font-bold text-foreground mb-3">You're All Set!</h2>
               <p className="text-sm text-muted-foreground mb-8">
-                Oversight found 6 repositories in <strong>{selectedDir}</strong>. <br/>
+                DevDeck found 6 repositories in <strong>{selectedDir}</strong>. <br/>
                 We'll continue monitoring them locally in the background.
               </p>
             </div>
@@ -203,7 +204,7 @@ export default function Onboarding() {
               onClick={handleComplete}
               className="px-6 py-2 rounded-md text-sm font-bold bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors flex items-center gap-2 ml-auto"
             >
-              Launch Oversight
+              Launch DevDeck
             </button>
           )}
         </div>

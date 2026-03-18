@@ -103,7 +103,7 @@ export default function Reviews() {
         {/* Page Header */}
         <div>
           <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Code Reviews</h1>
-          <p className="text-muted-foreground text-sm">Engineering cockpit for pull request management and review cycles.</p>
+          <p className="text-muted-foreground text-sm">DevDeck keeps pull request management and review cycles in one place.</p>
         </div>
 
         {/* Metrics */}

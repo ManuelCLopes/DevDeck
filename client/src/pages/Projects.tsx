@@ -31,7 +31,7 @@ export default function Projects() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Local Projects</h1>
-            <p className="text-muted-foreground text-sm">Repository inspection and local workspace tracking.</p>
+            <p className="text-muted-foreground text-sm">Browse repositories and local workspaces tracked by DevDeck.</p>
           </div>
           
           <div className="flex items-center gap-3">
