@@ -1,6 +1,7 @@
 export type WorkspaceProjectStatus = "healthy" | "warning" | "critical";
 export type WorkspaceReviewStatus = "active" | "stale";
 export type WorkspaceActivityType = "commit" | "checkout" | "repo";
+export type WorkspaceCiStatus = "passing" | "failing" | "pending" | "unknown";
 export type WorkspacePullRequestStatus =
   | "open"
   | "draft"
@@ -35,21 +36,30 @@ export interface WorkspaceDiscoveryResult {
 }
 
 export interface WorkspaceProject {
+  aheadBy: number;
+  awaitingReviewCount: number;
+  behindBy: number;
   branchCount: number;
+  ciStatus: WorkspaceCiStatus;
   contributorCount7d: number;
   currentBranch: string;
   defaultBranch: string;
   description: string;
+  hasUpstream: boolean;
   id: string;
   language: string;
   lastActivityMessage: string | null;
   lastUpdated: string;
   localPath: string;
   name: string;
+  openPullRequestCount: number;
   remoteUrl: string | null;
   relativePath?: string;
+  reviewedByViewerCount: number;
+  staleBranchCount: number;
   status: WorkspaceProjectStatus;
   team: string;
+  unpushedCommitCount: number;
 }
 
 export interface WorkspaceReviewItem {

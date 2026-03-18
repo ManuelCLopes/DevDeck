@@ -1,9 +1,11 @@
 import type { WorkspaceProject } from "@shared/workspace";
+import { getCiStatusMeta, getProjectAttentionSummary } from "@/lib/project-health";
 import {
   GitBranch,
   Globe,
   HardDrive,
   Link2Off,
+  MessageSquare,
   Users,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -19,6 +21,8 @@ export default function ProjectCard({ project }: ProjectCardProps) {
     critical: "bg-chart-3/10 text-chart-3 border-chart-3/20",
   };
   const projectHref = `/?project=${encodeURIComponent(project.id)}`;
+  const ciStatusMeta = getCiStatusMeta(project.ciStatus);
+  const attentionSummary = getProjectAttentionSummary(project);
 
   return (
     <Link href={projectHref}>
@@ -69,6 +73,27 @@ export default function ProjectCard({ project }: ProjectCardProps) {
                 <span className="text-[10px] text-muted-foreground font-medium">last 7d</span>
               </div>
             </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5" /> Pull Requests
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-lg font-bold">{project.openPullRequestCount}</span>
+                <span className="text-[10px] text-muted-foreground font-medium">
+                  {project.awaitingReviewCount} waiting
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] font-medium text-muted-foreground">
+                Attention
+              </span>
+              <span className="text-sm font-semibold text-foreground capitalize">
+                {attentionSummary}
+              </span>
+            </div>
           </div>
 
           <div className="flex-1"></div>
@@ -92,6 +117,10 @@ export default function ProjectCard({ project }: ProjectCardProps) {
                   No origin remote
                 </>
               )}
+            </div>
+
+            <div className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 ${ciStatusMeta.className}`}>
+              {ciStatusMeta.label}
             </div>
           </div>
         </div>

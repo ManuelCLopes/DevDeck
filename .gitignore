@@ -6,3 +6,6 @@ release
 server/public
 vite.config.ts.*
 *.tar.gz
+build/icon.icns
+build/icon.iconset/
+build/icon.png

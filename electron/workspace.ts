@@ -4,6 +4,7 @@ import path from "path";
 import { promisify } from "util";
 import type {
   MonitoredProject,
+  WorkspaceCiStatus,
   WorkspaceDiscoveryResult,
   WorkspaceGitHubStatus,
   WorkspaceProject,
@@ -28,6 +29,12 @@ interface RepositoryScanResult {
   project: WorkspaceProject;
   pullRequests: WorkspacePullRequestItem[];
   reviews: WorkspaceReviewItem[];
+}
+
+interface RepositorySyncStatus {
+  aheadBy: number;
+  behindBy: number;
+  hasUpstream: boolean;
 }
 
 interface GitHubPullRequestRecord {
@@ -70,6 +77,7 @@ const MAX_DISCOVERY_DEPTH = 2;
 const MAX_DISCOVERY_DIRECTORIES = 400;
 const GITHUB_AUTH_CACHE_TTL_MS = 1000 * 60 * 5;
 const PULL_REQUEST_CACHE_TTL_MS = 1000 * 60 * 2;
+const CI_STATUS_CACHE_TTL_MS = 1000 * 60 * 2;
 
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   cjs: "JavaScript",
@@ -107,6 +115,10 @@ let cachedGitHubAuthStatus:
 const pullRequestCache = new Map<
   string,
   { expiresAt: number; pullRequests: WorkspacePullRequestItem[] }
+>();
+const ciStatusCache = new Map<
+  string,
+  { expiresAt: number; status: WorkspaceCiStatus }
 >();
 
 function createRepositoryCandidate(
@@ -342,11 +354,24 @@ function countContributorsInLastWeek(logText: string | null) {
   return authors.size;
 }
 
-function inferStatus(lastUpdated: string): WorkspaceProjectStatus {
-  const ageInDays =
-    (Date.now() - new Date(lastUpdated).getTime()) / (1000 * 60 * 60 * 24);
+function inferStatus(project: Pick<
+  WorkspaceProject,
+  "ciStatus" | "lastUpdated" | "remoteUrl" | "staleBranchCount" | "unpushedCommitCount"
+>): WorkspaceProjectStatus {
+  if (project.ciStatus === "failing") {
+    return "critical";
+  }
 
-  if (ageInDays <= 7) {
+  const ageInDays =
+    (Date.now() - new Date(project.lastUpdated).getTime()) / (1000 * 60 * 60 * 24);
+
+  if (
+    ageInDays <= 7 &&
+    project.staleBranchCount === 0 &&
+    project.unpushedCommitCount === 0 &&
+    Boolean(project.remoteUrl) &&
+    project.ciStatus !== "pending"
+  ) {
     return "healthy";
   }
 
@@ -564,6 +589,92 @@ async function fetchPullRequests(
   }
 }
 
+async function getBranchSyncStatus(
+  repositoryPath: string,
+): Promise<RepositorySyncStatus> {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+      {
+        cwd: repositoryPath,
+        timeout: 4000,
+        maxBuffer: 1024 * 64,
+      },
+    );
+    const [aheadRaw = "0", behindRaw = "0"] = stdout.trim().split(/\s+/);
+
+    return {
+      aheadBy: Number.parseInt(aheadRaw, 10) || 0,
+      behindBy: Number.parseInt(behindRaw, 10) || 0,
+      hasUpstream: true,
+    };
+  } catch {
+    return {
+      aheadBy: 0,
+      behindBy: 0,
+      hasUpstream: false,
+    };
+  }
+}
+
+function mapGitHubCommitStateToCiStatus(commitState: string | null) {
+  switch (commitState) {
+    case "success":
+      return "passing" satisfies WorkspaceCiStatus;
+    case "failure":
+    case "error":
+      return "failing" satisfies WorkspaceCiStatus;
+    case "pending":
+      return "pending" satisfies WorkspaceCiStatus;
+    default:
+      return "unknown" satisfies WorkspaceCiStatus;
+  }
+}
+
+async function fetchDefaultBranchCiStatus(
+  remoteUrl: string | null,
+  defaultBranch: string,
+  githubAuthStatus: GitHubAuthStatus,
+) {
+  const githubRepository = parseGitHubRepository(remoteUrl);
+  if (!githubRepository || !githubAuthStatus.authenticated) {
+    return "unknown" satisfies WorkspaceCiStatus;
+  }
+
+  const cacheKey = `${githubRepository.slug}#${defaultBranch}`;
+  const cachedStatus = ciStatusCache.get(cacheKey);
+  if (cachedStatus && cachedStatus.expiresAt > Date.now()) {
+    return cachedStatus.status;
+  }
+
+  try {
+    const { stdout } = await execFileAsync(
+      "gh",
+      [
+        "api",
+        `repos/${githubRepository.slug}/commits/${encodeURIComponent(defaultBranch)}/status`,
+        "--jq",
+        ".state",
+      ],
+      {
+        timeout: 8000,
+        maxBuffer: 1024 * 128,
+      },
+    );
+    const ciStatus = mapGitHubCommitStateToCiStatus(stdout.trim() || null);
+
+    ciStatusCache.set(cacheKey, {
+      expiresAt: Date.now() + CI_STATUS_CACHE_TTL_MS,
+      status: ciStatus,
+    });
+
+    return ciStatus;
+  } catch {
+    return "unknown" satisfies WorkspaceCiStatus;
+  }
+}
+
 async function collectExtensionCounts(
   directoryPath: string,
   extensionCounts = new Map<string, number>(),
@@ -672,12 +783,13 @@ async function scanRepository(
       return null;
     }
 
-    const [headText, configText, originHeadText, headLogText, language] = await Promise.all([
+    const [headText, configText, originHeadText, headLogText, language, syncStatus] = await Promise.all([
       readOptionalText(path.join(gitPath, "HEAD")),
       readOptionalText(path.join(gitPath, "config")),
       readOptionalText(path.join(gitPath, "refs", "remotes", "origin", "HEAD")),
       readOptionalText(path.join(gitPath, "logs", "HEAD")),
       inferLanguage(repositoryPath),
+      getBranchSyncStatus(repositoryPath),
     ]);
 
     const branchLogsPath = path.join(gitPath, "logs", "refs", "heads");
@@ -718,29 +830,63 @@ async function scanRepository(
 
     const description = await inferDescription(repositoryPath, language, monitoredProject.name);
     const remoteUrl = parseConfigOriginUrl(configText);
-    const project: WorkspaceProject = {
+    const staleBranchCount = branchReviews.filter(
+      (review) => review?.status === "stale",
+    ).length;
+    const defaultBranchCiStatus = await fetchDefaultBranchCiStatus(
+      remoteUrl,
+      defaultBranch,
+      githubAuthStatus,
+    );
+    const baseProject: WorkspaceProject = {
+      aheadBy: syncStatus.aheadBy,
+      awaitingReviewCount: 0,
+      behindBy: syncStatus.behindBy,
       branchCount: Math.max(branches.length, 1),
+      ciStatus: defaultBranchCiStatus,
       contributorCount7d: countContributorsInLastWeek(headLogText),
       currentBranch,
       defaultBranch,
       description,
+      hasUpstream: syncStatus.hasUpstream,
       id: monitoredProject.id,
       language,
       lastActivityMessage: lastHeadEntry?.message ?? null,
       lastUpdated,
       localPath: repositoryPath,
       name: monitoredProject.name,
+      openPullRequestCount: 0,
       remoteUrl,
       relativePath: monitoredProject.relativePath,
-      status: inferStatus(lastUpdated),
+      reviewedByViewerCount: 0,
+      staleBranchCount,
+      status: "healthy",
       team: inferTeam(monitoredProject.relativePath),
+      unpushedCommitCount: syncStatus.aheadBy,
     };
     const pullRequests = await fetchPullRequests(
       repositoryPath,
-      project,
+      baseProject,
       remoteUrl,
       githubAuthStatus,
     );
+    const project: WorkspaceProject = {
+      ...baseProject,
+      awaitingReviewCount: pullRequests.filter(
+        (pullRequest) => pullRequest.reviewState === "unreviewed",
+      ).length,
+      openPullRequestCount: pullRequests.length,
+      reviewedByViewerCount: pullRequests.filter(
+        (pullRequest) => pullRequest.reviewedByViewer,
+      ).length,
+      status: inferStatus({
+        ciStatus: baseProject.ciStatus,
+        lastUpdated: baseProject.lastUpdated,
+        remoteUrl: baseProject.remoteUrl,
+        staleBranchCount: baseProject.staleBranchCount,
+        unpushedCommitCount: baseProject.unpushedCommitCount,
+      }),
+    };
 
     const activities = parseRecentReflogEntries(headLogText, 5).map((entry, index) => {
       const type = entry.message.startsWith("checkout:")
@@ -782,15 +928,30 @@ async function scanRepository(
 
 function createInsights(projects: WorkspaceProject[]) {
   const needsAttention = projects
-    .filter((project) => project.status !== "healthy" || !project.remoteUrl)
+    .filter(
+      (project) =>
+        project.status !== "healthy" ||
+        !project.remoteUrl ||
+        project.awaitingReviewCount > 0,
+    )
     .slice(0, 2)
     .map((project) => ({
-      title: !project.remoteUrl
-        ? `${project.name} has no origin remote`
-        : `${project.name} needs attention`,
-      description: !project.remoteUrl
-        ? "Connect a remote if you want hosted review and sync metadata."
-        : `Latest repository activity was ${project.status === "warning" ? "over a week" : "over a month"} ago.`,
+      title:
+        project.ciStatus === "failing"
+          ? `${project.name} has failing CI`
+          : project.awaitingReviewCount > 0
+            ? `${project.name} has PRs waiting for review`
+            : !project.remoteUrl
+              ? `${project.name} has no origin remote`
+              : `${project.name} needs attention`,
+      description:
+        project.ciStatus === "failing"
+          ? `Default branch checks are failing and ${project.unpushedCommitCount} local commit${project.unpushedCommitCount === 1 ? "" : "s"} are ahead.`
+          : project.awaitingReviewCount > 0
+            ? `${project.awaitingReviewCount} pull request${project.awaitingReviewCount === 1 ? "" : "s"} still need a first review.`
+            : !project.remoteUrl
+              ? "Connect a remote if you want hosted review and sync metadata."
+              : `Latest repository activity was ${project.status === "warning" ? "over a week" : "over a month"} ago.`,
     }));
 
   const recentHighlights = [...projects]

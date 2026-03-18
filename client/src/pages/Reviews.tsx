@@ -1,8 +1,13 @@
 import AppLayout from "@/components/layout/AppLayout";
+import PullRequestDetailDialog from "@/components/pull-requests/PullRequestDetailDialog";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
+import {
+  getPullRequestReviewSummary,
+  getPullRequestStatusMeta,
+} from "@/lib/pull-request-utils";
 import { formatDistanceToNow } from "date-fns";
 import {
   AlertCircle,
@@ -13,24 +18,11 @@ import {
   MessageSquare,
   RefreshCw,
 } from "lucide-react";
-
-const pullRequestStatusClasses = {
-  approved: "bg-chart-1/10 text-chart-1 border-chart-1/20",
-  changes_requested: "bg-chart-3/10 text-chart-3 border-chart-3/20",
-  draft: "bg-secondary text-muted-foreground border-border/60",
-  open: "bg-secondary text-foreground border-border/60",
-  review_required: "bg-chart-2/10 text-chart-2 border-chart-2/20",
-} as const;
-
-const pullRequestStatusLabels = {
-  approved: "approved",
-  changes_requested: "changes requested",
-  draft: "draft",
-  open: "open",
-  review_required: "review required",
-} as const;
+import { useLocation, useSearch } from "wouter";
 
 export default function Reviews() {
+  const [location, setLocation] = useLocation();
+  const search = useSearch();
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
   const pullRequests = snapshot?.pullRequests ?? [];
   const reviews = snapshot?.reviews ?? [];
@@ -43,9 +35,18 @@ export default function Reviews() {
       pullRequest.status === "review_required",
   );
   const latestPullRequest = pullRequests[0] ?? null;
-  const openPullRequestsPagination = usePagination(pullRequests, 8);
-  const activeReviewsPagination = usePagination(activeReviews, 6);
-  const staleReviewsPagination = usePagination(staleReviews, 6);
+  const selectedPullRequestId = new URLSearchParams(search).get("pr");
+  const selectedPullRequest =
+    pullRequests.find((pullRequest) => pullRequest.id === selectedPullRequestId) ?? null;
+  const openPullRequestsPagination = usePagination(pullRequests, 8, {
+    storageKey: "devdeck:reviews:open-prs",
+  });
+  const activeReviewsPagination = usePagination(activeReviews, 6, {
+    storageKey: "devdeck:reviews:active-reviews",
+  });
+  const staleReviewsPagination = usePagination(staleReviews, 6, {
+    storageKey: "devdeck:reviews:stale-reviews",
+  });
 
   const handleOpenPullRequest = async (targetUrl: string) => {
     const desktopApi = getDesktopApi();
@@ -57,9 +58,14 @@ export default function Reviews() {
     window.open(targetUrl, "_blank", "noopener,noreferrer");
   };
 
+  const handleInspectPullRequest = (pullRequestId: string) => {
+    setLocation(`/reviews?pr=${encodeURIComponent(pullRequestId)}`);
+  };
+
   return (
     <AppLayout>
-      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <>
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">
@@ -146,7 +152,8 @@ export default function Reviews() {
                   {openPullRequestsPagination.paginatedItems.map((pullRequest) => (
                     <div
                       key={pullRequest.id}
-                      className="group flex items-start gap-3 py-3 px-4 -mx-4 hover:bg-black/[0.03] rounded-md transition-colors border-b border-border/40 last:border-0"
+                      className="group flex items-start gap-3 py-3 px-4 -mx-4 hover:bg-black/[0.03] rounded-md transition-colors border-b border-border/40 last:border-0 cursor-pointer"
+                      onClick={() => handleInspectPullRequest(pullRequest.id)}
                     >
                       <div className="mt-0.5">
                         {pullRequest.status === "approved" ? (
@@ -164,9 +171,14 @@ export default function Reviews() {
                               #{pullRequest.number} {pullRequest.title}
                             </span>
                             <span
-                              className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${pullRequestStatusClasses[pullRequest.status]}`}
+                              className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestStatusMeta(pullRequest.status).className}`}
                             >
-                              {pullRequestStatusLabels[pullRequest.status]}
+                              {getPullRequestStatusMeta(pullRequest.status).label}
+                            </span>
+                            <span
+                              className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestReviewSummary(pullRequest).className}`}
+                            >
+                              {getPullRequestReviewSummary(pullRequest).label}
                             </span>
                           </div>
                           <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0">
@@ -189,7 +201,10 @@ export default function Reviews() {
 
                       <button
                         type="button"
-                        onClick={() => void handleOpenPullRequest(pullRequest.url)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleOpenPullRequest(pullRequest.url);
+                        }}
                         className="opacity-0 group-hover:opacity-100 transition-opacity pl-2 flex items-center h-8 px-2.5 rounded-md text-[11px] font-medium bg-white border border-border shadow-sm text-foreground hover:bg-secondary"
                       >
                         <span className="mr-1.5">Open</span>
@@ -376,7 +391,17 @@ export default function Reviews() {
             </section>
           </div>
         </div>
-      </div>
+        </div>
+        <PullRequestDetailDialog
+          open={Boolean(selectedPullRequest)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setLocation(location);
+            }
+          }}
+          pullRequest={selectedPullRequest}
+        />
+      </>
     </AppLayout>
   );
 }

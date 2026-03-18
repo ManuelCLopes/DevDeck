@@ -2,10 +2,17 @@ import { useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import ProjectCard from "@/components/dashboard/ProjectCard";
 import ProjectRow from "@/components/dashboard/ProjectRow";
+import PullRequestDetailDialog from "@/components/pull-requests/PullRequestDetailDialog";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
+import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
+import { getCiStatusMeta } from "@/lib/project-health";
+import {
+  getPullRequestReviewSummary,
+  getPullRequestStatusMeta,
+} from "@/lib/pull-request-utils";
 import { getWorkspaceSelection } from "@/lib/workspace-selection";
 import { formatDistanceToNow } from "date-fns";
 import { Link, useSearch } from "wouter";
@@ -29,52 +36,16 @@ import {
   Zap,
 } from "lucide-react";
 
-function getPullRequestReviewSummary(pullRequest: {
-  authoredByViewer?: boolean;
-  reviewCount?: number;
-  reviewState?: "unreviewed" | "reviewed" | "reviewed_by_you";
-  reviewedByOthersCount?: number;
-  reviewedByViewer?: boolean;
-}) {
-  const reviewedByViewer = pullRequest.reviewedByViewer ?? false;
-  const reviewedByOthersCount = pullRequest.reviewedByOthersCount ?? 0;
-  const reviewCount =
-    pullRequest.reviewCount ??
-    reviewedByOthersCount + (reviewedByViewer ? 1 : 0);
-  const reviewState =
-    pullRequest.reviewState ??
-    (reviewedByViewer
-      ? "reviewed_by_you"
-      : reviewCount > 0
-        ? "reviewed"
-        : "unreviewed");
-
-  if (reviewState === "reviewed_by_you") {
-    return {
-      className: "bg-chart-1/10 text-chart-1 border-chart-1/20",
-      label:
-        reviewedByOthersCount > 0
-          ? `you + ${reviewedByOthersCount} reviewer${reviewedByOthersCount === 1 ? "" : "s"}`
-          : "you reviewed",
-    };
-  }
-
-  if (reviewState === "reviewed") {
-    return {
-      className: "bg-secondary text-foreground border-border/60",
-      label: `${reviewCount} reviewer${reviewCount === 1 ? "" : "s"}`,
-    };
-  }
-
-  return {
-    className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
-    label: "no reviews yet",
-  };
-}
-
 export default function Dashboard() {
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [filterTeam, setFilterTeam] = useState<string | "All">("All");
+  const [viewMode, setViewMode] = usePersistentState<"grid" | "list">(
+    "devdeck:dashboard:view-mode",
+    "grid",
+  );
+  const [filterTeam, setFilterTeam] = usePersistentState<string | "All">(
+    "devdeck:dashboard:filter-team",
+    "All",
+  );
+  const [selectedPullRequestId, setSelectedPullRequestId] = useState<string | null>(null);
   const search = useSearch();
   const focusedProjectId = new URLSearchParams(search).get("project");
   const workspaceSelection = getWorkspaceSelection();
@@ -87,6 +58,9 @@ export default function Dashboard() {
   const visiblePullRequests = focusedProject
     ? pullRequests.filter((pullRequest) => pullRequest.projectId === focusedProject.id)
     : pullRequests;
+  const selectedPullRequest =
+    visiblePullRequests.find((pullRequest) => pullRequest.id === selectedPullRequestId) ??
+    null;
   const teams = ["All", ...Array.from(new Set(projects.map((project) => project.team)))];
   const filteredProjects =
     focusedProject
@@ -142,39 +116,37 @@ export default function Dashboard() {
           focusedProject.lastActivityMessage ?? `Current branch: ${focusedProject.currentBranch}`,
       }
     : snapshot?.insights.recentHighlights[0] ?? null;
-  const pullRequestStatusClasses = {
-    approved: "bg-chart-1/10 text-chart-1 border-chart-1/20",
-    changes_requested: "bg-chart-3/10 text-chart-3 border-chart-3/20",
-    draft: "bg-secondary text-muted-foreground border-border/60",
-    open: "bg-secondary text-foreground border-border/60",
-    review_required: "bg-chart-2/10 text-chart-2 border-chart-2/20",
-  } as const;
-  const pullRequestStatusLabels = {
-    approved: "approved",
-    changes_requested: "changes requested",
-    draft: "draft",
-    open: "open",
-    review_required: "review required",
-  } as const;
   const overviewPullRequestsPagination = usePagination(
     visiblePullRequests,
     6,
-    focusedProjectId ?? "workspace",
+    {
+      resetKey: focusedProjectId ?? "workspace",
+      storageKey: `devdeck:dashboard:overview-prs:${focusedProjectId ?? "workspace"}`,
+    },
   );
   const activeProjectsPagination = usePagination(
     filteredProjects,
     activeProjectsPageSize,
-    `${focusedProjectId ?? "workspace"}:${filterTeam}:${viewMode}`,
+    {
+      resetKey: `${focusedProjectId ?? "workspace"}:${filterTeam}:${viewMode}`,
+      storageKey: `devdeck:dashboard:projects:${viewMode}:${filterTeam}`,
+    },
   );
   const focusedActivityPagination = usePagination(
     focusedProjectActivities,
     4,
-    focusedProjectId,
+    {
+      resetKey: focusedProjectId,
+      storageKey: `devdeck:dashboard:activity:${focusedProjectId ?? "workspace"}`,
+    },
   );
   const focusedPullRequestsPagination = usePagination(
     focusedProjectPullRequests,
     4,
-    focusedProjectId,
+    {
+      resetKey: focusedProjectId,
+      storageKey: `devdeck:dashboard:pull-requests:${focusedProjectId ?? "workspace"}`,
+    },
   );
 
   const handleOpenPullRequest = async (targetUrl: string) => {
@@ -189,8 +161,9 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+      <>
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">
               {focusedProject ? `${focusedProject.name} Overview` : "Project Overview"}
@@ -405,8 +378,24 @@ export default function Dashboard() {
                   </div>
                   <div className="space-y-3 text-sm">
                     <div className="flex items-center justify-between gap-4">
+                      <span className="text-muted-foreground">Default branch checks</span>
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                        getCiStatusMeta(focusedProject.ciStatus).className
+                      }`}>
+                        {getCiStatusMeta(focusedProject.ciStatus).label}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
                       <span className="text-muted-foreground">Language</span>
                       <span className="font-semibold text-foreground">{focusedProject.language}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-muted-foreground">Branch sync</span>
+                      <span className="font-semibold text-foreground">
+                        {focusedProject.hasUpstream
+                          ? `${focusedProject.aheadBy} ahead · ${focusedProject.behindBy} behind`
+                          : "No upstream"}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-muted-foreground">Remote</span>
@@ -470,9 +459,14 @@ export default function Dashboard() {
                   <div className="space-y-3">
                     {focusedPullRequestsPagination.paginatedItems.map((pullRequest) => {
                       const reviewSummary = getPullRequestReviewSummary(pullRequest);
+                      const statusMeta = getPullRequestStatusMeta(pullRequest.status);
 
                       return (
-                        <div key={pullRequest.id} className="rounded-lg border border-border/60 p-3 bg-secondary/20">
+                        <div
+                          key={pullRequest.id}
+                          className="rounded-lg border border-border/60 p-3 bg-secondary/20 cursor-pointer hover:border-black/15 transition-colors"
+                          onClick={() => setSelectedPullRequestId(pullRequest.id)}
+                        >
                         <div className="flex items-start justify-between gap-4">
                           <div>
                             <p className="text-sm font-medium text-foreground">
@@ -483,10 +477,8 @@ export default function Dashboard() {
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${
-                              pullRequestStatusClasses[pullRequest.status]
-                            }`}>
-                              {pullRequestStatusLabels[pullRequest.status]}
+                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${statusMeta.className}`}>
+                              {statusMeta.label}
                             </span>
                             <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${
                               reviewSummary.className
@@ -500,7 +492,10 @@ export default function Dashboard() {
                             )}
                             <button
                               type="button"
-                              onClick={() => void handleOpenPullRequest(pullRequest.url)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleOpenPullRequest(pullRequest.url);
+                              }}
                               className="h-8 px-2.5 rounded-md text-[11px] font-medium bg-white border border-border/60 hover:bg-black/5 transition-colors"
                             >
                               Open
@@ -587,11 +582,16 @@ export default function Dashboard() {
 
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                 <div className="space-y-3">
-                  {overviewPullRequestsPagination.paginatedItems.map((pullRequest) => {
-                    const reviewSummary = getPullRequestReviewSummary(pullRequest);
+                    {overviewPullRequestsPagination.paginatedItems.map((pullRequest) => {
+                      const reviewSummary = getPullRequestReviewSummary(pullRequest);
+                      const statusMeta = getPullRequestStatusMeta(pullRequest.status);
 
-                    return (
-                      <div key={pullRequest.id} className="rounded-lg border border-border/60 p-3 bg-secondary/20">
+                      return (
+                      <div
+                        key={pullRequest.id}
+                        className="rounded-lg border border-border/60 p-3 bg-secondary/20 cursor-pointer hover:border-black/15 transition-colors"
+                        onClick={() => setSelectedPullRequestId(pullRequest.id)}
+                      >
                         <div className="flex items-start justify-between gap-4">
                           <div>
                             <p className="text-sm font-medium text-foreground">
@@ -602,10 +602,8 @@ export default function Dashboard() {
                             </p>
                           </div>
                           <div className="flex items-center gap-2 flex-wrap justify-end">
-                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${
-                              pullRequestStatusClasses[pullRequest.status]
-                            }`}>
-                              {pullRequestStatusLabels[pullRequest.status]}
+                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${statusMeta.className}`}>
+                              {statusMeta.label}
                             </span>
                             <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${
                               reviewSummary.className
@@ -619,7 +617,10 @@ export default function Dashboard() {
                             )}
                             <button
                               type="button"
-                              onClick={() => void handleOpenPullRequest(pullRequest.url)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleOpenPullRequest(pullRequest.url);
+                              }}
                               className="h-8 px-2.5 rounded-md text-[11px] font-medium bg-white border border-border/60 hover:bg-black/5 transition-colors"
                             >
                               Open
@@ -720,7 +721,17 @@ export default function Dashboard() {
             </section>
           </>
         )}
-      </div>
+        </div>
+        <PullRequestDetailDialog
+          open={Boolean(selectedPullRequest)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedPullRequestId(null);
+            }
+          }}
+          pullRequest={selectedPullRequest}
+        />
+      </>
     </AppLayout>
   );
 }

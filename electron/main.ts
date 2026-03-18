@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, shell } from "electron";
 import { execFile } from "child_process";
 import path from "path";
 import { promisify } from "util";
@@ -93,6 +93,51 @@ ipcMain.handle("devdeck:open-in-terminal", async (_event, targetPath: string) =>
   }
 
   await shell.openPath(targetPath);
+});
+
+ipcMain.handle("devdeck:open-in-code", async (_event, targetPath: string) => {
+  if (process.platform === "darwin") {
+    await execFileAsync("open", ["-a", "Visual Studio Code", targetPath]);
+    return;
+  }
+
+  await shell.openPath(targetPath);
+});
+
+ipcMain.handle("devdeck:copy-to-clipboard", async (_event, value: string) => {
+  clipboard.writeText(value);
+});
+
+ipcMain.handle(
+  "devdeck:show-notification",
+  async (_event, payload: { body?: string; title: string }) => {
+    if (!Notification.isSupported()) {
+      return;
+    }
+
+    new Notification({
+      body: payload.body,
+      title: payload.title,
+    }).show();
+  },
+);
+
+ipcMain.handle("devdeck:start-github-login", async () => {
+  if (process.platform === "darwin") {
+    await execFileAsync("osascript", [
+      "-e",
+      'tell application "Terminal" to do script "gh auth login --web"',
+      "-e",
+      'tell application "Terminal" to activate',
+    ]);
+    return;
+  }
+
+  await shell.openExternal("https://cli.github.com/manual/gh_auth_login");
+});
+
+ipcMain.handle("devdeck:set-launch-at-login", async (_event, enabled: boolean) => {
+  app.setLoginItemSettings({ openAtLogin: enabled });
 });
 
 ipcMain.handle(

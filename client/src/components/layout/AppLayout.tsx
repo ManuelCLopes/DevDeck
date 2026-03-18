@@ -1,13 +1,25 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import AddProjectsDialog from "@/components/workspace/AddProjectsDialog";
 import WindowControls from "@/components/layout/WindowControls";
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+} from "@/components/ui/command";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
+import { useAppPreferences } from "@/lib/app-preferences";
 import {
   goBackInApp,
   goForwardInApp,
   useAppNavigation,
 } from "@/lib/app-navigation";
+import { useWorkspaceAlerts } from "@/hooks/use-workspace-alerts";
 import { getOpenAddProjectsDialogEvent } from "@/lib/project-import-events";
 import { getMonitoredProjects, getWorkspaceSelection } from "@/lib/workspace-selection";
 import { 
@@ -32,13 +44,84 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [location, setLocation] = useLocation();
   const search = useSearch();
   const [isAddProjectsOpen, setIsAddProjectsOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const monitoredProjects = getMonitoredProjects(getWorkspaceSelection());
   const selectedProjectId = new URLSearchParams(search).get("project");
   const { data: snapshot } = useWorkspaceSnapshot();
+  const { preferences } = useAppPreferences();
   const reviewCount = snapshot?.pullRequests.length ?? 0;
   const activityCount = snapshot?.activities.length ?? 0;
   const routeKey = `${location}${search}`;
   const { canGoBack, canGoForward } = useAppNavigation(routeKey);
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase());
+
+  useWorkspaceAlerts(snapshot, preferences);
+
+  const searchResults = useMemo(() => {
+    if (!snapshot) {
+      return {
+        activities: [],
+        projects: [],
+        pullRequests: [],
+      };
+    }
+
+    const projectResults = snapshot.projects
+      .filter((project) =>
+        deferredSearchQuery.length === 0
+          ? true
+          : [
+              project.name,
+              project.localPath,
+              project.currentBranch,
+              project.defaultBranch,
+              project.language,
+            ]
+              .join(" ")
+              .toLowerCase()
+              .includes(deferredSearchQuery),
+      )
+      .slice(0, 6);
+    const pullRequestResults = snapshot.pullRequests
+      .filter((pullRequest) =>
+        deferredSearchQuery.length === 0
+          ? true
+          : [
+              pullRequest.title,
+              pullRequest.repo,
+              pullRequest.headBranch,
+              pullRequest.baseBranch,
+              pullRequest.author ?? "",
+              ...pullRequest.reviewerLogins,
+            ]
+              .join(" ")
+              .toLowerCase()
+              .includes(deferredSearchQuery),
+      )
+      .slice(0, 6);
+    const activityResults = snapshot.activities
+      .filter((activity) =>
+        deferredSearchQuery.length === 0
+          ? true
+          : [
+              activity.title,
+              activity.description,
+              activity.repo,
+              activity.author ?? "",
+            ]
+              .join(" ")
+              .toLowerCase()
+              .includes(deferredSearchQuery),
+      )
+      .slice(0, 6);
+
+    return {
+      activities: activityResults,
+      projects: projectResults,
+      pullRequests: pullRequestResults,
+    };
+  }, [deferredSearchQuery, snapshot]);
 
   const navItems = [
     { href: "/", icon: LayoutGrid, label: "Overview" },
@@ -56,6 +139,26 @@ export default function AppLayout({ children }: AppLayoutProps) {
     window.addEventListener(eventName, handleOpen);
     return () => window.removeEventListener(eventName, handleOpen);
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  const handleNavigate = (targetPath: string) => {
+    startTransition(() => {
+      setLocation(targetPath);
+      setIsSearchOpen(false);
+      setSearchQuery("");
+    });
+  };
 
   return (
     <>
@@ -184,14 +287,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </div>
 
             <div className="flex items-center gap-3 no-drag">
-              <div className="relative w-64">
+              <button
+                type="button"
+                onClick={() => setIsSearchOpen(true)}
+                className="relative w-64 h-7 pl-8 pr-12 rounded-md bg-secondary/70 border border-black/5 hover:bg-background text-left focus:bg-background focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none text-xs transition-all text-muted-foreground"
+              >
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input 
-                  type="text" 
-                  placeholder="Search projects, PRs..." 
-                  className="w-full h-7 pl-8 pr-3 rounded-md bg-secondary/70 border border-black/5 focus:bg-background focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none text-xs transition-all placeholder:text-muted-foreground"
-                />
-              </div>
+                <span>Search projects, PRs, activity...</span>
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground/80">
+                  {typeof navigator !== "undefined" && navigator.platform.includes("Mac")
+                    ? "⌘K"
+                    : "Ctrl K"}
+                </span>
+              </button>
               
               <Link href="/activity">
                 <a className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-secondary relative">
@@ -220,6 +328,85 @@ export default function AppLayout({ children }: AppLayoutProps) {
       `}</style>
       </div>
       <AddProjectsDialog open={isAddProjectsOpen} onOpenChange={setIsAddProjectsOpen} />
+      <CommandDialog
+        open={isSearchOpen}
+        onOpenChange={(open) => {
+          setIsSearchOpen(open);
+          if (!open) {
+            setSearchQuery("");
+          }
+        }}
+      >
+        <CommandInput
+          value={searchQuery}
+          onValueChange={setSearchQuery}
+          placeholder="Search projects, pull requests, and activity..."
+        />
+        <CommandList>
+          <CommandEmpty>No matching results.</CommandEmpty>
+          <CommandGroup heading="Projects">
+            {searchResults.projects.map((project) => (
+              <CommandItem
+                key={project.id}
+                value={`${project.name} ${project.localPath} ${project.currentBranch}`}
+                onSelect={() =>
+                  handleNavigate(`/?project=${encodeURIComponent(project.id)}`)
+                }
+              >
+                <HardDrive className="w-4 h-4 text-primary" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate font-medium">{project.name}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {project.localPath}
+                  </span>
+                </div>
+                <CommandShortcut>{project.currentBranch}</CommandShortcut>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+          <CommandSeparator />
+          <CommandGroup heading="Pull Requests">
+            {searchResults.pullRequests.map((pullRequest) => (
+              <CommandItem
+                key={pullRequest.id}
+                value={`${pullRequest.title} ${pullRequest.repo} ${pullRequest.headBranch} ${pullRequest.baseBranch}`}
+                onSelect={() =>
+                  handleNavigate(`/reviews?pr=${encodeURIComponent(pullRequest.id)}`)
+                }
+              >
+                <MessageSquare className="w-4 h-4 text-primary" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate font-medium">
+                    #{pullRequest.number} {pullRequest.title}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {pullRequest.repo} · {pullRequest.headBranch} into {pullRequest.baseBranch}
+                  </span>
+                </div>
+                <CommandShortcut>{pullRequest.repo}</CommandShortcut>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+          <CommandSeparator />
+          <CommandGroup heading="Activity">
+            {searchResults.activities.map((activity) => (
+              <CommandItem
+                key={activity.id}
+                value={`${activity.title} ${activity.description} ${activity.repo}`}
+                onSelect={() => handleNavigate("/activity")}
+              >
+                <Bell className="w-4 h-4 text-primary" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate font-medium">{activity.title}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {activity.repo} · {activity.description}
+                  </span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
     </>
   );
 }

@@ -1,6 +1,7 @@
 import type { WorkspaceProject } from "@shared/workspace";
+import { getCiStatusMeta, getProjectAttentionSummary } from "@/lib/project-health";
 import { formatDistanceToNow } from "date-fns";
-import { GitBranch, Globe, HardDrive, Link2Off, Users } from "lucide-react";
+import { GitBranch, Globe, HardDrive, Link2Off, MessageSquare, Users } from "lucide-react";
 import { Link } from "wouter";
 
 interface ProjectRowProps {
@@ -14,6 +15,8 @@ export default function ProjectRow({ project }: ProjectRowProps) {
     critical: "bg-chart-3 flex-shrink-0 shadow-[0_0_8px_rgba(255,95,86,0.5)]",
   };
   const projectHref = `/?project=${encodeURIComponent(project.id)}`;
+  const ciStatusMeta = getCiStatusMeta(project.ciStatus);
+  const attentionSummary = getProjectAttentionSummary(project);
 
   return (
     <Link href={projectHref}>
@@ -59,21 +62,33 @@ export default function ProjectRow({ project }: ProjectRowProps) {
 
           {/* Remote */}
           <div className="hidden lg:flex col-span-3 items-center gap-4">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {project.remoteUrl ? (
-                <Globe className="w-3.5 h-3.5 text-chart-1" />
-              ) : (
-                <Link2Off className="w-3.5 h-3.5 text-chart-3" />
-              )}
-              <span className="truncate font-medium">
-                {project.remoteUrl ? "Origin configured" : "No remote"}
-              </span>
+            <div className="flex flex-col gap-1 min-w-0">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                {project.remoteUrl ? (
+                  <Globe className="w-3.5 h-3.5 text-chart-1" />
+                ) : (
+                  <Link2Off className="w-3.5 h-3.5 text-chart-3" />
+                )}
+                <span className="truncate font-medium">
+                  {project.remoteUrl ? "Origin configured" : "No remote"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 ${ciStatusMeta.className}`}>
+                  {ciStatusMeta.label}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <MessageSquare className="w-3 h-3" />
+                  {project.openPullRequestCount} PRs
+                </span>
+              </div>
             </div>
           </div>
 
           {/* Activity */}
-          <div className="hidden md:flex col-span-3 lg:col-span-2 justify-end text-[11px] text-muted-foreground font-medium text-right whitespace-nowrap">
-            {formatDistanceToNow(new Date(project.lastUpdated), { addSuffix: true })}
+          <div className="hidden md:flex col-span-3 lg:col-span-2 flex-col items-end text-[11px] text-muted-foreground font-medium text-right">
+            <span>{formatDistanceToNow(new Date(project.lastUpdated), { addSuffix: true })}</span>
+            <span className="text-[10px]">{attentionSummary}</span>
           </div>
         </div>
       </a>

@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
+import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -13,7 +14,10 @@ import {
 } from "lucide-react";
 
 export default function Activity() {
-  const [filter, setFilter] = useState<"all" | "commit" | "checkout" | "repo">("all");
+  const [filter, setFilter] = usePersistentState<"all" | "commit" | "checkout" | "repo">(
+    "devdeck:activity:filter",
+    "all",
+  );
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
 
   const filteredActivities = useMemo(
@@ -23,7 +27,10 @@ export default function Activity() {
       ),
     [filter, snapshot?.activities],
   );
-  const activitiesPagination = usePagination(filteredActivities, 10, filter);
+  const activitiesPagination = usePagination(filteredActivities, 10, {
+    resetKey: filter,
+    storageKey: "devdeck:activity:pagination",
+  });
 
   const ActivityIcon = ({ type }: { type: string }) => {
     switch (type) {

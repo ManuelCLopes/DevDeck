@@ -1,4 +1,7 @@
 import AppLayout from "@/components/layout/AppLayout";
+import { Switch } from "@/components/ui/switch";
+import { useAppPreferences } from "@/lib/app-preferences";
+import { getDesktopApi } from "@/lib/desktop";
 import { Github, CheckCircle2, HardDrive, Shield, RotateCcw } from "lucide-react";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { useLocation } from "wouter";
@@ -14,11 +17,13 @@ import {
 
 export default function Settings() {
   const [, setLocation] = useLocation();
-  const { data: snapshot } = useWorkspaceSnapshot();
+  const { data: snapshot, refetch } = useWorkspaceSnapshot();
+  const { preferences, setPreference } = useAppPreferences();
   const workspaceSelection = getWorkspaceSelection();
   const monitoredDirectories = getMonitoredDirectoryLabels(workspaceSelection);
   const githubStatus = snapshot?.githubStatus;
   const connected = githubStatus?.authenticated ?? false;
+  const desktopApi = getDesktopApi();
 
   const handleResetOnboarding = () => {
     clearCompletedOnboarding();
@@ -26,6 +31,15 @@ export default function Settings() {
     void clearWorkspaceHandle();
     void queryClient.removeQueries({ queryKey: ["workspace", "snapshot"] });
     setLocation('/onboarding');
+  };
+
+  const handleGitHubLogin = async () => {
+    await desktopApi?.startGitHubLogin?.();
+  };
+
+  const handleToggleLaunchAtLogin = async (checked: boolean) => {
+    setPreference("launchAtLogin", checked);
+    await desktopApi?.setLaunchAtLogin?.(checked);
   };
 
   return (
@@ -104,16 +118,30 @@ export default function Settings() {
                     <p className="text-xs text-muted-foreground mt-1">
                       {githubStatus?.message ?? "GitHub status will appear after the first workspace scan."}
                     </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Viewer: {githubStatus?.viewerLogin ?? "Not authenticated"} · Connected repos: {githubStatus?.connectedRepositoryCount ?? 0}
+                    </p>
                   </div>
                 </div>
-                <div
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all shadow-sm whitespace-nowrap ${
-                    connected
-                      ? "bg-white text-foreground border border-border"
-                      : "bg-secondary text-secondary-foreground border border-border"
-                  }`}
-                >
-                  {connected ? "Connected via GitHub CLI" : "Awaiting gh auth login"}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void refetch()}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-white text-foreground border border-border hover:bg-secondary/50 whitespace-nowrap shadow-sm transition-colors"
+                  >
+                    Refresh Status
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleGitHubLogin()}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all shadow-sm whitespace-nowrap ${
+                      connected
+                        ? "bg-white text-foreground border border-border hover:bg-secondary/50"
+                        : "bg-primary text-primary-foreground border border-primary hover:bg-primary/90"
+                    }`}
+                  >
+                    {connected ? "Reconnect in Terminal" : "Connect with GitHub CLI"}
+                  </button>
                 </div>
               </div>
             </div>
@@ -128,21 +156,33 @@ export default function Settings() {
           <div className="p-2">
             <div className="space-y-1">
               {[
-                { id: "stale-prs", label: "Highlight Stale PRs", desc: "Flag pull requests that have no activity for > 5 days." },
-                { id: "failing-builds", label: "Alert on Failing Builds", desc: "Show native desktop notifications for default branch failures." },
-                { id: "launch-login", label: "Launch at Login", desc: "Start DevDeck automatically in the menu bar." }
+                { id: "highlightStalePrs", label: "Highlight Stale PRs", desc: "Keep stale local review branches visually flagged across the app." },
+                { id: "notifyReviewRequired", label: "Notify on Review Required", desc: "Show native notifications when a PR is waiting for its first review." },
+                { id: "notifyChangesRequested", label: "Notify on Changes Requested", desc: "Alert when a pull request receives changes requested." },
+                { id: "notifyApproved", label: "Notify on Approval", desc: "Alert when a pull request gets approved." },
+                { id: "alertFailingBuilds", label: "Alert on Failing Builds", desc: "Show native desktop notifications for default branch failures." },
+                { id: "launchAtLogin", label: "Launch at Login", desc: "Start DevDeck automatically when you sign in to macOS." }
               ].map(setting => (
                 <div key={setting.id} className="flex items-center justify-between gap-4 p-3 rounded-md hover:bg-secondary/30 transition-colors">
                   <div>
                     <label htmlFor={setting.id} className="font-medium text-sm text-foreground cursor-pointer">{setting.label}</label>
                     <p className="text-xs text-muted-foreground">{setting.desc}</p>
                   </div>
-                  <div className="pr-2">
-                    {/* Native-looking Mac toggle switch mockup */}
-                    <div className="w-10 h-6 bg-primary rounded-full relative cursor-pointer shadow-inner border border-black/10">
-                      <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-[0_2px_4px_rgba(0,0,0,0.2)] border border-black/5"></div>
-                    </div>
-                  </div>
+                  <Switch
+                    id={setting.id}
+                    checked={preferences[setting.id as keyof typeof preferences]}
+                    onCheckedChange={(checked) => {
+                      if (setting.id === "launchAtLogin") {
+                        void handleToggleLaunchAtLogin(checked);
+                        return;
+                      }
+
+                      setPreference(
+                        setting.id as keyof typeof preferences,
+                        checked,
+                      );
+                    }}
+                  />
                 </div>
               ))}
               

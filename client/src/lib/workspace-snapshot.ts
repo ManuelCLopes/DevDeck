@@ -444,12 +444,20 @@ async function scanRepository(
     monitoredProject.name,
   );
   const remoteUrl = parseConfigOriginUrl(configText);
+  const staleBranchCount = branchReviews.filter(
+    (review) => review?.status === "stale",
+  ).length;
   const project: WorkspaceProject = {
+    aheadBy: 0,
+    awaitingReviewCount: 0,
+    behindBy: 0,
     branchCount: Math.max(branches.length, 1),
+    ciStatus: "unknown",
     contributorCount7d: countContributorsInLastWeek(headLogText),
     currentBranch,
     defaultBranch,
     description,
+    hasUpstream: false,
     id: monitoredProject.id,
     language,
     lastActivityMessage: lastHeadEntry?.message ?? null,
@@ -460,10 +468,14 @@ async function scanRepository(
         ? rootName
         : `${rootName}/${monitoredProject.relativePath ?? monitoredProject.name}`),
     name: monitoredProject.name,
+    openPullRequestCount: 0,
     remoteUrl,
     relativePath: monitoredProject.relativePath,
+    reviewedByViewerCount: 0,
+    staleBranchCount,
     status: inferStatus(lastUpdated),
     team: inferTeam(monitoredProject.relativePath),
+    unpushedCommitCount: 0,
   };
 
   const activities = parseRecentReflogEntries(headLogText, 5).map((entry, index) => {

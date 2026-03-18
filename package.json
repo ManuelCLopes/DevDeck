@@ -1,6 +1,8 @@
 {
   "name": "devdeck",
   "version": "1.0.0",
+  "description": "Native macOS workspace dashboard for local repositories and pull request follow-up.",
+  "author": "Manuel Lopes",
   "type": "module",
   "main": "dist-electron/main.cjs",
   "license": "MIT",
@@ -14,10 +16,11 @@
     "build": "npm run build:web && npm run build:electron",
     "build:electron": "tsx script/build-electron.ts",
     "build:web": "tsx script/build.ts",
-    "dist:mac": "npm run build && electron-builder --mac",
-    "pack:mac": "npm run build && electron-builder --mac dir",
+    "dist:mac": "node script/generate-icon.cjs && npm run build && electron-builder --mac",
+    "pack:mac": "node script/generate-icon.cjs && npm run build && electron-builder --mac dir",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "test": "tsx --test client/src/lib/*.test.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
@@ -115,8 +118,11 @@
   },
   "build": {
     "appId": "com.manuelclopes.devdeck",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "afterSign": "script/notarize.cjs",
     "productName": "DevDeck",
     "directories": {
+      "buildResources": "build",
       "output": "release"
     },
     "files": [
@@ -124,8 +130,19 @@
       "dist/public/**/*",
       "package.json"
     ],
+    "dmg": {
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    },
     "mac": {
       "category": "public.app-category.developer-tools",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "gatekeeperAssess": false,
+      "hardenedRuntime": true,
+      "icon": "build/icon.icns",
       "target": [
         "dmg",
         "zip"

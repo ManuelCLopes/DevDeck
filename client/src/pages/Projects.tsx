@@ -1,11 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import PullRequestDetailDialog from "@/components/pull-requests/PullRequestDetailDialog";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
+import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
+import { getCiStatusMeta } from "@/lib/project-health";
+import {
+  getPullRequestReviewSummary,
+  getPullRequestStatusMeta,
+} from "@/lib/pull-request-utils";
 import { formatDistanceToNow } from "date-fns";
 import {
+  Copy,
   FolderGit2,
   TerminalSquare,
   Search,
@@ -16,14 +24,25 @@ import {
   Globe,
   Users,
   Link2Off,
+  MessageSquare,
   RefreshCw,
 } from "lucide-react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { WorkspaceProject } from "@shared/workspace";
 
 export default function Projects() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = usePersistentState(
+    "devdeck:projects:search",
+    "",
+  );
+  const [selectedProjectId, setSelectedProjectId] = usePersistentState<string | null>(
+    "devdeck:projects:selected-project",
+    null,
+  );
+  const [selectedPullRequestId, setSelectedPullRequestId] = usePersistentState<string | null>(
+    "devdeck:projects:selected-pr",
+    null,
+  );
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
   const desktopApi = getDesktopApi();
 
@@ -42,12 +61,36 @@ export default function Projects() {
         .includes(query),
     );
   }, [searchQuery, snapshot?.projects]);
-  const projectsPagination = usePagination(filteredProjects, 10, searchQuery);
+  const projectsPagination = usePagination(filteredProjects, 10, {
+    resetKey: searchQuery,
+    storageKey: "devdeck:projects:list-pagination",
+  });
 
   const selectedProject =
     filteredProjects.find((project) => project.id === selectedProjectId) ??
     filteredProjects[0] ??
     null;
+  const selectedProjectPullRequests = useMemo(
+    () =>
+      selectedProject
+        ? (snapshot?.pullRequests ?? []).filter(
+            (pullRequest) => pullRequest.projectId === selectedProject.id,
+          )
+        : [],
+    [selectedProject, snapshot?.pullRequests],
+  );
+  const selectedProjectPullRequestsPagination = usePagination(
+    selectedProjectPullRequests,
+    3,
+    {
+      resetKey: selectedProject?.id ?? null,
+      storageKey: `devdeck:projects:detail-prs:${selectedProject?.id ?? "none"}`,
+    },
+  );
+  const selectedPullRequest =
+    selectedProjectPullRequests.find(
+      (pullRequest) => pullRequest.id === selectedPullRequestId,
+    ) ?? null;
 
   useEffect(() => {
     if (selectedProject) {
@@ -56,10 +99,14 @@ export default function Projects() {
     }
 
     setSelectedProjectId(null);
-  }, [selectedProject]);
+  }, [selectedProject, setSelectedProjectId]);
 
   const openInTerminal = async (project: WorkspaceProject) => {
     await desktopApi?.openInTerminal(project.localPath);
+  };
+
+  const openInCode = async (project: WorkspaceProject) => {
+    await desktopApi?.openInCode?.(project.localPath);
   };
 
   const revealInFinder = async (project: WorkspaceProject) => {
@@ -74,9 +121,19 @@ export default function Projects() {
     await desktopApi?.openExternal(project.remoteUrl);
   };
 
+  const copyProjectPath = async (project: WorkspaceProject) => {
+    if (desktopApi?.copyToClipboard) {
+      await desktopApi.copyToClipboard(project.localPath);
+      return;
+    }
+
+    await navigator.clipboard.writeText(project.localPath);
+  };
+
   return (
     <AppLayout>
-      <div className="h-full flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-500 max-w-[1200px] mx-auto">
+      <>
+        <div className="h-full flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-500 max-w-[1200px] mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Local Projects</h1>
@@ -114,7 +171,7 @@ export default function Projects() {
               <div className="col-span-3 text-right">Last Updated</div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto">
               {projectsPagination.paginatedItems.map((project) => (
                 <div
                   key={project.id}
@@ -208,6 +265,14 @@ export default function Projects() {
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Repository Info</h3>
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between text-[12px] gap-3">
+                      <span className="text-muted-foreground flex items-center gap-2"><MessageSquare className="w-3.5 h-3.5" /> Pull Requests</span>
+                      <span className="text-foreground font-medium">{selectedProject.openPullRequestCount} open · {selectedProject.awaitingReviewCount} waiting</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[12px] gap-3">
+                      <span className="text-muted-foreground flex items-center gap-2"><GitBranch className="w-3.5 h-3.5" /> Branch Sync</span>
+                      <span className="text-foreground">{selectedProject.hasUpstream ? `${selectedProject.aheadBy} ahead · ${selectedProject.behindBy} behind` : "No upstream"}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[12px] gap-3">
                       <span className="text-muted-foreground flex items-center gap-2"><GitBranch className="w-3.5 h-3.5" /> Current Branch</span>
                       <span className="font-mono bg-secondary px-1.5 py-0.5 rounded text-foreground break-all">{selectedProject.currentBranch}</span>
                     </div>
@@ -222,6 +287,12 @@ export default function Projects() {
                     <div className="flex items-center justify-between text-[12px]">
                       <span className="text-muted-foreground flex items-center gap-2"><Users className="w-3.5 h-3.5" /> Contributors</span>
                       <span className="text-foreground font-medium">{selectedProject.contributorCount7d} in the last 7 days</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[12px]">
+                      <span className="text-muted-foreground flex items-center gap-2"><Globe className="w-3.5 h-3.5" /> CI Status</span>
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getCiStatusMeta(selectedProject.ciStatus).className}`}>
+                        {getCiStatusMeta(selectedProject.ciStatus).label}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between text-[12px] gap-3">
                       <span className="text-muted-foreground flex items-center gap-2">
@@ -238,6 +309,52 @@ export default function Projects() {
                 <div className="h-px bg-border/50 w-full"></div>
 
                 <div>
+                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Open Pull Requests</h3>
+                  <div className="space-y-2">
+                    {selectedProjectPullRequestsPagination.paginatedItems.map((pullRequest) => {
+                      const statusMeta = getPullRequestStatusMeta(pullRequest.status);
+                      const reviewSummary = getPullRequestReviewSummary(pullRequest);
+
+                      return (
+                        <button
+                          key={pullRequest.id}
+                          type="button"
+                          onClick={() => setSelectedPullRequestId(pullRequest.id)}
+                          className="w-full rounded-lg border border-border/60 bg-secondary/20 p-3 text-left hover:border-black/15 transition-colors"
+                        >
+                          <p className="text-[12px] font-semibold text-foreground line-clamp-2">
+                            #{pullRequest.number} {pullRequest.title}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusMeta.className}`}>
+                              {statusMeta.label}
+                            </span>
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${reviewSummary.className}`}>
+                              {reviewSummary.label}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {selectedProjectPullRequests.length === 0 && (
+                      <div className="rounded-lg border border-border/60 border-dashed p-3 text-xs text-muted-foreground">
+                        No open pull requests for this repository.
+                      </div>
+                    )}
+                  </div>
+                  <PaginationControls
+                    currentPage={selectedProjectPullRequestsPagination.currentPage}
+                    onPageChange={selectedProjectPullRequestsPagination.setCurrentPage}
+                    pageSize={selectedProjectPullRequestsPagination.pageSize}
+                    totalItems={selectedProjectPullRequestsPagination.totalItems}
+                    label="pull requests"
+                    className="pt-4"
+                  />
+                </div>
+
+                <div className="h-px bg-border/50 w-full"></div>
+
+                <div>
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</h3>
                   <div className="space-y-2">
                     <button
@@ -249,10 +366,25 @@ export default function Projects() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => void openInCode(selectedProject)}
+                      className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-md hover:bg-secondary transition-colors text-foreground"
+                    >
+                      Open in VS Code
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => void revealInFinder(selectedProject)}
                       className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-md hover:bg-secondary transition-colors text-foreground"
                     >
                       Reveal in Finder
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyProjectPath(selectedProject)}
+                      className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-md hover:bg-secondary transition-colors text-foreground flex items-center gap-2"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      Copy Path
                     </button>
                     <button
                       type="button"
@@ -272,7 +404,17 @@ export default function Projects() {
             </div>
           )}
         </div>
-      </div>
+        </div>
+        <PullRequestDetailDialog
+          open={Boolean(selectedPullRequest)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedPullRequestId(null);
+            }
+          }}
+          pullRequest={selectedPullRequest}
+        />
+      </>
     </AppLayout>
   );
 }
