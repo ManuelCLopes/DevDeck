@@ -1,9 +1,16 @@
 import { useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
-import { FolderGit2, Github, CheckCircle2, HardDrive, Shield, Lock } from "lucide-react";
+import { FolderGit2, Github, CheckCircle2, HardDrive, Shield, Lock, RotateCcw } from "lucide-react";
+import { useLocation } from "wouter";
 
 export default function Settings() {
   const [connected, setConnected] = useState(false);
+  const [, setLocation] = useLocation();
+
+  const handleResetOnboarding = () => {
+    localStorage.removeItem('oversight_onboarding_completed');
+    setLocation('/onboarding');
+  };
 
   return (
     <AppLayout>
@@ -104,6 +111,22 @@ export default function Settings() {
                   </div>
                 </div>
               ))}
+              
+              <div className="pt-4 mt-2 border-t border-border/40">
+                <div className="flex items-center justify-between gap-4 p-3 rounded-md hover:bg-secondary/30 transition-colors">
+                  <div>
+                    <p className="font-medium text-sm text-foreground">Reset Onboarding</p>
+                    <p className="text-xs text-muted-foreground">Show the welcome screens again.</p>
+                  </div>
+                  <button 
+                    onClick={handleResetOnboarding}
+                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-white border border-border hover:bg-secondary shadow-sm transition-colors flex items-center gap-1.5"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Restart Tour
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
