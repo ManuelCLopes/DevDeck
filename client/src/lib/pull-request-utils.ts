@@ -3,6 +3,14 @@ import type {
   WorkspacePullRequestStatus,
 } from "@shared/workspace";
 
+export type PullRequestFocus =
+  | "all"
+  | "needs_my_review"
+  | "needs_my_follow_up"
+  | "authored_by_me"
+  | "reviewed_by_me"
+  | "waiting_on_others";
+
 export function getPullRequestStatusMeta(status: WorkspacePullRequestStatus) {
   switch (status) {
     case "approved":
@@ -75,5 +83,111 @@ export function getPullRequestReviewSummary(
   return {
     className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
     label: "no reviews yet",
+  };
+}
+
+export function pullRequestNeedsViewerReview(
+  pullRequest: Pick<
+    WorkspacePullRequestItem,
+    | "authoredByViewer"
+    | "isViewerRequestedReviewer"
+    | "reviewState"
+    | "reviewedByViewer"
+    | "status"
+  >,
+) {
+  if (pullRequest.authoredByViewer || pullRequest.reviewedByViewer) {
+    return false;
+  }
+
+  return (
+    pullRequest.isViewerRequestedReviewer ||
+    (pullRequest.status === "review_required" &&
+      pullRequest.reviewState === "unreviewed")
+  );
+}
+
+export function pullRequestNeedsAuthorFollowUp(
+  pullRequest: Pick<WorkspacePullRequestItem, "authoredByViewer" | "status">,
+) {
+  return pullRequest.authoredByViewer && pullRequest.status === "changes_requested";
+}
+
+export function pullRequestWaitingOnOthers(
+  pullRequest: Pick<
+    WorkspacePullRequestItem,
+    | "authoredByViewer"
+    | "isViewerRequestedReviewer"
+    | "reviewState"
+    | "reviewedByViewer"
+    | "status"
+  >,
+) {
+  if (pullRequest.status === "draft") {
+    return false;
+  }
+
+  return (
+    !pullRequestNeedsViewerReview(pullRequest) &&
+    !pullRequestNeedsAuthorFollowUp(pullRequest)
+  );
+}
+
+export function filterPullRequestsByFocus(
+  pullRequests: WorkspacePullRequestItem[],
+  focus: PullRequestFocus,
+) {
+  switch (focus) {
+    case "needs_my_review":
+      return pullRequests.filter(pullRequestNeedsViewerReview);
+    case "needs_my_follow_up":
+      return pullRequests.filter(pullRequestNeedsAuthorFollowUp);
+    case "authored_by_me":
+      return pullRequests.filter((pullRequest) => pullRequest.authoredByViewer);
+    case "reviewed_by_me":
+      return pullRequests.filter((pullRequest) => pullRequest.reviewedByViewer);
+    case "waiting_on_others":
+      return pullRequests.filter(pullRequestWaitingOnOthers);
+    default:
+      return pullRequests;
+  }
+}
+
+export function getPullRequestFollowUpMeta(
+  pullRequest: Pick<
+    WorkspacePullRequestItem,
+    | "authoredByViewer"
+    | "isViewerRequestedReviewer"
+    | "reviewState"
+    | "reviewedByViewer"
+    | "status"
+  >,
+) {
+  if (pullRequestNeedsAuthorFollowUp(pullRequest)) {
+    return {
+      className: "bg-chart-3/10 text-chart-3 border-chart-3/20",
+      label: "needs your update",
+    };
+  }
+
+  if (pullRequestNeedsViewerReview(pullRequest)) {
+    return {
+      className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
+      label: pullRequest.isViewerRequestedReviewer
+        ? "your review requested"
+        : "review recommended",
+    };
+  }
+
+  if (pullRequest.reviewedByViewer) {
+    return {
+      className: "bg-chart-1/10 text-chart-1 border-chart-1/20",
+      label: "you reviewed",
+    };
+  }
+
+  return {
+    className: "bg-secondary text-muted-foreground border-border/60",
+    label: "waiting on others",
   };
 }

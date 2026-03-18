@@ -642,9 +642,15 @@ async function fetchPullRequests(
         reviews,
       );
       const authorLogin = normalizedPullRequest.author?.login ?? null;
+      const requestedReviewerLogins = pullRequest.requested_reviewers
+        .map((reviewer) => reviewer.login)
+        .filter((reviewerLogin) => reviewerLogin !== authorLogin);
       const reviewerLogins = normalizeReviewerLogins(normalizedPullRequest);
       const reviewedByViewer = githubAuthStatus.viewerLogin
         ? reviewerLogins.includes(githubAuthStatus.viewerLogin)
+        : false;
+      const isViewerRequestedReviewer = githubAuthStatus.viewerLogin
+        ? requestedReviewerLogins.includes(githubAuthStatus.viewerLogin)
         : false;
       const reviewedByOthersCount = reviewerLogins.filter(
         (reviewerLogin) => reviewerLogin !== githubAuthStatus.viewerLogin,
@@ -658,6 +664,7 @@ async function fetchPullRequests(
         baseBranch: normalizedPullRequest.baseRefName,
         headBranch: normalizedPullRequest.headRefName,
         id: `${githubRepository.slug}#${normalizedPullRequest.number}`,
+        isViewerRequestedReviewer,
         number: normalizedPullRequest.number,
         projectId: project.id,
         repo: project.name,
@@ -666,6 +673,7 @@ async function fetchPullRequests(
           reviewedByViewer,
           reviewerLogins.length,
         ),
+        requestedReviewerLogins,
         reviewedByOthersCount,
         reviewedByViewer,
         reviewerLogins,

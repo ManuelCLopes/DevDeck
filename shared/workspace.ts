@@ -93,11 +93,13 @@ export interface WorkspacePullRequestItem {
   baseBranch: string;
   headBranch: string;
   id: string;
+  isViewerRequestedReviewer: boolean;
   number: number;
   projectId: string;
   repo: string;
   reviewCount: number;
   reviewState: WorkspacePullRequestReviewState;
+  requestedReviewerLogins: string[];
   reviewedByOthersCount: number;
   reviewedByViewer: boolean;
   reviewerLogins: string[];

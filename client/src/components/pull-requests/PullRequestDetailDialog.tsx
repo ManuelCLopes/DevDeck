@@ -1,5 +1,13 @@
 import { formatDistanceToNow } from "date-fns";
-import { ArrowUpRight, Copy, GitBranch, Github, User2, Users } from "lucide-react";
+import {
+  ArrowUpRight,
+  Copy,
+  GitBranch,
+  Github,
+  ListChecks,
+  User2,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { getDesktopApi } from "@/lib/desktop";
 import {
+  getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
 } from "@/lib/pull-request-utils";
@@ -31,6 +40,9 @@ export default function PullRequestDetailDialog({
     : null;
   const reviewSummary = pullRequest
     ? getPullRequestReviewSummary(pullRequest)
+    : null;
+  const followUpMeta = pullRequest
+    ? getPullRequestFollowUpMeta(pullRequest)
     : null;
 
   const handleOpenPullRequest = async () => {
@@ -61,6 +73,20 @@ export default function PullRequestDetailDialog({
     await navigator.clipboard.writeText(pullRequest.url);
   };
 
+  const handleCopyBranch = async () => {
+    if (!pullRequest) {
+      return;
+    }
+
+    const desktopApi = getDesktopApi();
+    if (desktopApi?.copyToClipboard) {
+      await desktopApi.copyToClipboard(pullRequest.headBranch);
+      return;
+    }
+
+    await navigator.clipboard.writeText(pullRequest.headBranch);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl border-border/60 bg-white/95 backdrop-blur-md">
@@ -73,6 +99,9 @@ export default function PullRequestDetailDialog({
                 </span>
                 <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border ${reviewSummary?.className}`}>
                   {reviewSummary?.label}
+                </span>
+                <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border ${followUpMeta?.className}`}>
+                  {followUpMeta?.label}
                 </span>
                 {pullRequest.authoredByViewer && (
                   <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border bg-secondary text-muted-foreground border-border/60">
@@ -128,6 +157,12 @@ export default function PullRequestDetailDialog({
                     <span className="font-semibold text-foreground">{pullRequest.reviewCount}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">Requested from you</span>
+                    <span className="font-semibold text-foreground">
+                      {pullRequest.isViewerRequestedReviewer ? "Yes" : "No"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
                     <span className="text-muted-foreground">Reviewed by you</span>
                     <span className="font-semibold text-foreground">
                       {pullRequest.reviewedByViewer ? "Yes" : "No"}
@@ -138,6 +173,29 @@ export default function PullRequestDetailDialog({
                     <span className="font-semibold text-foreground">
                       {pullRequest.reviewedByOthersCount}
                     </span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <ListChecks className="w-3.5 h-3.5 text-primary" />
+                    Requested Reviewers
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {pullRequest.requestedReviewerLogins.length > 0 ? (
+                      pullRequest.requestedReviewerLogins.map((reviewerLogin) => (
+                        <span
+                          key={reviewerLogin}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-chart-2/20 bg-chart-2/10 px-2 py-1 text-[11px] font-medium text-chart-2"
+                        >
+                          <User2 className="w-3 h-3" />
+                          {reviewerLogin}
+                        </span>
+                      ))
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        No explicit review requests are open on this pull request.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -169,6 +227,15 @@ export default function PullRequestDetailDialog({
               >
                 <Copy className="w-3.5 h-3.5" />
                 Copy Link
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleCopyBranch()}
+                className="gap-1.5"
+              >
+                <GitBranch className="w-3.5 h-3.5" />
+                Copy Branch
               </Button>
               <Button
                 type="button"

@@ -1,8 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  filterPullRequestsByFocus,
+  getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
+  pullRequestNeedsAuthorFollowUp,
+  pullRequestNeedsViewerReview,
 } from "./pull-request-utils";
 
 test("getPullRequestReviewSummary marks unreviewed PRs clearly", () => {
@@ -38,4 +42,70 @@ test("getPullRequestReviewSummary prioritizes viewer reviews", () => {
 test("getPullRequestStatusMeta exposes readable labels", () => {
   assert.equal(getPullRequestStatusMeta("changes_requested").label, "changes requested");
   assert.equal(getPullRequestStatusMeta("approved").label, "approved");
+});
+
+test("pullRequestNeedsViewerReview prefers direct review responsibility", () => {
+  assert.equal(
+    pullRequestNeedsViewerReview({
+      authoredByViewer: false,
+      isViewerRequestedReviewer: true,
+      reviewState: "unreviewed",
+      reviewedByViewer: false,
+      status: "review_required",
+    }),
+    true,
+  );
+});
+
+test("pullRequestNeedsAuthorFollowUp detects changes requested on your PR", () => {
+  assert.equal(
+    pullRequestNeedsAuthorFollowUp({
+      authoredByViewer: true,
+      status: "changes_requested",
+    }),
+    true,
+  );
+});
+
+test("getPullRequestFollowUpMeta exposes waiting labels", () => {
+  assert.deepEqual(
+    getPullRequestFollowUpMeta({
+      authoredByViewer: false,
+      isViewerRequestedReviewer: false,
+      reviewState: "reviewed_by_you",
+      reviewedByViewer: true,
+      status: "approved",
+    }),
+    {
+      className: "bg-chart-1/10 text-chart-1 border-chart-1/20",
+      label: "you reviewed",
+    },
+  );
+});
+
+test("filterPullRequestsByFocus narrows authored pull requests", () => {
+  const pullRequests = [
+    {
+      authoredByViewer: true,
+      isViewerRequestedReviewer: false,
+      reviewState: "unreviewed",
+      reviewedByViewer: false,
+      status: "open",
+    },
+    {
+      authoredByViewer: false,
+      isViewerRequestedReviewer: true,
+      reviewState: "unreviewed",
+      reviewedByViewer: false,
+      status: "review_required",
+    },
+  ];
+
+  assert.equal(
+    filterPullRequestsByFocus(
+      pullRequests as never,
+      "authored_by_me",
+    ).length,
+    1,
+  );
 });

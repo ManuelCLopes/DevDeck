@@ -2,12 +2,18 @@ import AppLayout from "@/components/layout/AppLayout";
 import PullRequestDetailDialog from "@/components/pull-requests/PullRequestDetailDialog";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
+import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
 import { getGitHubStatusMeta } from "@/lib/github-status";
 import {
+  filterPullRequestsByFocus,
+  getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
+  pullRequestNeedsAuthorFollowUp,
+  pullRequestNeedsViewerReview,
+  type PullRequestFocus,
 } from "@/lib/pull-request-utils";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -19,29 +25,42 @@ import {
   MessageSquare,
   RefreshCw,
 } from "lucide-react";
+import { useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
 
 export default function Reviews() {
   const [location, setLocation] = useLocation();
   const search = useSearch();
+  const [focusFilter, setFocusFilter] = usePersistentState<PullRequestFocus>(
+    "devdeck:reviews:focus-filter",
+    "all",
+  );
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
   const pullRequests = snapshot?.pullRequests ?? [];
   const reviews = snapshot?.reviews ?? [];
+  const filteredPullRequests = useMemo(
+    () => filterPullRequestsByFocus(pullRequests, focusFilter),
+    [focusFilter, pullRequests],
+  );
   const activeReviews = reviews.filter((review) => review.status === "active");
   const staleReviews = reviews.filter((review) => review.status === "stale");
   const draftPullRequests = pullRequests.filter((pullRequest) => pullRequest.status === "draft");
-  const attentionPullRequests = pullRequests.filter(
-    (pullRequest) =>
-      pullRequest.status === "changes_requested" ||
-      pullRequest.status === "review_required",
-  );
+  const needsViewerReviewCount = pullRequests.filter(pullRequestNeedsViewerReview).length;
+  const needsAuthorFollowUpCount = pullRequests.filter(pullRequestNeedsAuthorFollowUp).length;
+  const reviewedByViewerCount = pullRequests.filter(
+    (pullRequest) => pullRequest.reviewedByViewer,
+  ).length;
+  const authoredByViewerCount = pullRequests.filter(
+    (pullRequest) => pullRequest.authoredByViewer,
+  ).length;
   const latestPullRequest = pullRequests[0] ?? null;
   const selectedPullRequestId = new URLSearchParams(search).get("pr");
   const githubStatus = snapshot?.githubStatus;
   const githubStatusMeta = getGitHubStatusMeta(githubStatus);
   const selectedPullRequest =
     pullRequests.find((pullRequest) => pullRequest.id === selectedPullRequestId) ?? null;
-  const openPullRequestsPagination = usePagination(pullRequests, 8, {
+  const openPullRequestsPagination = usePagination(filteredPullRequests, 8, {
+    resetKey: focusFilter,
     storageKey: "devdeck:reviews:open-prs",
   });
   const activeReviewsPagination = usePagination(activeReviews, 6, {
@@ -63,6 +82,32 @@ export default function Reviews() {
 
   const handleInspectPullRequest = (pullRequestId: string) => {
     setLocation(`/reviews?pr=${encodeURIComponent(pullRequestId)}`);
+  };
+
+  const pullRequestFilters: Array<{
+    count: number;
+    id: PullRequestFocus;
+    label: string;
+  }> = [
+    { count: pullRequests.length, id: "all", label: "All PRs" },
+    { count: needsViewerReviewCount, id: "needs_my_review", label: "Needs My Review" },
+    { count: needsAuthorFollowUpCount, id: "needs_my_follow_up", label: "Needs My Follow-Up" },
+    { count: authoredByViewerCount, id: "authored_by_me", label: "Authored By Me" },
+    { count: reviewedByViewerCount, id: "reviewed_by_me", label: "Reviewed By Me" },
+    {
+      count: filterPullRequestsByFocus(pullRequests, "waiting_on_others").length,
+      id: "waiting_on_others",
+      label: "Waiting On Others",
+    },
+  ];
+
+  const emptyPullRequestMessageByFilter: Record<PullRequestFocus, string> = {
+    all: "No open pull requests were found for the connected repositories.",
+    authored_by_me: "You do not currently have open pull requests in this workspace.",
+    needs_my_follow_up: "Nothing currently needs your follow-up.",
+    needs_my_review: "You do not currently have a review queue here.",
+    reviewed_by_me: "You have not reviewed any of the current open pull requests yet.",
+    waiting_on_others: "There are no pull requests currently waiting on someone else.",
   };
 
   return (
@@ -101,37 +146,40 @@ export default function Reviews() {
           </div>
           <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              Draft Pull Requests
+              Needs Your Review
             </h3>
             <div className="flex items-baseline gap-2 mt-auto">
-              <span className="text-3xl font-bold tracking-tight text-muted-foreground">
-                {draftPullRequests.length}
+              <span className="text-3xl font-bold tracking-tight text-chart-2">
+                {needsViewerReviewCount}
               </span>
-              <span className="text-xs text-muted-foreground">not ready yet</span>
+              <span className="text-xs text-muted-foreground">review queue</span>
             </div>
           </div>
           <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              Needs Attention
+              Needs Your Follow-Up
             </h3>
             <div className="flex items-baseline gap-2 mt-auto">
               <span className="text-3xl font-bold tracking-tight text-chart-3">
-                {attentionPullRequests.length}
+                {needsAuthorFollowUpCount}
               </span>
-              <span className="text-xs text-muted-foreground">awaiting action</span>
+              <span className="text-xs text-muted-foreground">author action</span>
             </div>
           </div>
           <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              Latest Update
+              Reviewed By You
             </h3>
             <div className="flex items-baseline gap-2 mt-auto">
-              <span className="text-sm font-semibold tracking-tight">
+              <span className="text-3xl font-bold tracking-tight text-chart-1">
+                {reviewedByViewerCount}
+              </span>
+              <span className="text-xs text-muted-foreground">
                 {latestPullRequest
-                  ? formatDistanceToNow(new Date(latestPullRequest.updatedAt), {
+                  ? `latest ${formatDistanceToNow(new Date(latestPullRequest.updatedAt), {
                       addSuffix: true,
-                    })
-                  : "No PR activity"}
+                    })}`
+                  : "no PR activity"}
               </span>
             </div>
           </div>
@@ -146,9 +194,28 @@ export default function Reviews() {
                     Open Pull Requests
                   </h2>
                   <span className="bg-secondary text-secondary-foreground text-[10px] px-1.5 py-0.5 rounded-sm font-bold border border-border/60">
-                    {pullRequests.length}
+                    {filteredPullRequests.length}
                   </span>
                 </div>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-3">
+                {pullRequestFilters.map((filter) => (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    onClick={() => setFocusFilter(filter.id)}
+                    className={`inline-flex items-center gap-2 whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                      focusFilter === filter.id
+                        ? "bg-foreground text-background border-foreground"
+                        : "bg-white text-muted-foreground border-border/60 hover:text-foreground hover:border-black/15"
+                    }`}
+                  >
+                    <span>{filter.label}</span>
+                    <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[10px] font-semibold">
+                      {filter.count}
+                    </span>
+                  </button>
+                ))}
               </div>
               <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl px-4 py-1 shadow-sm overflow-hidden">
                 <div className="flex flex-col">
@@ -183,6 +250,11 @@ export default function Reviews() {
                             >
                               {getPullRequestReviewSummary(pullRequest).label}
                             </span>
+                            <span
+                              className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestFollowUpMeta(pullRequest).className}`}
+                            >
+                              {getPullRequestFollowUpMeta(pullRequest).label}
+                            </span>
                           </div>
                           <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0">
                             {formatDistanceToNow(new Date(pullRequest.updatedAt), {
@@ -199,6 +271,11 @@ export default function Reviews() {
                             {pullRequest.headBranch} into {pullRequest.baseBranch}
                           </span>
                           {pullRequest.author && <span>{pullRequest.author}</span>}
+                          {pullRequest.isViewerRequestedReviewer && (
+                            <span className="rounded-full border border-chart-2/20 bg-chart-2/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-chart-2">
+                              requested from you
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -215,13 +292,13 @@ export default function Reviews() {
                       </button>
                     </div>
                   ))}
-                  {pullRequests.length === 0 && (
+                  {filteredPullRequests.length === 0 && (
                     <div className="py-6 text-center text-muted-foreground text-sm">
                       {isLoading
                         ? "Loading pull requests..."
                         : githubStatus?.state === "connected"
                           ? githubStatus.connectedRepositoryCount > 0
-                            ? "No open pull requests were found for the connected repositories."
+                            ? emptyPullRequestMessageByFilter[focusFilter]
                             : "No GitHub remotes were detected in the current workspace."
                           : githubStatus?.state === "unsupported"
                             ? "GitHub pull request sync requires the desktop app."
@@ -390,6 +467,9 @@ export default function Reviews() {
                     <p>
                       Connected repositories:{" "}
                       {githubStatus?.connectedRepositoryCount ?? 0}
+                    </p>
+                    <p>
+                      Draft pull requests: {draftPullRequests.length}
                     </p>
                   </div>
                 </div>

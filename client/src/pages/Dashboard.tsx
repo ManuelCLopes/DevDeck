@@ -10,8 +10,11 @@ import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
 import { getCiStatusMeta } from "@/lib/project-health";
 import {
+  getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
+  pullRequestNeedsAuthorFollowUp,
+  pullRequestNeedsViewerReview,
 } from "@/lib/pull-request-utils";
 import { getWorkspaceSelection } from "@/lib/workspace-selection";
 import { formatDistanceToNow } from "date-fns";
@@ -86,11 +89,17 @@ export default function Dashboard() {
   ).length;
   const attentionPullRequestCount = visiblePullRequests.filter(
     (pullRequest) =>
-      pullRequest.status === "changes_requested" ||
-      pullRequest.status === "review_required",
+      pullRequestNeedsViewerReview(pullRequest) ||
+      pullRequestNeedsAuthorFollowUp(pullRequest),
   ).length;
   const unreviewedPullRequestCount = visiblePullRequests.filter(
     (pullRequest) => (pullRequest.reviewState ?? "unreviewed") === "unreviewed",
+  ).length;
+  const needsViewerReviewCount = visiblePullRequests.filter(
+    pullRequestNeedsViewerReview,
+  ).length;
+  const needsAuthorFollowUpCount = visiblePullRequests.filter(
+    pullRequestNeedsAuthorFollowUp,
   ).length;
   const reviewedByViewerCount = visiblePullRequests.filter(
     (pullRequest) => pullRequest.reviewedByViewer,
@@ -352,19 +361,18 @@ export default function Dashboard() {
                       <span className="font-semibold text-foreground">{focusedProjectPullRequests.length}</span>
                     </div>
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-muted-foreground">Awaiting first review</span>
+                      <span className="text-muted-foreground">Needs your review</span>
                       <span className="font-semibold text-foreground">
                         {focusedProjectPullRequests.filter(
-                          (pullRequest) =>
-                            (pullRequest.reviewState ?? "unreviewed") === "unreviewed",
+                          pullRequestNeedsViewerReview,
                         ).length}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-muted-foreground">Reviewed by you</span>
+                      <span className="text-muted-foreground">Needs your follow-up</span>
                       <span className="font-semibold text-foreground">
                         {focusedProjectPullRequests.filter(
-                          (pullRequest) => pullRequest.reviewedByViewer,
+                          pullRequestNeedsAuthorFollowUp,
                         ).length}
                       </span>
                     </div>
@@ -458,6 +466,7 @@ export default function Dashboard() {
 
                   <div className="space-y-3">
                     {focusedPullRequestsPagination.paginatedItems.map((pullRequest) => {
+                      const followUpMeta = getPullRequestFollowUpMeta(pullRequest);
                       const reviewSummary = getPullRequestReviewSummary(pullRequest);
                       const statusMeta = getPullRequestStatusMeta(pullRequest.status);
 
@@ -484,6 +493,9 @@ export default function Dashboard() {
                               reviewSummary.className
                             }`}>
                               {reviewSummary.label}
+                            </span>
+                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${followUpMeta.className}`}>
+                              {followUpMeta.label}
                             </span>
                             {pullRequest.authoredByViewer && (
                               <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap bg-secondary text-muted-foreground border-border/60">
@@ -547,13 +559,24 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Awaiting First Review
+                    Needs Your Review
                   </h3>
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-bold tracking-tight text-chart-2">
-                      {unreviewedPullRequestCount}
+                      {needsViewerReviewCount}
                     </span>
-                    <span className="text-xs text-muted-foreground">no reviewer yet</span>
+                    <span className="text-xs text-muted-foreground">review queue</span>
+                  </div>
+                </div>
+                <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
+                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Needs Your Follow-Up
+                  </h3>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold tracking-tight text-chart-3">
+                      {needsAuthorFollowUpCount}
+                    </span>
+                    <span className="text-xs text-muted-foreground">author action</span>
                   </div>
                 </div>
                 <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
@@ -561,21 +584,12 @@ export default function Dashboard() {
                     Reviewed By You
                   </h3>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-chart-1">
+                    <span className="text-3xl font-bold tracking-tight">
                       {reviewedByViewerCount}
                     </span>
-                    <span className="text-xs text-muted-foreground">follow-up candidates</span>
-                  </div>
-                </div>
-                <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
-                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Team Reviewed
-                  </h3>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight">
-                      {reviewedByOthersCount}
+                    <span className="text-xs text-muted-foreground">
+                      {reviewedByOthersCount} touched by teammates
                     </span>
-                    <span className="text-xs text-muted-foreground">already touched</span>
                   </div>
                 </div>
               </div>
@@ -583,6 +597,7 @@ export default function Dashboard() {
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                 <div className="space-y-3">
                     {overviewPullRequestsPagination.paginatedItems.map((pullRequest) => {
+                      const followUpMeta = getPullRequestFollowUpMeta(pullRequest);
                       const reviewSummary = getPullRequestReviewSummary(pullRequest);
                       const statusMeta = getPullRequestStatusMeta(pullRequest.status);
 
@@ -609,6 +624,9 @@ export default function Dashboard() {
                               reviewSummary.className
                             }`}>
                               {reviewSummary.label}
+                            </span>
+                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${followUpMeta.className}`}>
+                              {followUpMeta.label}
                             </span>
                             {pullRequest.authoredByViewer && (
                               <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap bg-secondary text-muted-foreground border-border/60">
