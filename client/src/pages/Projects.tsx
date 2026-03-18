@@ -1,6 +1,5 @@
-import { useEffect, useMemo } from "react";
+import { Suspense, lazy, useEffect, useMemo } from "react";
 import AppLayout from "@/components/layout/AppLayout";
-import PullRequestDetailDialog from "@/components/pull-requests/PullRequestDetailDialog";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { usePersistentState } from "@/hooks/use-persistent-state";
@@ -29,6 +28,10 @@ import {
 } from "lucide-react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { WorkspaceProject } from "@shared/workspace";
+
+const PullRequestDetailDialog = lazy(
+  () => import("@/components/pull-requests/PullRequestDetailDialog"),
+);
 
 export default function Projects() {
   const [searchQuery, setSearchQuery] = usePersistentState(
@@ -405,15 +408,19 @@ export default function Projects() {
           )}
         </div>
         </div>
-        <PullRequestDetailDialog
-          open={Boolean(selectedPullRequest)}
-          onOpenChange={(open) => {
-            if (!open) {
-              setSelectedPullRequestId(null);
-            }
-          }}
-          pullRequest={selectedPullRequest}
-        />
+        {selectedPullRequest ? (
+          <Suspense fallback={null}>
+            <PullRequestDetailDialog
+              open={Boolean(selectedPullRequest)}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setSelectedPullRequestId(null);
+                }
+              }}
+              pullRequest={selectedPullRequest}
+            />
+          </Suspense>
+        ) : null}
       </>
     </AppLayout>
   );

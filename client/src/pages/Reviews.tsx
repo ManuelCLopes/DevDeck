@@ -1,5 +1,4 @@
 import AppLayout from "@/components/layout/AppLayout";
-import PullRequestDetailDialog from "@/components/pull-requests/PullRequestDetailDialog";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { usePersistentState } from "@/hooks/use-persistent-state";
@@ -25,8 +24,12 @@ import {
   MessageSquare,
   RefreshCw,
 } from "lucide-react";
-import { useMemo } from "react";
+import { Suspense, lazy, useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
+
+const PullRequestDetailDialog = lazy(
+  () => import("@/components/pull-requests/PullRequestDetailDialog"),
+);
 
 export default function Reviews() {
   const [location, setLocation] = useLocation();
@@ -478,15 +481,19 @@ export default function Reviews() {
           </div>
         </div>
         </div>
-        <PullRequestDetailDialog
-          open={Boolean(selectedPullRequest)}
-          onOpenChange={(open) => {
-            if (!open) {
-              setLocation(location);
-            }
-          }}
-          pullRequest={selectedPullRequest}
-        />
+        {selectedPullRequest ? (
+          <Suspense fallback={null}>
+            <PullRequestDetailDialog
+              open={Boolean(selectedPullRequest)}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setLocation(location);
+                }
+              }}
+              pullRequest={selectedPullRequest}
+            />
+          </Suspense>
+        ) : null}
       </>
     </AppLayout>
   );

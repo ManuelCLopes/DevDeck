@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import ProjectCard from "@/components/dashboard/ProjectCard";
 import ProjectRow from "@/components/dashboard/ProjectRow";
-import PullRequestDetailDialog from "@/components/pull-requests/PullRequestDetailDialog";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { usePersistentState } from "@/hooks/use-persistent-state";
@@ -38,6 +37,10 @@ import {
   Users,
   Zap,
 } from "lucide-react";
+
+const PullRequestDetailDialog = lazy(
+  () => import("@/components/pull-requests/PullRequestDetailDialog"),
+);
 
 export default function Dashboard() {
   const [viewMode, setViewMode] = usePersistentState<"grid" | "list">(
@@ -740,15 +743,19 @@ export default function Dashboard() {
           </>
         )}
         </div>
-        <PullRequestDetailDialog
-          open={Boolean(selectedPullRequest)}
-          onOpenChange={(open) => {
-            if (!open) {
-              setSelectedPullRequestId(null);
-            }
-          }}
-          pullRequest={selectedPullRequest}
-        />
+        {selectedPullRequest ? (
+          <Suspense fallback={null}>
+            <PullRequestDetailDialog
+              open={Boolean(selectedPullRequest)}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setSelectedPullRequestId(null);
+                }
+              }}
+              pullRequest={selectedPullRequest}
+            />
+          </Suspense>
+        ) : null}
       </>
     </AppLayout>
   );

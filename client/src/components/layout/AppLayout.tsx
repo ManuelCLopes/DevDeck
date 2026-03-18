@@ -1,6 +1,14 @@
-import { ReactNode, startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
+import {
+  ReactNode,
+  Suspense,
+  lazy,
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Link, useLocation, useSearch } from "wouter";
-import AddProjectsDialog from "@/components/workspace/AddProjectsDialog";
 import WindowControls from "@/components/layout/WindowControls";
 import {
   CommandDialog,
@@ -41,6 +49,8 @@ import {
   MessageSquare,
   RefreshCw,
 } from "lucide-react";
+
+const AddProjectsDialog = lazy(() => import("@/components/workspace/AddProjectsDialog"));
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -365,7 +375,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
         }
       `}</style>
       </div>
-      <AddProjectsDialog open={isAddProjectsOpen} onOpenChange={setIsAddProjectsOpen} />
+      {isAddProjectsOpen ? (
+        <Suspense fallback={null}>
+          <AddProjectsDialog open={isAddProjectsOpen} onOpenChange={setIsAddProjectsOpen} />
+        </Suspense>
+      ) : null}
       <CommandDialog
         open={isSearchOpen}
         onOpenChange={(open) => {
