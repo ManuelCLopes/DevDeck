@@ -6,6 +6,7 @@ import PullRequestDetailDialog from "@/components/pull-requests/PullRequestDetai
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { usePersistentState } from "@/hooks/use-persistent-state";
+import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
 import { getCiStatusMeta } from "@/lib/project-health";
@@ -16,7 +17,6 @@ import {
   pullRequestNeedsAuthorFollowUp,
   pullRequestNeedsViewerReview,
 } from "@/lib/pull-request-utils";
-import { getWorkspaceSelection } from "@/lib/workspace-selection";
 import { formatDistanceToNow } from "date-fns";
 import { Link, useSearch } from "wouter";
 import {
@@ -51,7 +51,7 @@ export default function Dashboard() {
   const [selectedPullRequestId, setSelectedPullRequestId] = useState<string | null>(null);
   const search = useSearch();
   const focusedProjectId = new URLSearchParams(search).get("project");
-  const workspaceSelection = getWorkspaceSelection();
+  const workspaceSelection = useWorkspaceSelection();
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
 
   const projects = snapshot?.projects ?? [];

@@ -19,12 +19,17 @@ export type WorkspaceGitHubState =
   | "unsupported";
 
 export interface MonitoredProject {
+  collectionId?: string;
+  collectionName?: string;
   id: string;
   isRoot?: boolean;
   localPath?: string;
   name: string;
+  order?: number;
   relativePath?: string;
   repositoryCount: number | null;
+  workspaceName?: string;
+  workspacePath?: string;
 }
 
 export interface WorkspaceSelection {

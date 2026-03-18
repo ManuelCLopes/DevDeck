@@ -4,6 +4,7 @@ import { setCompletedOnboarding } from "@/lib/onboarding-state";
 import { queryClient } from "@/lib/queryClient";
 import { getDesktopApi } from "@/lib/desktop";
 import {
+  buildWorkspaceSelectionFromImport,
   getWorkspaceSelection,
   mergeWorkspaceSelection,
   setWorkspaceSelection,
@@ -233,26 +234,12 @@ export default function Onboarding() {
       return;
     }
 
-    const selectedProjects =
-      projectCandidates.filter((candidate) => selectedProjectIds.includes(candidate.id)) ||
-      [];
-
-    const nextSelection = {
+    const nextSelection = buildWorkspaceSelectionFromImport({
+      candidates: projectCandidates,
       rootName: selectedRootName ?? selectedDir,
-      rootPath: selectedRootPath ?? selectedDir ?? selectedRootName,
-      projects:
-        selectedProjects.length > 0
-          ? selectedProjects
-          : [
-              {
-                id: `${selectedRootName ?? selectedDir}/.`,
-                isRoot: true,
-                localPath: selectedRootPath ?? selectedDir ?? selectedRootName ?? undefined,
-                name: selectedRootName ?? selectedDir,
-                repositoryCount: null,
-              },
-            ],
-    };
+      rootPath: selectedRootPath ?? selectedDir ?? selectedRootName ?? undefined,
+      selectedProjectIds,
+    });
     setWorkspaceSelection(
       isAppendMode
         ? mergeWorkspaceSelection(getWorkspaceSelection(), nextSelection)

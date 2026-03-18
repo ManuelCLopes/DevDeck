@@ -21,8 +21,11 @@ import {
   useAppNavigation,
 } from "@/lib/app-navigation";
 import { useWorkspaceAlerts } from "@/hooks/use-workspace-alerts";
+import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { getOpenAddProjectsDialogEvent } from "@/lib/project-import-events";
-import { getMonitoredProjects, getWorkspaceSelection } from "@/lib/workspace-selection";
+import {
+  getManagedProjectCollections,
+} from "@/lib/workspace-selection";
 import { format } from "date-fns";
 import { 
   Settings, 
@@ -49,7 +52,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [isAddProjectsOpen, setIsAddProjectsOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const monitoredProjects = getMonitoredProjects(getWorkspaceSelection());
+  const workspaceSelection = useWorkspaceSelection();
+  const managedCollections = getManagedProjectCollections(workspaceSelection);
   const selectedProjectId = new URLSearchParams(search).get("project");
   const { data: snapshot, isFetching, refetch } = useWorkspaceSnapshot();
   const { preferences } = useAppPreferences();
@@ -216,24 +220,35 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               </button>
             </div>
-            <div className="space-y-[2px]">
-              {monitoredProjects.map((project) => (
-                <Link
-                  key={project.localPath ?? project.id}
-                  href={`/?project=${encodeURIComponent(project.id)}`}
-                >
-                  <a
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-colors group ${
-                      selectedProjectId === project.id && location === "/"
-                        ? "bg-black/7 text-foreground font-medium"
-                        : "text-foreground/80 hover:bg-black/5"
-                    }`}
-                    title={project.localPath ?? project.name}
-                  >
-                    <HardDrive className="w-3.5 h-3.5 opacity-60 text-primary group-hover:opacity-100 transition-opacity" />
-                    <span className="truncate">{project.name}</span>
-                  </a>
-                </Link>
+            <div className="space-y-3">
+              {managedCollections.map((collection) => (
+                <div key={collection.id} className="space-y-[2px]">
+                  {managedCollections.length > 1 && (
+                    <div className="px-2 pt-1">
+                      <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                        {collection.name}
+                      </p>
+                    </div>
+                  )}
+                  {collection.projects.map((project) => (
+                    <Link
+                      key={project.localPath ?? project.id}
+                      href={`/?project=${encodeURIComponent(project.id)}`}
+                    >
+                      <a
+                        className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-colors group ${
+                          selectedProjectId === project.id && location === "/"
+                            ? "bg-black/7 text-foreground font-medium"
+                            : "text-foreground/80 hover:bg-black/5"
+                        }`}
+                        title={project.localPath ?? project.name}
+                      >
+                        <HardDrive className="w-3.5 h-3.5 opacity-60 text-primary group-hover:opacity-100 transition-opacity" />
+                        <span className="truncate">{project.name}</span>
+                      </a>
+                    </Link>
+                  ))}
+                </div>
               ))}
             </div>
           </nav>

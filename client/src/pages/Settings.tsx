@@ -1,6 +1,7 @@
 import { useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import GitHubConnectDialog from "@/components/settings/GitHubConnectDialog";
+import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import {
   Select,
   SelectContent,
@@ -14,10 +15,14 @@ import { getDesktopApi } from "@/lib/desktop";
 import { getGitHubStatusMeta } from "@/lib/github-status";
 import { formatDistanceToNow } from "date-fns";
 import {
+  ArrowDown,
+  ArrowUp,
   Github,
   HardDrive,
+  Layers3,
   RotateCcw,
   Shield,
+  Trash2,
 } from "lucide-react";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { useLocation } from "wouter";
@@ -27,8 +32,12 @@ import { queryClient } from "@/lib/queryClient";
 import { clearWorkspaceHandle } from "@/lib/workspace-handle";
 import {
   clearWorkspaceSelection,
-  getMonitoredDirectoryLabels,
-  getWorkspaceSelection,
+  getManagedProjectCollections,
+  moveManagedProject,
+  moveManagedProjectCollection,
+  removeManagedProject,
+  renameManagedProjectCollection,
+  setWorkspaceSelection,
 } from "@/lib/workspace-selection";
 
 export default function Settings() {
@@ -36,13 +45,28 @@ export default function Settings() {
   const { data: snapshot, isFetching, refetch } = useWorkspaceSnapshot();
   const { preferences, setPreference } = useAppPreferences();
   const [isGitHubConnectOpen, setIsGitHubConnectOpen] = useState(false);
-  const workspaceSelection = getWorkspaceSelection();
-  const monitoredDirectories = getMonitoredDirectoryLabels(workspaceSelection);
+  const workspaceSelection = useWorkspaceSelection();
+  const managedCollections = getManagedProjectCollections(workspaceSelection);
   const githubStatus = snapshot?.githubStatus;
   const connected = githubStatus?.authenticated ?? false;
   const githubStatusMeta = getGitHubStatusMeta(githubStatus);
   const githubState = githubStatus?.state ?? "unsupported";
   const desktopApi = getDesktopApi();
+
+  const persistWorkspaceSelection = async (
+    nextSelection: ReturnType<typeof renameManagedProjectCollection>,
+  ) => {
+    if (!nextSelection) {
+      clearWorkspaceSelection();
+      await clearWorkspaceHandle();
+      void queryClient.removeQueries({ queryKey: ["workspace", "snapshot"] });
+      setLocation("/onboarding");
+      return;
+    }
+
+    setWorkspaceSelection(nextSelection);
+    void queryClient.invalidateQueries({ queryKey: ["workspace", "snapshot"] });
+  };
 
   const handleResetOnboarding = () => {
     clearCompletedOnboarding();
@@ -60,6 +84,31 @@ export default function Settings() {
   const handleDisconnectGitHub = async () => {
     await desktopApi?.clearGitHubToken?.();
     await refetch();
+  };
+
+  const handleRenameCollection = async (collectionId: string, nextName: string) => {
+    await persistWorkspaceSelection(
+      renameManagedProjectCollection(workspaceSelection, collectionId, nextName),
+    );
+  };
+
+  const handleMoveCollection = async (
+    collectionId: string,
+    direction: "up" | "down",
+  ) => {
+    await persistWorkspaceSelection(
+      moveManagedProjectCollection(workspaceSelection, collectionId, direction),
+    );
+  };
+
+  const handleMoveProject = async (projectId: string, direction: "up" | "down") => {
+    await persistWorkspaceSelection(
+      moveManagedProject(workspaceSelection, projectId, direction),
+    );
+  };
+
+  const handleRemoveProject = async (projectId: string) => {
+    await persistWorkspaceSelection(removeManagedProject(workspaceSelection, projectId));
   };
 
   const lastWorkspaceSyncLabel = snapshot
@@ -142,19 +191,9 @@ export default function Settings() {
                     <h3 className="font-semibold text-sm">Managed Projects</h3>
                     <p className="text-xs text-muted-foreground mt-1">
                       {workspaceSelection
-                        ? `Projects selected from ${workspaceSelection.rootPath ?? workspaceSelection.rootName}.`
+                        ? `${workspaceSelection.projects.length} projects across ${managedCollections.length} ${managedCollections.length === 1 ? "collection" : "collections"}.`
                         : "Select folders where your git repositories live."}
                     </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {monitoredDirectories.map((directory) => (
-                        <span
-                          key={directory}
-                          className="text-[11px] font-mono bg-secondary px-2 py-1 rounded border border-border/50 text-foreground/80"
-                        >
-                          {directory}
-                        </span>
-                      ))}
-                    </div>
                   </div>
                 </div>
                 <button
@@ -165,6 +204,127 @@ export default function Settings() {
                   Add Projects...
                 </button>
               </div>
+
+              {workspaceSelection ? (
+                <div className="space-y-3">
+                  {managedCollections.map((collection, collectionIndex) => (
+                    <div
+                      key={collection.id}
+                      className="rounded-lg border border-border/60 bg-secondary/15 overflow-hidden"
+                    >
+                      <div className="flex flex-col gap-4 border-b border-border/40 bg-white/70 px-4 py-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <label
+                              htmlFor={`collection-${collection.id}`}
+                              className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                            >
+                              Collection Name
+                            </label>
+                            <input
+                              key={`${collection.id}:${collection.name}`}
+                              id={`collection-${collection.id}`}
+                              defaultValue={collection.name}
+                              onBlur={(event) =>
+                                void handleRenameCollection(collection.id, event.target.value)
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.currentTarget.blur();
+                                }
+                              }}
+                              className="mt-2 h-9 w-full rounded-md border border-input bg-white px-3 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            />
+                            <p
+                              className="mt-2 truncate text-xs text-muted-foreground"
+                              title={collection.workspacePath ?? collection.workspaceName}
+                            >
+                              Source workspace: {collection.workspacePath ?? collection.workspaceName}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => void handleMoveCollection(collection.id, "up")}
+                              disabled={collectionIndex === 0}
+                              className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-secondary disabled:opacity-40"
+                              aria-label={`Move ${collection.name} up`}
+                            >
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleMoveCollection(collection.id, "down")}
+                              disabled={collectionIndex === managedCollections.length - 1}
+                              className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-secondary disabled:opacity-40"
+                              aria-label={`Move ${collection.name} down`}
+                            >
+                              <ArrowDown className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Layers3 className="h-3.5 w-3.5" />
+                          {collection.projects.length}{" "}
+                          {collection.projects.length === 1 ? "project" : "projects"}
+                        </div>
+                      </div>
+
+                      <div className="divide-y divide-border/40">
+                        {collection.projects.map((project, projectIndex) => (
+                          <div
+                            key={project.localPath ?? project.id}
+                            className="flex items-center justify-between gap-4 px-4 py-3"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-foreground">
+                                {project.name}
+                              </p>
+                              <p
+                                className="truncate font-mono text-[11px] text-muted-foreground"
+                                title={project.localPath ?? project.relativePath ?? project.name}
+                              >
+                                {project.localPath ?? project.relativePath ?? project.name}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => void handleMoveProject(project.id, "up")}
+                                disabled={projectIndex === 0}
+                                className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-secondary disabled:opacity-40"
+                                aria-label={`Move ${project.name} up`}
+                              >
+                                <ArrowUp className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleMoveProject(project.id, "down")}
+                                disabled={projectIndex === collection.projects.length - 1}
+                                className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-secondary disabled:opacity-40"
+                                aria-label={`Move ${project.name} down`}
+                              >
+                                <ArrowDown className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleRemoveProject(project.id)}
+                                className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-red-50 hover:text-red-600"
+                                aria-label={`Remove ${project.name}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             {/* GitHub Integration */}

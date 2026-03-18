@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { queryClient } from "@/lib/queryClient";
 import { getDesktopApi } from "@/lib/desktop";
 import {
+  buildWorkspaceSelectionFromImport,
   getWorkspaceSelection,
   mergeWorkspaceSelection,
   setWorkspaceSelection,
@@ -21,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { FolderGit2, HardDrive, Plus, ShieldCheck } from "lucide-react";
 
 type FilePickerFile = File & {
@@ -182,6 +184,7 @@ export default function AddProjectsDialog({
   const [selectedRootPath, setSelectedRootPath] = useState<string | null>(null);
   const [discoveredRepositoryCount, setDiscoveredRepositoryCount] = useState(0);
   const [projectCandidates, setProjectCandidates] = useState<ProjectCandidate[]>([]);
+  const [collectionName, setCollectionName] = useState("");
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -193,6 +196,7 @@ export default function AddProjectsDialog({
     setSelectedRootPath(null);
     setDiscoveredRepositoryCount(0);
     setProjectCandidates([]);
+    setCollectionName("");
     setSelectionError(null);
     setSelectedProjectIds([]);
   };
@@ -214,6 +218,7 @@ export default function AddProjectsDialog({
     setSelectedDir(rootPath ?? rootName);
     setDiscoveredRepositoryCount(discoveredRepositoryCount);
     setProjectCandidates(candidates);
+    setCollectionName(rootName);
     setSelectedProjectIds(getDefaultSelectedProjectIds(candidates));
   };
 
@@ -302,26 +307,13 @@ export default function AddProjectsDialog({
       return;
     }
 
-    const selectedProjects = projectCandidates.filter((candidate) =>
-      selectedProjectIds.includes(candidate.id),
-    );
-
-    const nextSelection = {
+    const nextSelection = buildWorkspaceSelectionFromImport({
+      candidates: projectCandidates,
+      collectionName,
       rootName: selectedRootName ?? selectedDir,
-      rootPath: selectedRootPath ?? selectedDir ?? selectedRootName,
-      projects:
-        selectedProjects.length > 0
-          ? selectedProjects
-          : [
-              {
-                id: `${selectedRootName ?? selectedDir}/.`,
-                isRoot: true,
-                localPath: selectedRootPath ?? selectedDir ?? selectedRootName ?? undefined,
-                name: selectedRootName ?? selectedDir,
-                repositoryCount: null,
-              },
-            ],
-    };
+      rootPath: selectedRootPath ?? selectedDir ?? selectedRootName ?? undefined,
+      selectedProjectIds,
+    });
 
     setWorkspaceSelection(
       mergeWorkspaceSelection(getWorkspaceSelection(), nextSelection),
@@ -400,9 +392,30 @@ export default function AddProjectsDialog({
             />
 
             {selectedDir && (
-              <div className="mt-4 flex items-center justify-center gap-2 text-sm font-mono text-foreground bg-white border border-border px-3 py-2 rounded-md shadow-sm">
-                <FolderGit2 className="w-4 h-4 text-primary" />
-                {selectedDir}
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-center gap-2 text-sm font-mono text-foreground bg-white border border-border px-3 py-2 rounded-md shadow-sm">
+                  <FolderGit2 className="w-4 h-4 text-primary" />
+                  {selectedDir}
+                </div>
+
+                <div className="space-y-2">
+                  <label
+                    htmlFor="add-projects-collection"
+                    className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                  >
+                    Collection
+                  </label>
+                  <Input
+                    id="add-projects-collection"
+                    value={collectionName}
+                    onChange={(event) => setCollectionName(event.target.value)}
+                    placeholder="Personal Projects"
+                    className="bg-white"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Use collections to group related repositories together in the sidebar and settings.
+                  </p>
+                </div>
               </div>
             )}
           </div>
