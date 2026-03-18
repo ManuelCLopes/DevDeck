@@ -26,14 +26,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { href: "/", icon: LayoutGrid, label: "Overview" },
     { href: "/reviews", icon: MessageSquare, label: "Code Reviews" },
     { href: "/projects", icon: FolderGit2, label: "Local Projects" },
-    { href: "/activity", icon: Activity, label: "Activity" },
+    { href: "/activity", icon: Activity, label: "Activity Inbox" },
   ];
 
   return (
     <div className="flex h-screen bg-[#ececec] overflow-hidden text-[13px] font-sans">
-      {/* 
-        This wrapper simulates the macOS Window environment.
-      */}
       <div className="flex w-full h-full border border-black/10 rounded-lg shadow-2xl overflow-hidden bg-white/50 backdrop-blur-3xl m-0 sm:m-4 sm:rounded-xl">
         
         {/* Sidebar - macOS visual style */}
@@ -65,6 +62,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     {item.label === "Code Reviews" && (
                       <span className="ml-auto text-[10px] font-bold bg-primary-foreground/20 px-1.5 rounded-sm">
                         3
+                      </span>
+                    )}
+                    {item.label === "Activity Inbox" && (
+                      <span className="ml-auto text-[10px] font-bold bg-primary-foreground/20 px-1.5 rounded-sm">
+                        12
                       </span>
                     )}
                   </a>
@@ -138,10 +140,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 />
               </div>
               
-              <button className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-secondary relative">
-                <Bell className="w-4 h-4" />
-                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary border-2 border-background"></span>
-              </button>
+              <Link href="/activity">
+                <a className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-secondary relative">
+                  <Bell className="w-4 h-4" />
+                  <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary border-2 border-background"></span>
+                </a>
+              </Link>
             </div>
           </header>
 
@@ -155,7 +159,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
       </div>
       
       <style>{`
-        /* Helper class for non-draggable elements in a draggable titlebar */
         .no-drag {
           -webkit-app-region: no-drag;
         }

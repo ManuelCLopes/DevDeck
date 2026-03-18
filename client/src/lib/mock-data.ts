@@ -19,6 +19,7 @@ export interface Project {
   contributors7d: number;
   repositoryUrl: string;
   localPath: string;
+  language: string;
 }
 
 export type PRStatus = 'needs_review' | 'changes_requested' | 'approved' | 'draft' | 'updated';
@@ -40,12 +41,74 @@ export interface PullRequest {
   actionableInsight?: string;
 }
 
+export interface ActivityItem {
+  id: string;
+  type: 'review_requested' | 'pr_approved' | 'build_failed' | 'mention' | 'repo_cloned';
+  title: string;
+  description: string;
+  timestamp: string;
+  repo: string;
+  read: boolean;
+  author?: string;
+}
+
 export const mockReviewMetrics = {
   pendingLoad: 4,
   completedThisWeek: 12,
   averageTurnaround: "3.2h",
   waitingOnAuthor: 2,
 };
+
+export const mockActivities: ActivityItem[] = [
+  {
+    id: "act-1",
+    type: "build_failed",
+    title: "Build Failed on main",
+    description: "The latest commit on core-api failed the testing pipeline.",
+    timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+    repo: "core-api",
+    read: false
+  },
+  {
+    id: "act-2",
+    type: "review_requested",
+    title: "Review Requested",
+    description: "sarahj requested your review on 'feat: implement local sync engine'",
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+    repo: "core-api",
+    read: false,
+    author: "sarahj"
+  },
+  {
+    id: "act-3",
+    type: "mention",
+    title: "Mentioned in comment",
+    description: "alex_dev mentioned you in 'chore: update tailwind config'",
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+    repo: "web-dashboard",
+    read: true,
+    author: "alex_dev"
+  },
+  {
+    id: "act-4",
+    type: "pr_approved",
+    title: "Pull Request Approved",
+    description: "Your PR 'refactor: isolate macOS window controls' was approved.",
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+    repo: "web-dashboard",
+    read: true,
+    author: "mike_chen"
+  },
+  {
+    id: "act-5",
+    type: "repo_cloned",
+    title: "Repository Synced",
+    description: "payment-service has been successfully synced locally.",
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+    repo: "payment-service",
+    read: true
+  }
+];
 
 export const mockPullRequests: PullRequest[] = [
   {
@@ -130,7 +193,7 @@ export const mockPullRequests: PullRequest[] = [
     author: "jamie_t",
     status: "needs_review",
     role: "reviewer",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), // 5 days old
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), 
     updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
     comments: 1,
     unresolvedThreads: 0,
@@ -159,7 +222,8 @@ export const mockProjects: Project[] = [
     unreviewedPRs: 4,
     contributors7d: 8,
     repositoryUrl: "github.com/org/core-api",
-    localPath: "~/Developer/backend/core-api"
+    localPath: "~/Developer/backend/core-api",
+    language: "TypeScript"
   },
   {
     id: "proj-2",
@@ -179,7 +243,8 @@ export const mockProjects: Project[] = [
     unreviewedPRs: 1,
     contributors7d: 5,
     repositoryUrl: "github.com/org/web-dashboard",
-    localPath: "~/Developer/frontend/web-dashboard"
+    localPath: "~/Developer/frontend/web-dashboard",
+    language: "TypeScript"
   },
   {
     id: "proj-3",
@@ -199,7 +264,8 @@ export const mockProjects: Project[] = [
     unreviewedPRs: 6,
     contributors7d: 1,
     repositoryUrl: "github.com/org/payment-service",
-    localPath: "~/Developer/backend/payment-service"
+    localPath: "~/Developer/backend/payment-service",
+    language: "Go"
   },
   {
     id: "proj-4",
@@ -219,7 +285,8 @@ export const mockProjects: Project[] = [
     unreviewedPRs: 0,
     contributors7d: 3,
     repositoryUrl: "github.com/org/data-pipeline",
-    localPath: "~/Developer/data/data-pipeline"
+    localPath: "~/Developer/data/data-pipeline",
+    language: "Python"
   }
 ];
 
