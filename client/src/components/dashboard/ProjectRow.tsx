@@ -21,7 +21,7 @@ export default function ProjectRow({ project }: ProjectRowProps) {
   };
 
   return (
-    <div className="group flex items-center gap-4 py-2.5 px-4 -mx-4 hover:bg-black/[0.03] rounded-md transition-colors border-b border-border/40 last:border-0 cursor-default">
+    <div className="group flex items-center gap-4 py-2.5 px-4 -mx-4 hover:bg-black/[0.02] rounded-md transition-colors border-b border-border/40 last:border-0 cursor-default">
       <div className={`w-1.5 h-1.5 rounded-full ${statusColors[project.status]}`} />
       
       <div className="flex-1 min-w-0 grid grid-cols-12 gap-4 items-center">

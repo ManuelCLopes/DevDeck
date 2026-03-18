@@ -31,7 +31,7 @@ export default function Projects() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Local Projects</h1>
-            <p className="text-muted-foreground text-sm">Manage and inspect your cloned repositories.</p>
+            <p className="text-muted-foreground text-sm">Repository inspection and local workspace tracking.</p>
           </div>
           
           <div className="flex items-center gap-3">
@@ -42,10 +42,10 @@ export default function Projects() {
                 placeholder="Filter repositories..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-8 pl-8 pr-3 rounded-md bg-white border border-border/60 shadow-sm focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none text-xs transition-all"
+                className="w-full h-8 pl-8 pr-3 rounded-md bg-white/60 backdrop-blur-sm border border-border/60 shadow-sm focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none text-xs transition-all"
               />
             </div>
-            <button className="h-8 px-3 rounded-md text-xs font-medium bg-white border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap">
+            <button className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap">
               Add Directory
             </button>
           </div>
@@ -53,8 +53,8 @@ export default function Projects() {
 
         <div className="flex flex-1 gap-6 min-h-0">
           {/* Project List */}
-          <div className="flex-1 bg-white border border-border/60 rounded-xl shadow-sm overflow-hidden flex flex-col">
-            <div className="grid grid-cols-12 gap-4 px-5 py-3 border-b border-border/40 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider bg-secondary/20">
+          <div className="flex-1 bg-white/60 backdrop-blur-md border border-border/60 rounded-xl shadow-sm overflow-hidden flex flex-col">
+            <div className="grid grid-cols-12 gap-4 px-5 py-3 border-b border-border/40 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider bg-secondary/30 backdrop-blur-md">
               <div className="col-span-5">Repository</div>
               <div className="col-span-2">Language</div>
               <div className="col-span-2">Health</div>
@@ -115,8 +115,8 @@ export default function Projects() {
 
           {/* Details Sidebar (Desktop Native Inspector pattern) */}
           {selectedProject ? (
-            <div className="w-[320px] bg-white border border-border/60 rounded-xl shadow-sm flex flex-col flex-shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="p-5 border-b border-border/40 bg-secondary/10">
+            <div className="w-[320px] bg-white/60 backdrop-blur-md border border-border/60 rounded-xl shadow-sm flex flex-col flex-shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
+              <div className="p-5 border-b border-border/40 bg-secondary/20 backdrop-blur-sm">
                 <div className="flex items-start justify-between gap-4 mb-3">
                   <div className="bg-primary/10 p-2.5 rounded-lg border border-primary/20">
                     <FolderGit2 className="w-6 h-6 text-primary" />
@@ -125,7 +125,7 @@ export default function Projects() {
                     <Tooltip.Provider>
                       <Tooltip.Root>
                         <Tooltip.Trigger asChild>
-                          <button className="p-1.5 bg-white border border-border shadow-sm rounded-md text-foreground hover:bg-secondary transition-colors">
+                          <button className="p-1.5 bg-white/80 backdrop-blur-sm border border-border shadow-sm rounded-md text-foreground hover:bg-black/5 transition-colors">
                             <TerminalSquare className="w-4 h-4" />
                           </button>
                         </Tooltip.Trigger>

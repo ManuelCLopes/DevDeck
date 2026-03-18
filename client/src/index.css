@@ -50,25 +50,25 @@
 
 /* LIGHT MODE - macOS Native Feel */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 15%;
+  --background: 0 0% 98%;
+  --foreground: 240 5% 10%;
   --card: 0 0% 100%;
-  --card-foreground: 240 10% 15%;
+  --card-foreground: 240 5% 10%;
   --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 15%;
-  --primary: 212 100% 50%; /* macOS Blue */
+  --popover-foreground: 240 5% 10%;
+  --primary: 240 5% 15%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 240 5% 96%;
-  --secondary-foreground: 240 10% 15%;
-  --muted: 240 5% 94%;
+  --secondary: 240 4% 94%;
+  --secondary-foreground: 240 5% 20%;
+  --muted: 240 4% 94%;
   --muted-foreground: 240 4% 46%;
-  --accent: 212 100% 50%;
-  --accent-foreground: 0 0% 100%;
+  --accent: 240 4% 94%;
+  --accent-foreground: 240 5% 10%;
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 0 0% 98%;
-  --border: 240 6% 90%;
-  --input: 240 6% 90%;
-  --ring: 212 100% 50%;
+  --border: 240 5% 88%;
+  --input: 240 5% 88%;
+  --ring: 240 5% 15%;
   
   --chart-1: 142 71% 45%; 
   --chart-2: 43 74% 66%; 
@@ -86,19 +86,19 @@
   --card-foreground: 0 0% 98%;
   --popover: 240 4% 18%;
   --popover-foreground: 0 0% 98%;
-  --primary: 212 100% 55%;
-  --primary-foreground: 0 0% 100%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 240 5% 15%;
   --secondary: 240 4% 24%;
   --secondary-foreground: 0 0% 98%;
   --muted: 240 4% 24%;
   --muted-foreground: 240 5% 65%;
-  --accent: 212 100% 55%;
-  --accent-foreground: 0 0% 100%;
+  --accent: 240 4% 24%;
+  --accent-foreground: 0 0% 98%;
   --destructive: 0 62.8% 50.6%;
   --destructive-foreground: 0 0% 98%;
   --border: 240 4% 24%;
   --input: 240 4% 24%;
-  --ring: 212 100% 55%;
+  --ring: 0 0% 98%;
   
   --chart-1: 142 71% 45%;
   --chart-2: 43 74% 66%;

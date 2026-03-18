@@ -103,32 +103,32 @@ export default function Reviews() {
         {/* Page Header */}
         <div>
           <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Code Reviews</h1>
-          <p className="text-muted-foreground text-sm">Your personal engineering cockpit for daily review workflows.</p>
+          <p className="text-muted-foreground text-sm">Engineering cockpit for pull request management and review cycles.</p>
         </div>
 
         {/* Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
+          <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Pending Review Load</h3>
             <div className="flex items-baseline gap-2 mt-auto">
               <span className="text-3xl font-bold tracking-tight">{mockReviewMetrics.pendingLoad}</span>
               <span className="text-xs text-muted-foreground">PRs</span>
             </div>
           </div>
-          <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
+          <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Completed This Week</h3>
             <div className="flex items-baseline gap-2 mt-auto">
               <span className="text-3xl font-bold tracking-tight text-chart-1">{mockReviewMetrics.completedThisWeek}</span>
               <span className="text-xs text-muted-foreground">Reviews</span>
             </div>
           </div>
-          <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
+          <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Avg Turnaround</h3>
             <div className="flex items-baseline gap-2 mt-auto">
               <span className="text-3xl font-bold tracking-tight">{mockReviewMetrics.averageTurnaround}</span>
             </div>
           </div>
-          <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
+          <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Blocked / Waiting</h3>
             <div className="flex items-baseline gap-2 mt-auto">
               <span className="text-3xl font-bold tracking-tight">{mockReviewMetrics.waitingOnAuthor}</span>
@@ -151,7 +151,7 @@ export default function Reviews() {
                   </span>
                 </div>
               </div>
-              <div className="bg-white border border-border/60 rounded-xl px-4 py-1 shadow-sm overflow-hidden">
+              <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl px-4 py-1 shadow-sm overflow-hidden">
                 <div className="flex flex-col">
                   {needsAction.map((pr) => (
                     <PRRow key={pr.id} pr={pr} />
@@ -174,7 +174,7 @@ export default function Reviews() {
                     </span>
                   </div>
                 </div>
-                <div className="bg-white border border-border/60 rounded-xl px-4 py-1 shadow-sm overflow-hidden">
+                <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl px-4 py-1 shadow-sm overflow-hidden">
                   <div className="flex flex-col">
                     {ready.map((pr) => (
                       <PRRow key={pr.id} pr={pr} />
@@ -191,12 +191,12 @@ export default function Reviews() {
             {/* Waiting on others */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-sm font-semibold tracking-tight text-foreground">Waiting</h2>
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">Pending Dependencies</h2>
                 <span className="bg-secondary text-muted-foreground text-[10px] px-1.5 py-0.5 rounded-sm font-bold border border-border/60">
                   {waiting.length}
                 </span>
               </div>
-              <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
+              <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm">
                 <div className="space-y-4">
                   {waiting.map(pr => (
                     <div key={pr.id} className="group relative">

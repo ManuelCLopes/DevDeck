@@ -68,8 +68,8 @@ export default function Onboarding() {
               <div>
                 <h1 className="text-2xl font-bold text-foreground mb-3">Welcome to Oversight</h1>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  The calm, desktop-first cockpit for software engineers. <br/>
-                  Get high-signal visibility into your projects, manage code reviews efficiently, and track local repository health—all without leaving your Mac.
+                  The professional, desktop-first cockpit for software engineers. <br/>
+                  Gain high-signal visibility into your projects, manage code reviews efficiently, and track local repository health.
                 </p>
               </div>
             </div>
@@ -77,7 +77,7 @@ export default function Onboarding() {
 
           {step === 2 && (
             <div className="w-full max-w-lg animate-in fade-in slide-in-from-right-8 duration-500">
-              <h2 className="text-xl font-bold text-center mb-8">What Oversight Does</h2>
+              <h2 className="text-xl font-bold text-center mb-8">Capabilities</h2>
               
               <div className="space-y-4">
                 <div className="flex gap-4 p-4 rounded-lg bg-secondary/30 border border-border/50">
@@ -86,7 +86,7 @@ export default function Onboarding() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-sm mb-1">Project Overview</h3>
-                    <p className="text-xs text-muted-foreground">A clean bird's-eye view of all your local repositories. See PR counts, issue queues, and build statuses at a glance.</p>
+                    <p className="text-xs text-muted-foreground">A clear overview of all your local repositories. Monitor PR counts, issue queues, and build statuses effortlessly.</p>
                   </div>
                 </div>
 
@@ -96,7 +96,7 @@ export default function Onboarding() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-sm mb-1">Code Review Workflow</h3>
-                    <p className="text-xs text-muted-foreground">Your personal inbox for PRs. Instantly see what needs your review, what's blocked, and your turnaround metrics.</p>
+                    <p className="text-xs text-muted-foreground">A dedicated inbox for PRs. Instantly identify required actions, blocked items, and performance metrics.</p>
                   </div>
                 </div>
 
@@ -105,8 +105,8 @@ export default function Onboarding() {
                     <Activity className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-sm mb-1">Low-Noise Activity</h3>
-                    <p className="text-xs text-muted-foreground">Say goodbye to email floods. A focused inbox for mentions, build failures, and approvals relevant to your daily work.</p>
+                    <h3 className="font-semibold text-sm mb-1">Targeted Activity</h3>
+                    <p className="text-xs text-muted-foreground">Reduce notification noise. A focused stream for mentions, build failures, and approvals that impact your current work.</p>
                   </div>
                 </div>
               </div>

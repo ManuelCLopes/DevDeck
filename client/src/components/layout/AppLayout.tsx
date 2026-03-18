@@ -114,10 +114,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 flex flex-col min-w-0 bg-white shadow-[-1px_0_0_0_rgba(0,0,0,0.1)] z-10">
+        <main className="flex-1 flex flex-col min-w-0 bg-[#fbfbfb] shadow-[-1px_0_0_0_rgba(0,0,0,0.1)] z-10">
           
           {/* Top Titlebar / Toolbar */}
-          <header className="h-[52px] border-b border-black/10 flex items-center justify-between px-4 titlebar-drag-region bg-white/90 backdrop-blur-md sticky top-0 z-50">
+          <header className="h-[52px] border-b border-black/10 flex items-center justify-between px-4 titlebar-drag-region bg-white/60 backdrop-blur-md sticky top-0 z-50">
             <div className="flex items-center gap-4 no-drag">
               <div className="flex items-center gap-1">
                 <button className="p-1 rounded text-muted-foreground hover:bg-secondary disabled:opacity-50">
