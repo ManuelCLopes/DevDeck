@@ -1,0 +1,114 @@
+const GITHUB_API_BASE_URL = "https://api.github.com";
+const GITHUB_API_VERSION = "2026-03-10";
+
+export interface GitHubApiViewer {
+  login: string;
+}
+
+export interface GitHubApiPullRequestReview {
+  id: number;
+  state: string;
+  submitted_at: string | null;
+  user: { login: string } | null;
+}
+
+export interface GitHubApiPullRequest {
+  base: { ref: string };
+  draft: boolean;
+  head: { ref: string };
+  html_url: string;
+  number: number;
+  requested_reviewers: Array<{ login: string }>;
+  title: string;
+  updated_at: string;
+  user: { login: string } | null;
+}
+
+interface GitHubApiRequestOptions {
+  method?: string;
+  timeoutMs?: number;
+}
+
+export class GitHubApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "GitHubApiError";
+  }
+}
+
+async function githubApiRequest<T>(
+  pathname: string,
+  token: string,
+  options?: GitHubApiRequestOptions,
+) {
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(
+    () => abortController.abort(),
+    options?.timeoutMs ?? 8000,
+  );
+
+  try {
+    const response = await fetch(`${GITHUB_API_BASE_URL}${pathname}`, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
+      },
+      method: options?.method ?? "GET",
+      signal: abortController.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = (await response.text()).trim();
+      throw new GitHubApiError(
+        errorText || `GitHub API request failed with status ${response.status}.`,
+        response.status,
+      );
+    }
+
+    return (await response.json()) as T;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export function fetchGitHubViewer(token: string) {
+  return githubApiRequest<GitHubApiViewer>("/user", token, {
+    timeoutMs: 5000,
+  });
+}
+
+export function fetchGitHubPullRequests(repositorySlug: string, token: string) {
+  return githubApiRequest<GitHubApiPullRequest[]>(
+    `/repos/${repositorySlug}/pulls?state=open&sort=updated&direction=desc&per_page=20`,
+    token,
+  );
+}
+
+export function fetchGitHubPullRequestReviews(
+  repositorySlug: string,
+  pullRequestNumber: number,
+  token: string,
+) {
+  return githubApiRequest<GitHubApiPullRequestReview[]>(
+    `/repos/${repositorySlug}/pulls/${pullRequestNumber}/reviews?per_page=100`,
+    token,
+  );
+}
+
+export async function fetchGitHubCommitStatus(
+  repositorySlug: string,
+  ref: string,
+  token: string,
+) {
+  const encodedRef = encodeURIComponent(ref);
+  const response = await githubApiRequest<{ state: string | null }>(
+    `/repos/${repositorySlug}/commits/${encodedRef}/status`,
+    token,
+  );
+
+  return response.state ?? null;
+}

@@ -15,7 +15,6 @@ export type WorkspacePullRequestReviewState =
 export type WorkspaceGitHubState =
   | "connected"
   | "unauthenticated"
-  | "missing_cli"
   | "error"
   | "unsupported";
 

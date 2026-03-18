@@ -223,11 +223,9 @@ export default function Reviews() {
                           ? githubStatus.connectedRepositoryCount > 0
                             ? "No open pull requests were found for the connected repositories."
                             : "No GitHub remotes were detected in the current workspace."
-                          : githubStatus?.state === "missing_cli"
-                            ? "GitHub CLI is not installed yet. Install `gh` to load pull requests."
-                            : githubStatus?.state === "unsupported"
-                              ? "GitHub pull request sync requires the desktop app."
-                              : "GitHub CLI is not authenticated yet. Connect it in Preferences to load pull requests."}
+                          : githubStatus?.state === "unsupported"
+                            ? "GitHub pull request sync requires the desktop app."
+                            : "GitHub is not connected yet. Open Preferences to authenticate and load pull requests."}
                     </div>
                   )}
                 </div>

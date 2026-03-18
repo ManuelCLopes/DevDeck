@@ -3,7 +3,18 @@ import { execFile } from "child_process";
 import path from "path";
 import { promisify } from "util";
 import type { WorkspaceSelection } from "../shared/workspace";
-import { discoverWorkspace, loadWorkspaceSnapshot } from "./workspace";
+import {
+  clearStoredGitHubToken,
+  getGitHubAuthCapabilities,
+  pollGitHubDeviceAuth,
+  startGitHubDeviceAuth,
+  validateAndStoreGitHubToken,
+} from "./github-auth";
+import {
+  clearWorkspaceSnapshotCaches,
+  discoverWorkspace,
+  loadWorkspaceSnapshot,
+} from "./workspace";
 
 const execFileAsync = promisify(execFile);
 
@@ -122,18 +133,32 @@ ipcMain.handle(
   },
 );
 
-ipcMain.handle("devdeck:start-github-login", async () => {
-  if (process.platform === "darwin") {
-    await execFileAsync("osascript", [
-      "-e",
-      'tell application "Terminal" to do script "gh auth login --web"',
-      "-e",
-      'tell application "Terminal" to activate',
-    ]);
-    return;
+ipcMain.handle("devdeck:get-github-auth-capabilities", async () => {
+  return getGitHubAuthCapabilities();
+});
+
+ipcMain.handle("devdeck:save-github-token", async (_event, token: string) => {
+  const result = await validateAndStoreGitHubToken(token);
+  clearWorkspaceSnapshotCaches();
+  return result;
+});
+
+ipcMain.handle("devdeck:clear-github-token", async () => {
+  await clearStoredGitHubToken();
+  clearWorkspaceSnapshotCaches();
+});
+
+ipcMain.handle("devdeck:start-github-device-auth", async () => {
+  return startGitHubDeviceAuth();
+});
+
+ipcMain.handle("devdeck:poll-github-device-auth", async (_event, deviceCode: string) => {
+  const result = await pollGitHubDeviceAuth(deviceCode);
+  if (result.status === "complete") {
+    clearWorkspaceSnapshotCaches();
   }
 
-  await shell.openExternal("https://cli.github.com/manual/gh_auth_login");
+  return result;
 });
 
 ipcMain.handle("devdeck:set-launch-at-login", async (_event, enabled: boolean) => {

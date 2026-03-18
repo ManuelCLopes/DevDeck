@@ -14,10 +14,6 @@ const META_BY_STATE: Record<WorkspaceGitHubState, GitHubStatusMeta> = {
     className: "bg-chart-3/10 text-chart-3 border-chart-3/20",
     label: "Unavailable",
   },
-  missing_cli: {
-    className: "bg-chart-3/10 text-chart-3 border-chart-3/20",
-    label: "CLI Missing",
-  },
   unauthenticated: {
     className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
     label: "Sign In Required",

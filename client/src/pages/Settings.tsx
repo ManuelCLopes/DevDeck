@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import GitHubConnectDialog from "@/components/settings/GitHubConnectDialog";
 import {
   Select,
   SelectContent,
@@ -13,10 +14,8 @@ import { getDesktopApi } from "@/lib/desktop";
 import { getGitHubStatusMeta } from "@/lib/github-status";
 import { formatDistanceToNow } from "date-fns";
 import {
-  ExternalLink,
   Github,
   HardDrive,
-  LoaderCircle,
   RotateCcw,
   Shield,
 } from "lucide-react";
@@ -36,7 +35,7 @@ export default function Settings() {
   const [, setLocation] = useLocation();
   const { data: snapshot, isFetching, refetch } = useWorkspaceSnapshot();
   const { preferences, setPreference } = useAppPreferences();
-  const [isAwaitingGitHubLogin, setIsAwaitingGitHubLogin] = useState(false);
+  const [isGitHubConnectOpen, setIsGitHubConnectOpen] = useState(false);
   const workspaceSelection = getWorkspaceSelection();
   const monitoredDirectories = getMonitoredDirectoryLabels(workspaceSelection);
   const githubStatus = snapshot?.githubStatus;
@@ -53,55 +52,15 @@ export default function Settings() {
     setLocation('/onboarding');
   };
 
-  const handleGitHubLogin = async () => {
-    if (desktopApi?.startGitHubLogin) {
-      await desktopApi.startGitHubLogin();
-      setIsAwaitingGitHubLogin(true);
-      void refetch();
-      return;
-    }
-
-    window.open("https://cli.github.com/manual/gh_auth_login", "_blank", "noopener,noreferrer");
-  };
-
-  const handleInstallGitHubCli = async () => {
-    const installerUrl = "https://cli.github.com/";
-
-    if (desktopApi) {
-      await desktopApi.openExternal(installerUrl);
-      return;
-    }
-
-    window.open(installerUrl, "_blank", "noopener,noreferrer");
-  };
-
   const handleToggleLaunchAtLogin = async (checked: boolean) => {
     setPreference("launchAtLogin", checked);
     await desktopApi?.setLaunchAtLogin?.(checked);
   };
 
-  useEffect(() => {
-    if (!isAwaitingGitHubLogin) {
-      return;
-    }
-
-    if (githubState === "connected" || githubState === "missing_cli" || githubState === "error") {
-      setIsAwaitingGitHubLogin(false);
-      return;
-    }
-
-    const pollingIntervalId = window.setInterval(() => {
-      void refetch();
-    }, 4000);
-    const timeoutId = window.setTimeout(() => {
-      setIsAwaitingGitHubLogin(false);
-    }, 120000);
-
-    return () => {
-      window.clearInterval(pollingIntervalId);
-      window.clearTimeout(timeoutId);
-    };
-  }, [githubState, isAwaitingGitHubLogin, refetch]);
+  const handleDisconnectGitHub = async () => {
+    await desktopApi?.clearGitHubToken?.();
+    await refetch();
+  };
 
   const lastWorkspaceSyncLabel = snapshot
     ? formatDistanceToNow(new Date(snapshot.generatedAt), { addSuffix: true })
@@ -222,17 +181,11 @@ export default function Settings() {
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${githubStatusMeta.className}`}>
                         {githubStatusMeta.label}
                       </span>
-                      {isAwaitingGitHubLogin && (
-                        <span className="text-[9px] bg-secondary text-muted-foreground px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider border border-border/60 inline-flex items-center gap-1">
-                          <LoaderCircle className="w-3 h-3 animate-spin" />
-                          Waiting
-                        </span>
-                      )}
                     </h3>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {githubState === "missing_cli"
-                        ? "Install GitHub CLI first, then sign in so DevDeck can pull live pull request data."
-                        : "DevDeck reads GitHub authentication from GitHub CLI to load live pull request data without syncing your source code elsewhere."}
+                      DevDeck stores your GitHub credential locally and uses the
+                      GitHub API directly for pull request, reviewer, and commit
+                      status data.
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {githubStatus?.message ?? "GitHub status will appear after the first workspace scan."}
@@ -240,9 +193,9 @@ export default function Settings() {
                     <p className="text-xs text-muted-foreground mt-1">
                       Viewer: {githubStatus?.viewerLogin ?? "Not authenticated"} · Connected repos: {githubStatus?.connectedRepositoryCount ?? 0}
                     </p>
-                    {githubState === "missing_cli" && (
+                    {githubState === "unsupported" && (
                       <p className="text-xs text-muted-foreground mt-1">
-                        Recommended install command: <span className="font-mono">brew install gh</span>
+                        Direct GitHub connection is available in the desktop app build.
                       </p>
                     )}
                   </div>
@@ -255,26 +208,26 @@ export default function Settings() {
                   >
                     {isFetching ? "Refreshing..." : "Refresh Status"}
                   </button>
-                  {githubState === "missing_cli" ? (
+                  {connected ? (
                     <button
                       type="button"
-                      onClick={() => void handleInstallGitHubCli()}
-                      className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground border border-primary hover:bg-primary/90 whitespace-nowrap shadow-sm transition-colors inline-flex items-center gap-1.5"
+                      onClick={() => void handleDisconnectGitHub()}
+                      className="px-3 py-1.5 rounded-md text-xs font-medium bg-white text-foreground border border-border hover:bg-secondary/50 whitespace-nowrap shadow-sm transition-colors"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      Install GitHub CLI
+                      Disconnect
                     </button>
                   ) : (
                     <button
                       type="button"
-                      onClick={() => void handleGitHubLogin()}
-                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all shadow-sm whitespace-nowrap ${
-                        connected
-                          ? "bg-white text-foreground border border-border hover:bg-secondary/50"
-                          : "bg-primary text-primary-foreground border border-primary hover:bg-primary/90"
-                      }`}
+                      onClick={() => setIsGitHubConnectOpen(true)}
+                      disabled={githubState === "unsupported"}
+                      className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground border border-primary hover:bg-primary/90 whitespace-nowrap shadow-sm transition-colors disabled:opacity-50"
                     >
-                      {connected ? "Reconnect in Terminal" : "Connect in Terminal"}
+                      {githubState === "unsupported"
+                        ? "Desktop Only"
+                        : githubState === "error"
+                          ? "Reconnect GitHub"
+                          : "Connect GitHub"}
                     </button>
                   )}
                 </div>
@@ -382,6 +335,13 @@ export default function Settings() {
         </div>
 
       </div>
+      <GitHubConnectDialog
+        open={isGitHubConnectOpen}
+        onOpenChange={setIsGitHubConnectOpen}
+        onConnected={() => {
+          void refetch();
+        }}
+      />
     </AppLayout>
   );
 }

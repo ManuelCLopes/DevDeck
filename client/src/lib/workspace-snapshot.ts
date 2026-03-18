@@ -542,7 +542,7 @@ function buildWorkspaceSnapshot(results: RepositoryScanResult[]) {
   const githubStatus: WorkspaceGitHubStatus = {
     authenticated: false,
     connectedRepositoryCount: projects.filter((project) => Boolean(project.remoteUrl)).length,
-    message: "GitHub pull request sync is available in the desktop app through GitHub CLI.",
+    message: "GitHub pull request sync is available in the desktop app.",
     state: "unsupported",
     viewerLogin: null,
   };

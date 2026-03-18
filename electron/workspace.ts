@@ -2,6 +2,16 @@ import { execFile } from "child_process";
 import { access, readFile, readdir } from "fs/promises";
 import path from "path";
 import { promisify } from "util";
+import {
+  fetchGitHubCommitStatus,
+  fetchGitHubPullRequestReviews,
+  fetchGitHubPullRequests,
+  fetchGitHubViewer,
+  GitHubApiError,
+  type GitHubApiPullRequest,
+  type GitHubApiPullRequestReview,
+} from "./github-api";
+import { readStoredGitHubToken } from "./github-auth";
 import type {
   MonitoredProject,
   WorkspaceCiStatus,
@@ -52,17 +62,18 @@ interface GitHubPullRequestRecord {
   url: string;
 }
 
-interface GitHubAuthStatus {
-  authenticated: boolean;
-  message: string | null;
-  state: WorkspaceGitHubState;
-  viewerLogin: string | null;
-}
-
 interface GitHubPullRequestReviewRecord {
   author: { login: string } | null;
   state: string;
   submittedAt?: string;
+}
+
+interface GitHubAuthStatus {
+  authenticated: boolean;
+  message: string | null;
+  state: WorkspaceGitHubState;
+  token: string | null;
+  viewerLogin: string | null;
 }
 
 const DIRECTORY_NAMES_TO_IGNORE = new Set([
@@ -110,7 +121,6 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   yaml: "YAML",
 };
 
-const execFileAsync = promisify(execFile);
 let cachedGitHubAuthStatus:
   | (GitHubAuthStatus & { expiresAt: number })
   | null = null;
@@ -123,11 +133,7 @@ const ciStatusCache = new Map<
   { expiresAt: number; status: WorkspaceCiStatus }
 >();
 
-interface ExecFileFailure extends Error {
-  code?: number | string;
-  stderr?: string;
-  stdout?: string;
-}
+const execFileAsync = promisify(execFile);
 
 function createRepositoryCandidate(
   rootName: string,
@@ -419,6 +425,65 @@ function parseGitHubRepository(remoteUrl: string | null) {
   return null;
 }
 
+function normalizePullRequestRecord(
+  pullRequest: GitHubApiPullRequest,
+  reviews: GitHubApiPullRequestReview[],
+) {
+  const latestReviewerState = new Map<string, { state: string; submittedAt: number }>();
+  const normalizedReviews = reviews.map((review) => ({
+    author: review.user ? { login: review.user.login } : null,
+    state: review.state,
+    submittedAt: review.submitted_at ?? undefined,
+  }));
+
+  for (const review of reviews) {
+    const reviewerLogin = review.user?.login ?? null;
+    if (!reviewerLogin) {
+      continue;
+    }
+
+    const submittedAt = review.submitted_at
+      ? new Date(review.submitted_at).getTime()
+      : 0;
+    const currentLatestReview = latestReviewerState.get(reviewerLogin);
+    if (!currentLatestReview || submittedAt >= currentLatestReview.submittedAt) {
+      latestReviewerState.set(reviewerLogin, {
+        state: review.state,
+        submittedAt,
+      });
+    }
+  }
+
+  const latestStates = Array.from(latestReviewerState.values()).map(
+    (review) => review.state,
+  );
+  let reviewDecision: GitHubPullRequestRecord["reviewDecision"] = null;
+  if (latestStates.includes("CHANGES_REQUESTED")) {
+    reviewDecision = "CHANGES_REQUESTED";
+  } else if (latestStates.includes("APPROVED")) {
+    reviewDecision = "APPROVED";
+  } else if (
+    pullRequest.requested_reviewers.length > 0 ||
+    latestStates.length === 0
+  ) {
+    reviewDecision = "REVIEW_REQUIRED";
+  }
+
+  return {
+    author: pullRequest.user ? { login: pullRequest.user.login } : null,
+    baseRefName: pullRequest.base.ref,
+    headRefName: pullRequest.head.ref,
+    isDraft: pullRequest.draft,
+    latestReviews: normalizedReviews,
+    number: pullRequest.number,
+    reviewDecision,
+    reviews: normalizedReviews,
+    title: pullRequest.title,
+    updatedAt: pullRequest.updated_at,
+    url: pullRequest.html_url,
+  } satisfies GitHubPullRequestRecord;
+}
+
 function getPullRequestStatus(
   pullRequest: Pick<GitHubPullRequestRecord, "isDraft" | "reviewDecision">,
 ): WorkspacePullRequestStatus {
@@ -471,6 +536,12 @@ function getPullRequestReviewState(
   return "unreviewed";
 }
 
+export function clearWorkspaceSnapshotCaches() {
+  cachedGitHubAuthStatus = null;
+  pullRequestCache.clear();
+  ciStatusCache.clear();
+}
+
 async function getGitHubAuthStatus(): Promise<GitHubAuthStatus> {
   if (
     cachedGitHubAuthStatus &&
@@ -480,48 +551,37 @@ async function getGitHubAuthStatus(): Promise<GitHubAuthStatus> {
   }
 
   try {
-    const { stdout, stderr } = await execFileAsync("gh", ["auth", "status"], {
-      timeout: 5000,
-      maxBuffer: 1024 * 256,
-    });
-    const authOutput = `${stdout}\n${stderr}`;
-    const viewerLogin =
-      authOutput.match(/account\s+([^\s]+)\s+\(/)?.[1] ?? null;
-
-    cachedGitHubAuthStatus = {
-      authenticated: true,
-      expiresAt: Date.now() + GITHUB_AUTH_CACHE_TTL_MS,
-      message: "Live GitHub pull request data is available through GitHub CLI.",
-      state: "connected",
-      viewerLogin,
-    };
-  } catch (error) {
-    const execError = error as ExecFileFailure;
-    const authOutput = `${execError.stdout ?? ""}\n${execError.stderr ?? ""}`
-      .trim()
-      .toLowerCase();
-
-    if (execError.code === "ENOENT") {
+    const token = await readStoredGitHubToken();
+    if (!token) {
       cachedGitHubAuthStatus = {
         authenticated: false,
         expiresAt: Date.now() + GITHUB_AUTH_CACHE_TTL_MS,
-        message: "GitHub CLI is not installed. Install `gh` to sync live pull requests.",
-        state: "missing_cli",
+        message: "Connect GitHub in Preferences to load live pull request data.",
+        state: "unauthenticated",
+        token: null,
         viewerLogin: null,
       };
 
       return cachedGitHubAuthStatus;
     }
+    const viewer = await fetchGitHubViewer(token);
 
-    if (
-      authOutput.includes("not logged into any github hosts") ||
-      authOutput.includes("gh auth login")
-    ) {
+    cachedGitHubAuthStatus = {
+      authenticated: true,
+      expiresAt: Date.now() + GITHUB_AUTH_CACHE_TTL_MS,
+      message: "Live GitHub pull request data is available through the GitHub API.",
+      state: "connected",
+      token,
+      viewerLogin: viewer.login,
+    };
+  } catch (error) {
+    if (error instanceof GitHubApiError && error.status === 401) {
       cachedGitHubAuthStatus = {
         authenticated: false,
         expiresAt: Date.now() + GITHUB_AUTH_CACHE_TTL_MS,
-        message: "GitHub CLI is installed, but no GitHub session is active yet.",
+        message: "The saved GitHub credentials were rejected. Reconnect GitHub in Preferences.",
         state: "unauthenticated",
+        token: null,
         viewerLogin: null,
       };
 
@@ -531,11 +591,9 @@ async function getGitHubAuthStatus(): Promise<GitHubAuthStatus> {
     cachedGitHubAuthStatus = {
       authenticated: false,
       expiresAt: Date.now() + GITHUB_AUTH_CACHE_TTL_MS,
-      message:
-        execError.code === "ETIMEDOUT"
-          ? "GitHub CLI timed out while checking authentication."
-          : "GitHub CLI could not be reached. Try refreshing the connection.",
+      message: "GitHub could not be reached. Check your connection and retry.",
       state: "error",
+      token: null,
       viewerLogin: null,
     };
   }
@@ -544,13 +602,16 @@ async function getGitHubAuthStatus(): Promise<GitHubAuthStatus> {
 }
 
 async function fetchPullRequests(
-  repositoryPath: string,
   project: Pick<WorkspaceProject, "id" | "name">,
   remoteUrl: string | null,
   githubAuthStatus: GitHubAuthStatus,
 ) {
   const githubRepository = parseGitHubRepository(remoteUrl);
-  if (!githubRepository || !githubAuthStatus.authenticated) {
+  if (
+    !githubRepository ||
+    !githubAuthStatus.authenticated ||
+    !githubAuthStatus.token
+  ) {
     return [] as WorkspacePullRequestItem[];
   }
 
@@ -560,32 +621,28 @@ async function fetchPullRequests(
   }
 
   try {
-    const { stdout } = await execFileAsync(
-      "gh",
-      [
-        "pr",
-        "list",
-        "--repo",
-        githubRepository.slug,
-        "--state",
-        "open",
-        "--limit",
-        "20",
-        "--json",
-        "author,baseRefName,headRefName,isDraft,latestReviews,number,reviewDecision,reviews,title,updatedAt,url",
-      ],
-      {
-        cwd: repositoryPath,
-        timeout: 8000,
-        maxBuffer: 1024 * 1024,
-      },
+    const pullRequests = await fetchGitHubPullRequests(
+      githubRepository.slug,
+      githubAuthStatus.token,
+    );
+    const pullRequestReviews = await Promise.all(
+      pullRequests.map((pullRequest) =>
+        fetchGitHubPullRequestReviews(
+          githubRepository.slug,
+          pullRequest.number,
+          githubAuthStatus.token!,
+        ),
+      ),
     );
 
-    const pullRequests = (
-      JSON.parse(stdout) as GitHubPullRequestRecord[]
-    ).map((pullRequest) => {
-      const authorLogin = pullRequest.author?.login ?? null;
-      const reviewerLogins = normalizeReviewerLogins(pullRequest);
+    const workspacePullRequests = pullRequests.map((pullRequest, index) => {
+      const reviews = pullRequestReviews[index];
+      const normalizedPullRequest = normalizePullRequestRecord(
+        pullRequest,
+        reviews,
+      );
+      const authorLogin = normalizedPullRequest.author?.login ?? null;
+      const reviewerLogins = normalizeReviewerLogins(normalizedPullRequest);
       const reviewedByViewer = githubAuthStatus.viewerLogin
         ? reviewerLogins.includes(githubAuthStatus.viewerLogin)
         : false;
@@ -598,10 +655,10 @@ async function fetchPullRequests(
         authoredByViewer:
           Boolean(githubAuthStatus.viewerLogin) &&
           authorLogin === githubAuthStatus.viewerLogin,
-        baseBranch: pullRequest.baseRefName,
-        headBranch: pullRequest.headRefName,
-        id: `${githubRepository.slug}#${pullRequest.number}`,
-        number: pullRequest.number,
+        baseBranch: normalizedPullRequest.baseRefName,
+        headBranch: normalizedPullRequest.headRefName,
+        id: `${githubRepository.slug}#${normalizedPullRequest.number}`,
+        number: normalizedPullRequest.number,
         projectId: project.id,
         repo: project.name,
         reviewCount: reviewerLogins.length,
@@ -612,19 +669,19 @@ async function fetchPullRequests(
         reviewedByOthersCount,
         reviewedByViewer,
         reviewerLogins,
-        status: getPullRequestStatus(pullRequest),
-        title: pullRequest.title,
-        updatedAt: pullRequest.updatedAt,
-        url: pullRequest.url,
+        status: getPullRequestStatus(normalizedPullRequest),
+        title: normalizedPullRequest.title,
+        updatedAt: normalizedPullRequest.updatedAt,
+        url: normalizedPullRequest.url,
       } satisfies WorkspacePullRequestItem;
     });
 
     pullRequestCache.set(githubRepository.slug, {
       expiresAt: Date.now() + PULL_REQUEST_CACHE_TTL_MS,
-      pullRequests,
+      pullRequests: workspacePullRequests,
     });
 
-    return pullRequests;
+    return workspacePullRequests;
   } catch (error) {
     console.error(
       `Failed to load pull requests for ${githubRepository.slug}`,
@@ -683,7 +740,11 @@ async function fetchDefaultBranchCiStatus(
   githubAuthStatus: GitHubAuthStatus,
 ) {
   const githubRepository = parseGitHubRepository(remoteUrl);
-  if (!githubRepository || !githubAuthStatus.authenticated) {
+  if (
+    !githubRepository ||
+    !githubAuthStatus.authenticated ||
+    !githubAuthStatus.token
+  ) {
     return "unknown" satisfies WorkspaceCiStatus;
   }
 
@@ -694,20 +755,12 @@ async function fetchDefaultBranchCiStatus(
   }
 
   try {
-    const { stdout } = await execFileAsync(
-      "gh",
-      [
-        "api",
-        `repos/${githubRepository.slug}/commits/${encodeURIComponent(defaultBranch)}/status`,
-        "--jq",
-        ".state",
-      ],
-      {
-        timeout: 8000,
-        maxBuffer: 1024 * 128,
-      },
+    const commitState = await fetchGitHubCommitStatus(
+      githubRepository.slug,
+      defaultBranch,
+      githubAuthStatus.token,
     );
-    const ciStatus = mapGitHubCommitStateToCiStatus(stdout.trim() || null);
+    const ciStatus = mapGitHubCommitStateToCiStatus(commitState);
 
     ciStatusCache.set(cacheKey, {
       expiresAt: Date.now() + CI_STATUS_CACHE_TTL_MS,
@@ -910,7 +963,6 @@ async function scanRepository(
       unpushedCommitCount: syncStatus.aheadBy,
     };
     const pullRequests = await fetchPullRequests(
-      repositoryPath,
       baseProject,
       remoteUrl,
       githubAuthStatus,
