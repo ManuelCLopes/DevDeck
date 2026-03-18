@@ -8,6 +8,7 @@ The app now runs through Electron on top of the existing React and Vite UI, so i
 
 - Shows a project overview dashboard for local repositories
 - Surfaces a branch review inbox and activity feed from local Git data
+- Syncs open pull requests and commit status directly from the GitHub API
 - Includes a local-first onboarding flow and preferences screen
 - Packages as a native macOS app bundle
 
@@ -15,11 +16,11 @@ The app now runs through Electron on top of the existing React and Vite UI, so i
 
 This repository is still a prototype:
 
-- GitHub connection in settings is mocked
 - No production API routes are implemented yet
-- The review and activity views are currently derived from local Git metadata only
+- Some repository insights are still inferred from local Git metadata only
+- macOS packaging is unsigned by default unless you provide Apple signing credentials
 
-That means DevDeck now scans real local repositories, but it does not yet sync hosted pull request state from GitHub.
+That means DevDeck now scans real local repositories and can sync hosted pull request state from GitHub, but parts of the experience are still evolving.
 
 ## Requirements
 
@@ -31,6 +32,22 @@ That means DevDeck now scans real local repositories, but it does not yet sync h
 ```bash
 npm install
 ```
+
+## Environment
+
+Create a local environment file if you want optional integrations:
+
+```bash
+cp .env.example .env
+```
+
+Available variables:
+
+- `DEVDECK_GITHUB_CLIENT_ID`
+  Enables GitHub device-flow sign-in inside the desktop app.
+  If you leave this unset, DevDeck still lets you paste a GitHub token manually in `Preferences > GitHub Access`.
+- `DATABASE_URL`
+  Only needed for the old Drizzle/database tooling. The desktop app itself does not require a database.
 
 ## Run in development
 
@@ -64,12 +81,27 @@ When you first open DevDeck:
 From there you can use:
 
 - `Overview` to see repository health, branch counts, and recent workspace signals
-- `Code Reviews` to inspect active and stale local branches derived from Git reflogs
+- `Pull Requests` to inspect live GitHub pull requests plus local review signals
 - `Local Projects` to browse repositories and inspect project details
 - `Activity Inbox` to review recent local Git activity
 - `Preferences` to revisit onboarding and toggle local behavior settings
 
 If you want to see onboarding again, open `Preferences` and use `Reset Onboarding`.
+
+## GitHub connection
+
+DevDeck now uses the GitHub API directly from the Electron main process.
+
+You have two ways to connect GitHub in `Preferences`:
+
+1. Device flow
+   Requires `DEVDECK_GITHUB_CLIENT_ID` to be set.
+   DevDeck opens GitHub sign-in, stores the resulting credential locally, and starts syncing PR and commit-status data.
+2. Personal access token
+   Works without any extra app configuration.
+   Paste a classic token with `repo` scope, or a fine-grained token with read access to repository metadata, pull requests, and commit statuses.
+
+On macOS, DevDeck stores the credential in Keychain. It is not committed into the repository.
 
 ## Build and package
 
@@ -121,8 +153,8 @@ DevDeck is intended to be used locally:
 
 - Workspace selection is stored locally on your machine
 - Repository scanning reads local files and Git metadata directly
-- The current experience runs without cloud services
-- GitHub connectivity is not required for the default local workflow
+- GitHub connectivity is optional, but enables PR and CI status sync
+- The GitHub credential is stored locally on your machine
 
 ## Project scripts
 
