@@ -12,6 +12,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
+import { useWorkspaceAutoRefresh } from "@/hooks/use-workspace-auto-refresh";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { useAppPreferences } from "@/lib/app-preferences";
 import {
@@ -22,6 +23,7 @@ import {
 import { useWorkspaceAlerts } from "@/hooks/use-workspace-alerts";
 import { getOpenAddProjectsDialogEvent } from "@/lib/project-import-events";
 import { getMonitoredProjects, getWorkspaceSelection } from "@/lib/workspace-selection";
+import { format } from "date-fns";
 import { 
   Settings, 
   Activity, 
@@ -33,7 +35,8 @@ import {
   ChevronLeft,
   ChevronRight,
   HardDrive,
-  MessageSquare
+  MessageSquare,
+  RefreshCw,
 } from "lucide-react";
 
 interface AppLayoutProps {
@@ -48,7 +51,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const monitoredProjects = getMonitoredProjects(getWorkspaceSelection());
   const selectedProjectId = new URLSearchParams(search).get("project");
-  const { data: snapshot } = useWorkspaceSnapshot();
+  const { data: snapshot, isFetching, refetch } = useWorkspaceSnapshot();
   const { preferences } = useAppPreferences();
   const reviewCount = snapshot?.pullRequests.length ?? 0;
   const activityCount = snapshot?.activities.length ?? 0;
@@ -57,6 +60,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase());
 
   useWorkspaceAlerts(snapshot, preferences);
+  useWorkspaceAutoRefresh();
 
   const searchResults = useMemo(() => {
     if (!snapshot) {
@@ -287,6 +291,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </div>
 
             <div className="flex items-center gap-3 no-drag">
+              <div className="hidden xl:flex items-center gap-2 rounded-md border border-black/5 bg-secondary/60 px-2.5 py-1 text-[11px] text-muted-foreground">
+                <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+                <span>
+                  {snapshot
+                    ? isFetching
+                      ? "Refreshing workspace..."
+                      : `Updated ${format(new Date(snapshot.generatedAt), "HH:mm:ss")}`
+                    : "Waiting for workspace"}
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsSearchOpen(true)}
@@ -299,6 +313,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     ? "⌘K"
                     : "Ctrl K"}
                 </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-secondary"
+                aria-label="Refresh workspace snapshot"
+                title="Refresh workspace snapshot"
+              >
+                <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
               </button>
               
               <Link href="/activity">

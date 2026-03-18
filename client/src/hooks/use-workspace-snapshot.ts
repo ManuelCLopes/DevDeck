@@ -6,8 +6,5 @@ export function useWorkspaceSnapshot() {
   return useQuery<WorkspaceSnapshot | null>({
     queryKey: ["workspace", "snapshot"],
     queryFn: loadWorkspaceSnapshot,
-    refetchInterval: 30000,
-    refetchOnWindowFocus: true,
-    staleTime: 0,
   });
 }

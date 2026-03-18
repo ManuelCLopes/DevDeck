@@ -4,6 +4,7 @@ import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
+import { getGitHubStatusMeta } from "@/lib/github-status";
 import {
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
@@ -36,6 +37,8 @@ export default function Reviews() {
   );
   const latestPullRequest = pullRequests[0] ?? null;
   const selectedPullRequestId = new URLSearchParams(search).get("pr");
+  const githubStatus = snapshot?.githubStatus;
+  const githubStatusMeta = getGitHubStatusMeta(githubStatus);
   const selectedPullRequest =
     pullRequests.find((pullRequest) => pullRequest.id === selectedPullRequestId) ?? null;
   const openPullRequestsPagination = usePagination(pullRequests, 8, {
@@ -216,11 +219,15 @@ export default function Reviews() {
                     <div className="py-6 text-center text-muted-foreground text-sm">
                       {isLoading
                         ? "Loading pull requests..."
-                        : snapshot?.githubStatus.authenticated
-                          ? snapshot?.githubStatus.connectedRepositoryCount > 0
+                        : githubStatus?.state === "connected"
+                          ? githubStatus.connectedRepositoryCount > 0
                             ? "No open pull requests were found for the connected repositories."
                             : "No GitHub remotes were detected in the current workspace."
-                          : "GitHub CLI is not authenticated yet. Run `gh auth login` to load pull requests."}
+                          : githubStatus?.state === "missing_cli"
+                            ? "GitHub CLI is not installed yet. Install `gh` to load pull requests."
+                            : githubStatus?.state === "unsupported"
+                              ? "GitHub pull request sync requires the desktop app."
+                              : "GitHub CLI is not authenticated yet. Connect it in Preferences to load pull requests."}
                     </div>
                   )}
                 </div>
@@ -375,15 +382,16 @@ export default function Reviews() {
                     <Github className="w-4 h-4 text-foreground/70" />
                   </div>
                   <div className="space-y-1">
-                    <p className="font-medium text-foreground text-sm">
-                      {snapshot?.githubStatus.authenticated
-                        ? "GitHub CLI connected"
-                        : "GitHub CLI not connected"}
+                    <p className="font-medium text-foreground text-sm flex items-center gap-2">
+                      GitHub Connection
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${githubStatusMeta.className}`}>
+                        {githubStatusMeta.label}
+                      </span>
                     </p>
-                    <p>{snapshot?.githubStatus.message ?? "GitHub status is unavailable."}</p>
+                    <p>{githubStatus?.message ?? "GitHub status is unavailable."}</p>
                     <p>
                       Connected repositories:{" "}
-                      {snapshot?.githubStatus.connectedRepositoryCount ?? 0}
+                      {githubStatus?.connectedRepositoryCount ?? 0}
                     </p>
                   </div>
                 </div>

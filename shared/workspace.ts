@@ -12,6 +12,12 @@ export type WorkspacePullRequestReviewState =
   | "unreviewed"
   | "reviewed"
   | "reviewed_by_you";
+export type WorkspaceGitHubState =
+  | "connected"
+  | "unauthenticated"
+  | "missing_cli"
+  | "error"
+  | "unsupported";
 
 export interface MonitoredProject {
   id: string;
@@ -106,6 +112,7 @@ export interface WorkspaceGitHubStatus {
   authenticated: boolean;
   connectedRepositoryCount: number;
   message: string | null;
+  state: WorkspaceGitHubState;
   viewerLogin: string | null;
 }
 

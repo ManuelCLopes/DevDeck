@@ -1,8 +1,25 @@
+import { useEffect, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useAppPreferences } from "@/lib/app-preferences";
+import { type AppPreferences, useAppPreferences } from "@/lib/app-preferences";
 import { getDesktopApi } from "@/lib/desktop";
-import { Github, CheckCircle2, HardDrive, Shield, RotateCcw } from "lucide-react";
+import { getGitHubStatusMeta } from "@/lib/github-status";
+import { formatDistanceToNow } from "date-fns";
+import {
+  ExternalLink,
+  Github,
+  HardDrive,
+  LoaderCircle,
+  RotateCcw,
+  Shield,
+} from "lucide-react";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { useLocation } from "wouter";
 import { clearCompletedOnboarding } from "@/lib/onboarding-state";
@@ -17,12 +34,15 @@ import {
 
 export default function Settings() {
   const [, setLocation] = useLocation();
-  const { data: snapshot, refetch } = useWorkspaceSnapshot();
+  const { data: snapshot, isFetching, refetch } = useWorkspaceSnapshot();
   const { preferences, setPreference } = useAppPreferences();
+  const [isAwaitingGitHubLogin, setIsAwaitingGitHubLogin] = useState(false);
   const workspaceSelection = getWorkspaceSelection();
   const monitoredDirectories = getMonitoredDirectoryLabels(workspaceSelection);
   const githubStatus = snapshot?.githubStatus;
   const connected = githubStatus?.authenticated ?? false;
+  const githubStatusMeta = getGitHubStatusMeta(githubStatus);
+  const githubState = githubStatus?.state ?? "unsupported";
   const desktopApi = getDesktopApi();
 
   const handleResetOnboarding = () => {
@@ -34,13 +54,102 @@ export default function Settings() {
   };
 
   const handleGitHubLogin = async () => {
-    await desktopApi?.startGitHubLogin?.();
+    if (desktopApi?.startGitHubLogin) {
+      await desktopApi.startGitHubLogin();
+      setIsAwaitingGitHubLogin(true);
+      void refetch();
+      return;
+    }
+
+    window.open("https://cli.github.com/manual/gh_auth_login", "_blank", "noopener,noreferrer");
+  };
+
+  const handleInstallGitHubCli = async () => {
+    const installerUrl = "https://cli.github.com/";
+
+    if (desktopApi) {
+      await desktopApi.openExternal(installerUrl);
+      return;
+    }
+
+    window.open(installerUrl, "_blank", "noopener,noreferrer");
   };
 
   const handleToggleLaunchAtLogin = async (checked: boolean) => {
     setPreference("launchAtLogin", checked);
     await desktopApi?.setLaunchAtLogin?.(checked);
   };
+
+  useEffect(() => {
+    if (!isAwaitingGitHubLogin) {
+      return;
+    }
+
+    if (githubState === "connected" || githubState === "missing_cli" || githubState === "error") {
+      setIsAwaitingGitHubLogin(false);
+      return;
+    }
+
+    const pollingIntervalId = window.setInterval(() => {
+      void refetch();
+    }, 4000);
+    const timeoutId = window.setTimeout(() => {
+      setIsAwaitingGitHubLogin(false);
+    }, 120000);
+
+    return () => {
+      window.clearInterval(pollingIntervalId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [githubState, isAwaitingGitHubLogin, refetch]);
+
+  const lastWorkspaceSyncLabel = snapshot
+    ? formatDistanceToNow(new Date(snapshot.generatedAt), { addSuffix: true })
+    : "No workspace snapshot yet";
+  const toggleSettings: Array<{
+    desc: string;
+    id: Exclude<
+      keyof AppPreferences,
+      "autoRefreshEnabled" | "autoRefreshIntervalSeconds"
+    >;
+    label: string;
+  }> = [
+    {
+      desc: "Keep stale local review branches visually flagged across the app.",
+      id: "highlightStalePrs",
+      label: "Highlight Stale PRs",
+    },
+    {
+      desc: "Check for updates whenever the DevDeck window becomes active again.",
+      id: "refreshOnWindowFocus",
+      label: "Refresh on Focus",
+    },
+    {
+      desc: "Show native notifications when a PR is waiting for its first review.",
+      id: "notifyReviewRequired",
+      label: "Notify on Review Required",
+    },
+    {
+      desc: "Alert when a pull request receives changes requested.",
+      id: "notifyChangesRequested",
+      label: "Notify on Changes Requested",
+    },
+    {
+      desc: "Alert when a pull request gets approved.",
+      id: "notifyApproved",
+      label: "Notify on Approval",
+    },
+    {
+      desc: "Show native desktop notifications for default branch failures.",
+      id: "alertFailingBuilds",
+      label: "Alert on Failing Builds",
+    },
+    {
+      desc: "Start DevDeck automatically when you sign in to macOS.",
+      id: "launchAtLogin",
+      label: "Launch at Login",
+    },
+  ];
 
   return (
     <AppLayout>
@@ -110,10 +219,20 @@ export default function Settings() {
                   <div>
                     <h3 className="font-semibold text-sm flex items-center gap-2">
                       GitHub Access
-                      {connected && <span className="text-[9px] bg-chart-1/10 text-chart-1 px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1 border border-chart-1/20"><CheckCircle2 className="w-3 h-3" /> Connected</span>}
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${githubStatusMeta.className}`}>
+                        {githubStatusMeta.label}
+                      </span>
+                      {isAwaitingGitHubLogin && (
+                        <span className="text-[9px] bg-secondary text-muted-foreground px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider border border-border/60 inline-flex items-center gap-1">
+                          <LoaderCircle className="w-3 h-3 animate-spin" />
+                          Waiting
+                        </span>
+                      )}
                     </h3>
                     <p className="text-xs text-muted-foreground mt-1">
-                      DevDeck reads GitHub authentication from GitHub CLI. Use <span className="font-mono">gh auth login</span> in your terminal to enable live pull request sync.
+                      {githubState === "missing_cli"
+                        ? "Install GitHub CLI first, then sign in so DevDeck can pull live pull request data."
+                        : "DevDeck reads GitHub authentication from GitHub CLI to load live pull request data without syncing your source code elsewhere."}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {githubStatus?.message ?? "GitHub status will appear after the first workspace scan."}
@@ -121,6 +240,11 @@ export default function Settings() {
                     <p className="text-xs text-muted-foreground mt-1">
                       Viewer: {githubStatus?.viewerLogin ?? "Not authenticated"} · Connected repos: {githubStatus?.connectedRepositoryCount ?? 0}
                     </p>
+                    {githubState === "missing_cli" && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Recommended install command: <span className="font-mono">brew install gh</span>
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -129,19 +253,30 @@ export default function Settings() {
                     onClick={() => void refetch()}
                     className="px-3 py-1.5 rounded-md text-xs font-medium bg-white text-foreground border border-border hover:bg-secondary/50 whitespace-nowrap shadow-sm transition-colors"
                   >
-                    Refresh Status
+                    {isFetching ? "Refreshing..." : "Refresh Status"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleGitHubLogin()}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all shadow-sm whitespace-nowrap ${
-                      connected
-                        ? "bg-white text-foreground border border-border hover:bg-secondary/50"
-                        : "bg-primary text-primary-foreground border border-primary hover:bg-primary/90"
-                    }`}
-                  >
-                    {connected ? "Reconnect in Terminal" : "Connect with GitHub CLI"}
-                  </button>
+                  {githubState === "missing_cli" ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleInstallGitHubCli()}
+                      className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground border border-primary hover:bg-primary/90 whitespace-nowrap shadow-sm transition-colors inline-flex items-center gap-1.5"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Install GitHub CLI
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void handleGitHubLogin()}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all shadow-sm whitespace-nowrap ${
+                        connected
+                          ? "bg-white text-foreground border border-border hover:bg-secondary/50"
+                          : "bg-primary text-primary-foreground border border-primary hover:bg-primary/90"
+                      }`}
+                    >
+                      {connected ? "Reconnect in Terminal" : "Connect in Terminal"}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -155,14 +290,58 @@ export default function Settings() {
           </div>
           <div className="p-2">
             <div className="space-y-1">
-              {[
-                { id: "highlightStalePrs", label: "Highlight Stale PRs", desc: "Keep stale local review branches visually flagged across the app." },
-                { id: "notifyReviewRequired", label: "Notify on Review Required", desc: "Show native notifications when a PR is waiting for its first review." },
-                { id: "notifyChangesRequested", label: "Notify on Changes Requested", desc: "Alert when a pull request receives changes requested." },
-                { id: "notifyApproved", label: "Notify on Approval", desc: "Alert when a pull request gets approved." },
-                { id: "alertFailingBuilds", label: "Alert on Failing Builds", desc: "Show native desktop notifications for default branch failures." },
-                { id: "launchAtLogin", label: "Launch at Login", desc: "Start DevDeck automatically when you sign in to macOS." }
-              ].map(setting => (
+              <div className="p-3 rounded-md border border-border/50 bg-secondary/20 space-y-4 mb-2">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-sm text-foreground">Auto Refresh Workspace</p>
+                    <p className="text-xs text-muted-foreground">
+                      Keep local Git and GitHub metadata fresh without leaving the app open on manual refresh.
+                    </p>
+                  </div>
+                  <Switch
+                    id="autoRefreshEnabled"
+                    checked={preferences.autoRefreshEnabled}
+                    onCheckedChange={(checked) =>
+                      setPreference("autoRefreshEnabled", checked)
+                    }
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Refresh Cadence
+                    </p>
+                    <Select
+                      value={String(preferences.autoRefreshIntervalSeconds)}
+                      onValueChange={(value) =>
+                        setPreference("autoRefreshIntervalSeconds", Number(value))
+                      }
+                      disabled={!preferences.autoRefreshEnabled}
+                    >
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Choose interval" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="30">Every 30 seconds</SelectItem>
+                        <SelectItem value="60">Every minute</SelectItem>
+                        <SelectItem value="120">Every 2 minutes</SelectItem>
+                        <SelectItem value="300">Every 5 minutes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Last Workspace Sync
+                    </p>
+                    <div className="rounded-md border border-border/60 bg-white px-3 py-2 text-sm text-foreground shadow-sm">
+                      {lastWorkspaceSyncLabel}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {toggleSettings.map((setting) => (
                 <div key={setting.id} className="flex items-center justify-between gap-4 p-3 rounded-md hover:bg-secondary/30 transition-colors">
                   <div>
                     <label htmlFor={setting.id} className="font-medium text-sm text-foreground cursor-pointer">{setting.label}</label>
@@ -170,17 +349,14 @@ export default function Settings() {
                   </div>
                   <Switch
                     id={setting.id}
-                    checked={preferences[setting.id as keyof typeof preferences]}
+                    checked={preferences[setting.id]}
                     onCheckedChange={(checked) => {
                       if (setting.id === "launchAtLogin") {
                         void handleToggleLaunchAtLogin(checked);
                         return;
                       }
 
-                      setPreference(
-                        setting.id as keyof typeof preferences,
-                        checked,
-                      );
+                      setPreference(setting.id, checked);
                     }}
                   />
                 </div>

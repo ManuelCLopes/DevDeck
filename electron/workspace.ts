@@ -6,6 +6,7 @@ import type {
   MonitoredProject,
   WorkspaceCiStatus,
   WorkspaceDiscoveryResult,
+  WorkspaceGitHubState,
   WorkspaceGitHubStatus,
   WorkspaceProject,
   WorkspaceProjectStatus,
@@ -54,6 +55,7 @@ interface GitHubPullRequestRecord {
 interface GitHubAuthStatus {
   authenticated: boolean;
   message: string | null;
+  state: WorkspaceGitHubState;
   viewerLogin: string | null;
 }
 
@@ -120,6 +122,12 @@ const ciStatusCache = new Map<
   string,
   { expiresAt: number; status: WorkspaceCiStatus }
 >();
+
+interface ExecFileFailure extends Error {
+  code?: number | string;
+  stderr?: string;
+  stdout?: string;
+}
 
 function createRepositoryCandidate(
   rootName: string,
@@ -484,13 +492,50 @@ async function getGitHubAuthStatus(): Promise<GitHubAuthStatus> {
       authenticated: true,
       expiresAt: Date.now() + GITHUB_AUTH_CACHE_TTL_MS,
       message: "Live GitHub pull request data is available through GitHub CLI.",
+      state: "connected",
       viewerLogin,
     };
-  } catch {
+  } catch (error) {
+    const execError = error as ExecFileFailure;
+    const authOutput = `${execError.stdout ?? ""}\n${execError.stderr ?? ""}`
+      .trim()
+      .toLowerCase();
+
+    if (execError.code === "ENOENT") {
+      cachedGitHubAuthStatus = {
+        authenticated: false,
+        expiresAt: Date.now() + GITHUB_AUTH_CACHE_TTL_MS,
+        message: "GitHub CLI is not installed. Install `gh` to sync live pull requests.",
+        state: "missing_cli",
+        viewerLogin: null,
+      };
+
+      return cachedGitHubAuthStatus;
+    }
+
+    if (
+      authOutput.includes("not logged into any github hosts") ||
+      authOutput.includes("gh auth login")
+    ) {
+      cachedGitHubAuthStatus = {
+        authenticated: false,
+        expiresAt: Date.now() + GITHUB_AUTH_CACHE_TTL_MS,
+        message: "GitHub CLI is installed, but no GitHub session is active yet.",
+        state: "unauthenticated",
+        viewerLogin: null,
+      };
+
+      return cachedGitHubAuthStatus;
+    }
+
     cachedGitHubAuthStatus = {
       authenticated: false,
       expiresAt: Date.now() + GITHUB_AUTH_CACHE_TTL_MS,
-      message: "Run `gh auth login` to load pull requests from GitHub.",
+      message:
+        execError.code === "ETIMEDOUT"
+          ? "GitHub CLI timed out while checking authentication."
+          : "GitHub CLI could not be reached. Try refreshing the connection.",
+      state: "error",
       viewerLogin: null,
     };
   }
@@ -1040,9 +1085,10 @@ export async function loadWorkspaceSnapshot(selection: {
     authenticated: githubAuthStatus.authenticated,
     connectedRepositoryCount,
     message:
-      connectedRepositoryCount === 0
+      githubAuthStatus.authenticated && connectedRepositoryCount === 0
         ? "No GitHub remotes were detected in the current workspace."
         : githubAuthStatus.message,
+    state: githubAuthStatus.state,
     viewerLogin: githubAuthStatus.viewerLogin,
   };
 
