@@ -21,6 +21,125 @@ export interface Project {
   localPath: string;
 }
 
+export type PRStatus = 'needs_review' | 'changes_requested' | 'approved' | 'draft' | 'updated';
+export type PRRole = 'reviewer' | 'author';
+
+export interface PullRequest {
+  id: string;
+  title: string;
+  repo: string;
+  author: string;
+  status: PRStatus;
+  role: PRRole;
+  createdAt: string;
+  updatedAt: string;
+  comments: number;
+  unresolvedThreads: number;
+  linesAdded: number;
+  linesRemoved: number;
+  actionableInsight?: string;
+}
+
+export const mockReviewMetrics = {
+  pendingLoad: 4,
+  completedThisWeek: 12,
+  averageTurnaround: "3.2h",
+  waitingOnAuthor: 2,
+};
+
+export const mockPullRequests: PullRequest[] = [
+  {
+    id: "pr-1042",
+    title: "feat: implement local sync engine for repository discovery",
+    repo: "core-api",
+    author: "sarahj",
+    status: "needs_review",
+    role: "reviewer",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+    updatedAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+    comments: 0,
+    unresolvedThreads: 0,
+    linesAdded: 342,
+    linesRemoved: 12,
+    actionableInsight: "Waiting on you"
+  },
+  {
+    id: "pr-1038",
+    title: "fix: resolve memory leak in background worker",
+    repo: "data-pipeline",
+    author: "mike_chen",
+    status: "updated",
+    role: "reviewer",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
+    updatedAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+    comments: 8,
+    unresolvedThreads: 2,
+    linesAdded: 45,
+    linesRemoved: 89,
+    actionableInsight: "Updated since your review"
+  },
+  {
+    id: "pr-1045",
+    title: "chore: update tailwind configuration for mac desktop native feel",
+    repo: "web-dashboard",
+    author: "alex_dev",
+    status: "changes_requested",
+    role: "reviewer",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
+    comments: 12,
+    unresolvedThreads: 3,
+    linesAdded: 120,
+    linesRemoved: 40,
+    actionableInsight: "Waiting on author"
+  },
+  {
+    id: "pr-1048",
+    title: "refactor: isolate macOS window controls component",
+    repo: "web-dashboard",
+    author: "you",
+    status: "approved",
+    role: "author",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+    updatedAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
+    comments: 2,
+    unresolvedThreads: 0,
+    linesAdded: 85,
+    linesRemoved: 20,
+    actionableInsight: "Merge-ready after approval"
+  },
+  {
+    id: "pr-1049",
+    title: "feat: add desktop notification support",
+    repo: "core-api",
+    author: "you",
+    status: "needs_review",
+    role: "author",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+    comments: 0,
+    unresolvedThreads: 0,
+    linesAdded: 210,
+    linesRemoved: 5,
+    actionableInsight: "Waiting for review"
+  },
+  {
+    id: "pr-1051",
+    title: "fix: correct sidebar spacing on smaller screens",
+    repo: "web-dashboard",
+    author: "jamie_t",
+    status: "needs_review",
+    role: "reviewer",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), // 5 days old
+    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
+    comments: 1,
+    unresolvedThreads: 0,
+    linesAdded: 12,
+    linesRemoved: 12,
+    actionableInsight: "Stale review"
+  }
+];
+
 export const mockProjects: Project[] = [
   {
     id: "proj-1",
@@ -101,46 +220,6 @@ export const mockProjects: Project[] = [
     contributors7d: 3,
     repositoryUrl: "github.com/org/data-pipeline",
     localPath: "~/Developer/data/data-pipeline"
-  },
-  {
-    id: "proj-5",
-    name: "auth-gateway",
-    team: "backend",
-    description: "Centralized authentication and authorization",
-    status: "warning",
-    lastUpdated: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-    openPRs: 5,
-    closedPRs7d: 10,
-    stalePRs: 2,
-    openIssues: 15,
-    staleIssues: 2,
-    latestRelease: "v3.0.1",
-    releaseDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(),
-    buildStatus: "success",
-    unreviewedPRs: 3,
-    contributors7d: 4,
-    repositoryUrl: "github.com/org/auth-gateway",
-    localPath: "~/Developer/backend/auth-gateway"
-  },
-  {
-    id: "proj-6",
-    name: "ios-app",
-    team: "mobile",
-    description: "Native iOS application",
-    status: "healthy",
-    lastUpdated: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-    openPRs: 6,
-    closedPRs7d: 28,
-    stalePRs: 0,
-    openIssues: 32,
-    staleIssues: 4,
-    latestRelease: "v4.2.0",
-    releaseDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 14).toISOString(),
-    buildStatus: "success",
-    unreviewedPRs: 2,
-    contributors7d: 6,
-    repositoryUrl: "github.com/org/ios-app",
-    localPath: "~/Developer/mobile/ios-app"
   }
 ];
 

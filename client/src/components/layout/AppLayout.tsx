@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
-  HardDrive
+  HardDrive,
+  MessageSquare
 } from "lucide-react";
 
 interface AppLayoutProps {
@@ -23,8 +24,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   const navItems = [
     { href: "/", icon: LayoutGrid, label: "Overview" },
+    { href: "/reviews", icon: MessageSquare, label: "Code Reviews" },
     { href: "/projects", icon: FolderGit2, label: "Local Projects" },
-    { href: "/prs", icon: GitPullRequest, label: "Pull Requests" },
     { href: "/activity", icon: Activity, label: "Activity" },
   ];
 
@@ -32,8 +33,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
     <div className="flex h-screen bg-[#ececec] overflow-hidden text-[13px] font-sans">
       {/* 
         This wrapper simulates the macOS Window environment.
-        The actual app background is slightly gray to match standard macOS windows, 
-        with the sidebar taking a translucent effect and main area white.
       */}
       <div className="flex w-full h-full border border-black/10 rounded-lg shadow-2xl overflow-hidden bg-white/50 backdrop-blur-3xl m-0 sm:m-4 sm:rounded-xl">
         
@@ -63,6 +62,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   }`}>
                     <item.icon className={`w-4 h-4 ${active ? "opacity-100" : "opacity-70 text-primary"}`} />
                     {item.label}
+                    {item.label === "Code Reviews" && (
+                      <span className="ml-auto text-[10px] font-bold bg-primary-foreground/20 px-1.5 rounded-sm">
+                        3
+                      </span>
+                    )}
                   </a>
                 </Link>
               );
@@ -93,7 +97,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   : "text-foreground/80 hover:bg-black/5"
               }`}>
                 <Settings className="w-4 h-4 opacity-70" />
-                Settings
+                Preferences
               </a>
             </Link>
             
@@ -111,7 +115,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <main className="flex-1 flex flex-col min-w-0 bg-white shadow-[-1px_0_0_0_rgba(0,0,0,0.1)] z-10">
           
           {/* Top Titlebar / Toolbar */}
-          <header className="h-[52px] border-b border-black/10 flex items-center justify-between px-4 titlebar-drag-region bg-white">
+          <header className="h-[52px] border-b border-black/10 flex items-center justify-between px-4 titlebar-drag-region bg-white/90 backdrop-blur-md sticky top-0 z-50">
             <div className="flex items-center gap-4 no-drag">
               <div className="flex items-center gap-1">
                 <button className="p-1 rounded text-muted-foreground hover:bg-secondary disabled:opacity-50">
@@ -129,7 +133,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input 
                   type="text" 
-                  placeholder="Search local projects..." 
+                  placeholder="Search projects, PRs..." 
                   className="w-full h-7 pl-8 pr-3 rounded-md bg-secondary/70 border border-black/5 focus:bg-background focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none text-xs transition-all placeholder:text-muted-foreground"
                 />
               </div>
