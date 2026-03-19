@@ -6,11 +6,13 @@ export interface AppPreferences {
   autoRefreshEnabled: boolean;
   autoRefreshIntervalSeconds: number;
   highlightStalePrs: boolean;
+  keepRunningInBackground: boolean;
   launchAtLogin: boolean;
   notifyApproved: boolean;
   notifyChangesRequested: boolean;
   notifyReviewRequired: boolean;
   refreshOnWindowFocus: boolean;
+  showMenuBarIcon: boolean;
 }
 
 const APP_PREFERENCES_KEY = "devdeck_app_preferences";
@@ -20,11 +22,13 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   autoRefreshEnabled: true,
   autoRefreshIntervalSeconds: 30,
   highlightStalePrs: true,
+  keepRunningInBackground: true,
   launchAtLogin: false,
   notifyApproved: true,
   notifyChangesRequested: true,
   notifyReviewRequired: true,
   refreshOnWindowFocus: true,
+  showMenuBarIcon: true,
 };
 
 function mergeAppPreferences(

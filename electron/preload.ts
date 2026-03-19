@@ -10,7 +10,9 @@ interface WorkspaceMonitorState {
   preferences: WorkspaceMonitorPreferences & {
     autoRefreshEnabled: boolean;
     autoRefreshIntervalSeconds: number;
+    keepRunningInBackground: boolean;
     refreshOnWindowFocus: boolean;
+    showMenuBarIcon: boolean;
   };
   selection: WorkspaceSelection | null;
 }
@@ -21,6 +23,16 @@ const devdeck = {
   },
   loadWorkspaceSnapshot(selection: WorkspaceSelection): Promise<WorkspaceSnapshot> {
     return ipcRenderer.invoke("devdeck:load-workspace-snapshot", selection);
+  },
+  onNavigate(listener: (targetPath: string) => void) {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      targetPath: string,
+    ) => listener(targetPath);
+    ipcRenderer.on("devdeck:navigate", wrappedListener);
+    return () => {
+      ipcRenderer.removeListener("devdeck:navigate", wrappedListener);
+    };
   },
   onWorkspaceSnapshotUpdated(
     listener: (snapshot: WorkspaceSnapshot) => void,

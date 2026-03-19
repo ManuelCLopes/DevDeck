@@ -13,9 +13,50 @@ export interface WorkspaceNotificationPayload {
   title: string;
 }
 
+export interface WorkspaceAttentionSummary {
+  needsAuthorFollowUpCount: number;
+  needsViewerReviewCount: number;
+  totalAttentionCount: number;
+}
+
 interface PullRequestAlertState {
   reviewState: string;
   status: string;
+}
+
+function pullRequestNeedsViewerReview(
+  pullRequest: WorkspaceSnapshot["pullRequests"][number],
+) {
+  if (pullRequest.authoredByViewer || pullRequest.reviewedByViewer) {
+    return false;
+  }
+
+  return (
+    pullRequest.isViewerRequestedReviewer ||
+    (pullRequest.status === "review_required" &&
+      pullRequest.reviewState === "unreviewed")
+  );
+}
+
+function pullRequestNeedsAuthorFollowUp(
+  pullRequest: WorkspaceSnapshot["pullRequests"][number],
+) {
+  return pullRequest.authoredByViewer && pullRequest.status === "changes_requested";
+}
+
+export function getWorkspaceAttentionSummary(snapshot: WorkspaceSnapshot) {
+  const needsViewerReviewCount = snapshot.pullRequests.filter(
+    pullRequestNeedsViewerReview,
+  ).length;
+  const needsAuthorFollowUpCount = snapshot.pullRequests.filter(
+    pullRequestNeedsAuthorFollowUp,
+  ).length;
+
+  return {
+    needsAuthorFollowUpCount,
+    needsViewerReviewCount,
+    totalAttentionCount: needsViewerReviewCount + needsAuthorFollowUpCount,
+  } satisfies WorkspaceAttentionSummary;
 }
 
 export function collectWorkspaceNotifications(

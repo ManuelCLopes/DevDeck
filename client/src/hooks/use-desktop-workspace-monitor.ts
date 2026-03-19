@@ -21,10 +21,12 @@ export function useDesktopWorkspaceMonitor(
         alertFailingBuilds: preferences.alertFailingBuilds,
         autoRefreshEnabled: preferences.autoRefreshEnabled,
         autoRefreshIntervalSeconds: preferences.autoRefreshIntervalSeconds,
+        keepRunningInBackground: preferences.keepRunningInBackground,
         notifyApproved: preferences.notifyApproved,
         notifyChangesRequested: preferences.notifyChangesRequested,
         notifyReviewRequired: preferences.notifyReviewRequired,
         refreshOnWindowFocus: preferences.refreshOnWindowFocus,
+        showMenuBarIcon: preferences.showMenuBarIcon,
       },
       selection,
     });

@@ -9,7 +9,9 @@ interface WorkspaceMonitorState {
   preferences: WorkspaceMonitorPreferences & {
     autoRefreshEnabled: boolean;
     autoRefreshIntervalSeconds: number;
+    keepRunningInBackground: boolean;
     refreshOnWindowFocus: boolean;
+    showMenuBarIcon: boolean;
   };
   selection: WorkspaceSelection | null;
 }
@@ -19,6 +21,7 @@ interface DevDeckDesktopApi {
   copyToClipboard(value: string): Promise<void>;
   getGitHubAuthCapabilities(): Promise<{ deviceFlowAvailable: boolean }>;
   loadWorkspaceSnapshot(selection: WorkspaceSelection): Promise<WorkspaceSnapshot>;
+  onNavigate(listener: (targetPath: string) => void): () => void;
   onWorkspaceSnapshotUpdated(
     listener: (snapshot: WorkspaceSnapshot) => void,
   ): () => void;

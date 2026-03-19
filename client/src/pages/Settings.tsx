@@ -133,6 +133,16 @@ export default function Settings() {
       label: "Refresh on Focus",
     },
     {
+      desc: "Hide the window instead of quitting so background refresh and alerts can keep running.",
+      id: "keepRunningInBackground",
+      label: "Keep Running in Background",
+    },
+    {
+      desc: "Show a menu bar item with quick-open actions and pending review counts.",
+      id: "showMenuBarIcon",
+      label: "Show Menu Bar Icon",
+    },
+    {
       desc: "Show native notifications when a PR is waiting for its first review.",
       id: "notifyReviewRequired",
       label: "Notify on Review Required",

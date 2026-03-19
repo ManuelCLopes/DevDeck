@@ -26,7 +26,7 @@ import {
   MessageSquare,
   RefreshCw,
 } from "lucide-react";
-import { Suspense, lazy, useMemo } from "react";
+import { Suspense, lazy, useEffect, useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
 
 const PullRequestDetailDialog = lazy(
@@ -74,6 +74,21 @@ export default function Reviews() {
   const staleReviewsPagination = usePagination(staleReviews, 6, {
     storageKey: "devdeck:reviews:stale-reviews",
   });
+
+  useEffect(() => {
+    const nextFocus = new URLSearchParams(search).get("focus");
+    if (
+      nextFocus === "all" ||
+      nextFocus === "needs_my_review" ||
+      nextFocus === "needs_my_follow_up" ||
+      nextFocus === "authored_by_me" ||
+      nextFocus === "changes_requested" ||
+      nextFocus === "reviewed_by_me" ||
+      nextFocus === "waiting_on_others"
+    ) {
+      setFocusFilter(nextFocus);
+    }
+  }, [search, setFocusFilter]);
 
   const handleOpenPullRequest = async (targetUrl: string) => {
     const desktopApi = getDesktopApi();

@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { WorkspaceSnapshot } from "./workspace";
-import { collectWorkspaceNotifications } from "./workspace-monitor";
+import {
+  collectWorkspaceNotifications,
+  getWorkspaceAttentionSummary,
+} from "./workspace-monitor";
 
 function createSnapshot(overrides?: Partial<WorkspaceSnapshot>): WorkspaceSnapshot {
   return {
@@ -133,4 +136,63 @@ test("collectWorkspaceNotifications emits failing CI alerts when status degrades
   });
 
   assert.equal(notifications[0]?.title, "Failing CI on repo");
+});
+
+test("getWorkspaceAttentionSummary separates review queue and follow-up work", () => {
+  const snapshot = createSnapshot({
+    pullRequests: [
+      {
+        author: "teammate",
+        authoredByViewer: false,
+        baseBranch: "main",
+        ciStatus: "passing",
+        headBranch: "feature/review-me",
+        id: "repo#1",
+        isViewerRequestedReviewer: true,
+        number: 1,
+        projectId: "project-1",
+        repo: "repo",
+        reviewCount: 0,
+        reviewState: "unreviewed",
+        reviewTimeline: [],
+        requestedReviewerLogins: ["manuel"],
+        reviewedByOthersCount: 0,
+        reviewedByViewer: false,
+        reviewerLogins: [],
+        status: "review_required",
+        title: "Need review",
+        updatedAt: "2026-03-18T20:00:00.000Z",
+        url: "https://github.com/example/repo/pull/1",
+      },
+      {
+        author: "manuel",
+        authoredByViewer: true,
+        baseBranch: "main",
+        ciStatus: "failing",
+        headBranch: "feature/follow-up",
+        id: "repo#2",
+        isViewerRequestedReviewer: false,
+        number: 2,
+        projectId: "project-1",
+        repo: "repo",
+        reviewCount: 1,
+        reviewState: "reviewed",
+        reviewTimeline: [],
+        requestedReviewerLogins: [],
+        reviewedByOthersCount: 1,
+        reviewedByViewer: false,
+        reviewerLogins: ["teammate"],
+        status: "changes_requested",
+        title: "Need follow-up",
+        updatedAt: "2026-03-18T20:05:00.000Z",
+        url: "https://github.com/example/repo/pull/2",
+      },
+    ],
+  });
+
+  assert.deepEqual(getWorkspaceAttentionSummary(snapshot), {
+    needsAuthorFollowUpCount: 1,
+    needsViewerReviewCount: 1,
+    totalAttentionCount: 2,
+  });
 });

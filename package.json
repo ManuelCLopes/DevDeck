@@ -130,6 +130,9 @@
       "dist/public/**/*",
       "package.json"
     ],
+    "extraResources": [
+      "build/icon.png"
+    ],
     "dmg": {
       "backgroundColor": "#eff4fb",
       "contents": [

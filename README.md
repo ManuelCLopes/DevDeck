@@ -94,6 +94,16 @@ From there you can use:
 
 If you want to see onboarding again, open `Preferences` and use `Reset Onboarding`.
 
+## Background mode
+
+DevDeck can keep monitoring your workspace even after you close the main window.
+
+- `Preferences > Keep Running in Background` changes the close button into a hide action instead of quitting the app
+- `Preferences > Show Menu Bar Icon` adds a menu bar item with quick actions for opening DevDeck, jumping to the PR inbox, and forcing a refresh
+- `Preferences > Launch at Login` lets DevDeck start automatically when you sign in to macOS
+
+When background mode is on, DevDeck continues refreshing local Git and GitHub state on the configured cadence and keeps macOS notifications active.
+
 ## GitHub connection
 
 DevDeck now uses the GitHub API directly from the Electron main process.
@@ -141,6 +151,25 @@ For a signed and notarized build, export either:
 - or `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`
 
 If you also want the produced `.app` and `.dmg` signed, provide `CSC_LINK` and `CSC_KEY_PASSWORD` before running `npm run dist:mac`.
+
+## GitHub Actions release
+
+There is also a macOS release workflow at [.github/workflows/release-mac.yml](/Users/manuellopes/Desktop/DevDeck/.github/workflows/release-mac.yml).
+
+It can be triggered manually or by pushing a tag like `v1.0.0`, and it will:
+
+- install dependencies with `npm ci`
+- run `npm run check`
+- run `npm test`
+- build signed macOS artifacts with `npm run dist:mac`
+- upload the generated `.dmg` and `.zip`
+- publish them to the GitHub release for tagged builds
+
+Repository secrets expected by that workflow:
+
+- `CSC_LINK`
+- `CSC_KEY_PASSWORD`
+- `APPLE_NOTARY_PROFILE`, or `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`
 
 ## Type check
 

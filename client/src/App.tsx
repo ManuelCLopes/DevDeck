@@ -38,6 +38,17 @@ function Router() {
   const workspaceSelection = useWorkspaceSelection();
 
   useEffect(() => {
+    const desktopApi = getDesktopApi();
+    if (!desktopApi?.onNavigate) {
+      return;
+    }
+
+    return desktopApi.onNavigate((targetPath) => {
+      setLocation(targetPath);
+    });
+  }, [setLocation]);
+
+  useEffect(() => {
     const isDesktopApp = Boolean(getDesktopApi());
     const hasValidDesktopWorkspace =
       !isDesktopApp || hasValidWorkspaceSelection(workspaceSelection);

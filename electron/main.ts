@@ -1,10 +1,23 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Notification, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeImage,
+  Notification,
+  shell,
+  Tray,
+} from "electron";
 import { execFile } from "child_process";
+import { existsSync } from "fs";
 import path from "path";
 import { promisify } from "util";
 import type { WorkspaceSelection, WorkspaceSnapshot } from "../shared/workspace";
 import {
   collectWorkspaceNotifications,
+  getWorkspaceAttentionSummary,
   type WorkspaceMonitorPreferences,
 } from "../shared/workspace-monitor";
 import {
@@ -25,20 +38,26 @@ const DEFAULT_WORKSPACE_MONITOR_PREFERENCES = {
   alertFailingBuilds: true,
   autoRefreshEnabled: true,
   autoRefreshIntervalSeconds: 30,
+  keepRunningInBackground: true,
   notifyApproved: true,
   notifyChangesRequested: true,
   notifyReviewRequired: true,
   refreshOnWindowFocus: true,
+  showMenuBarIcon: true,
 } satisfies WorkspaceMonitorPreferences & {
   autoRefreshEnabled: boolean;
   autoRefreshIntervalSeconds: number;
+  keepRunningInBackground: boolean;
   refreshOnWindowFocus: boolean;
+  showMenuBarIcon: boolean;
 };
 
 interface WorkspaceMonitorSettings extends WorkspaceMonitorPreferences {
   autoRefreshEnabled: boolean;
   autoRefreshIntervalSeconds: number;
+  keepRunningInBackground: boolean;
   refreshOnWindowFocus: boolean;
+  showMenuBarIcon: boolean;
 }
 
 interface WorkspaceMonitorState {
@@ -51,6 +70,8 @@ interface WorkspaceMonitorState {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let appTray: Tray | null = null;
+let isQuitting = false;
 const workspaceMonitorState: WorkspaceMonitorState = {
   intervalId: null,
   isRefreshing: false,
@@ -74,6 +95,183 @@ function getRendererUrl() {
 
 function shouldOpenDevTools() {
   return process.env.DEVDECK_OPEN_DEVTOOLS === "true";
+}
+
+function getTrayIconPath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "icon.png");
+  }
+
+  return path.resolve(__dirname, "..", "build", "icon.png");
+}
+
+function createTrayImage() {
+  const iconPath = getTrayIconPath();
+  if (!existsSync(iconPath)) {
+    return nativeImage.createEmpty();
+  }
+
+  const icon = nativeImage.createFromPath(iconPath);
+  if (icon.isEmpty()) {
+    return nativeImage.createEmpty();
+  }
+
+  return process.platform === "darwin"
+    ? icon.resize({ height: 18, width: 18 })
+    : icon;
+}
+
+function updateDockBadge(snapshot: WorkspaceSnapshot | null) {
+  if (process.platform !== "darwin" || !app.dock) {
+    return;
+  }
+
+  const badgeValue = snapshot
+    ? String(getWorkspaceAttentionSummary(snapshot).totalAttentionCount || "")
+    : "";
+  app.dock.setBadge(badgeValue);
+}
+
+function showMainWindow() {
+  const nextMainWindow = mainWindow ?? createMainWindow();
+  if (nextMainWindow.isMinimized()) {
+    nextMainWindow.restore();
+  }
+
+  nextMainWindow.show();
+  nextMainWindow.focus();
+  if (process.platform === "darwin" && app.dock) {
+    app.dock.show();
+  }
+}
+
+function navigateMainWindow(targetPath: string) {
+  const nextMainWindow = mainWindow ?? createMainWindow();
+  const sendNavigation = () => {
+    nextMainWindow.webContents.send("devdeck:navigate", targetPath);
+  };
+
+  if (nextMainWindow.webContents.isLoadingMainFrame()) {
+    nextMainWindow.webContents.once("did-finish-load", sendNavigation);
+  } else {
+    sendNavigation();
+  }
+
+  showMainWindow();
+}
+
+function buildTrayTooltip(snapshot: WorkspaceSnapshot | null) {
+  if (!snapshot) {
+    return "DevDeck";
+  }
+
+  const attention = getWorkspaceAttentionSummary(snapshot);
+  if (attention.totalAttentionCount === 0) {
+    return "DevDeck · Workspace idle";
+  }
+
+  const parts: string[] = [];
+  if (attention.needsViewerReviewCount > 0) {
+    parts.push(`${attention.needsViewerReviewCount} need review`);
+  }
+  if (attention.needsAuthorFollowUpCount > 0) {
+    parts.push(`${attention.needsAuthorFollowUpCount} need follow-up`);
+  }
+
+  return `DevDeck · ${parts.join(" · ")}`;
+}
+
+function updateTrayMenu() {
+  if (!appTray) {
+    return;
+  }
+
+  const snapshot = workspaceMonitorState.latestSnapshot;
+  const attention = snapshot ? getWorkspaceAttentionSummary(snapshot) : null;
+  const statusLabel = attention
+    ? attention.totalAttentionCount > 0
+      ? `${attention.needsViewerReviewCount} need review · ${attention.needsAuthorFollowUpCount} need follow-up`
+      : "Workspace idle"
+    : "Waiting for first workspace snapshot";
+
+  appTray.setToolTip(buildTrayTooltip(snapshot));
+  if (process.platform === "darwin") {
+    appTray.setTitle(
+      attention && attention.totalAttentionCount > 0
+        ? ` ${attention.totalAttentionCount}`
+        : "",
+    );
+  }
+
+  appTray.setContextMenu(
+    Menu.buildFromTemplate([
+      { enabled: false, label: `DevDeck · ${statusLabel}` },
+      { type: "separator" },
+      {
+        click: () => {
+          showMainWindow();
+        },
+        label: "Open DevDeck",
+      },
+      {
+        click: () => {
+          navigateMainWindow("/reviews");
+        },
+        label: "Open Pull Requests",
+      },
+      {
+        click: () => {
+          navigateMainWindow("/reviews?focus=needs_my_review");
+        },
+        label: "Open Review Queue",
+      },
+      {
+        click: () => {
+          void refreshWorkspaceSnapshot("settings");
+        },
+        label: "Refresh Now",
+      },
+      { type: "separator" },
+      {
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+        label: "Quit DevDeck",
+      },
+    ]),
+  );
+}
+
+function ensureTray() {
+  if (appTray || !workspaceMonitorState.preferences.showMenuBarIcon) {
+    return;
+  }
+
+  appTray = new Tray(createTrayImage());
+  appTray.on("click", () => {
+    showMainWindow();
+  });
+  updateTrayMenu();
+}
+
+function destroyTray() {
+  if (!appTray) {
+    return;
+  }
+
+  appTray.destroy();
+  appTray = null;
+}
+
+function syncTrayPresence() {
+  if (workspaceMonitorState.preferences.showMenuBarIcon) {
+    ensureTray();
+    updateTrayMenu();
+    return;
+  }
+
+  destroyTray();
 }
 
 function createMainWindow() {
@@ -104,6 +302,14 @@ function createMainWindow() {
     }
 
     void refreshWorkspaceSnapshot("focus");
+  });
+  nextMainWindow.on("close", (event) => {
+    if (isQuitting || !workspaceMonitorState.preferences.keepRunningInBackground) {
+      return;
+    }
+
+    event.preventDefault();
+    nextMainWindow.hide();
   });
   nextMainWindow.on("closed", () => {
     if (mainWindow === nextMainWindow) {
@@ -194,6 +400,8 @@ async function refreshWorkspaceSnapshot(
     }
 
     broadcastWorkspaceSnapshot(nextSnapshot);
+    updateDockBadge(nextSnapshot);
+    updateTrayMenu();
     return nextSnapshot;
   } finally {
     workspaceMonitorState.isRefreshing = false;
@@ -219,11 +427,14 @@ function applyWorkspaceMonitorState(nextState: {
   }
 
   syncWorkspaceMonitorSchedule();
+  syncTrayPresence();
 
   if (workspaceMonitorState.selection) {
     void refreshWorkspaceSnapshot(selectionChanged ? "selection" : "settings");
   } else {
     workspaceMonitorState.latestSnapshot = null;
+    updateDockBadge(null);
+    updateTrayMenu();
   }
 }
 
@@ -362,16 +573,27 @@ ipcMain.handle(
 
 app.whenReady().then(() => {
   createMainWindow();
+  syncTrayPresence();
 
   app.on("activate", () => {
+    if (mainWindow) {
+      showMainWindow();
+      return;
+    }
+
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
     }
   });
 });
 
+app.on("before-quit", () => {
+  isQuitting = true;
+});
+
 app.on("window-all-closed", () => {
   clearWorkspaceMonitorInterval();
+  destroyTray();
   if (process.platform !== "darwin") {
     app.quit();
   }
