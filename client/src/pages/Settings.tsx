@@ -250,7 +250,7 @@ export default function Settings() {
 
   return (
     <AppLayout>
-      <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="mx-auto w-full max-w-4xl min-w-0 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div>
           <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Preferences</h1>
           <p className="text-muted-foreground text-sm">Configure DevDeck's local directories and remote connections.</p>
@@ -296,8 +296,8 @@ export default function Settings() {
 
               {workspaceSelection ? (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-white px-4 py-3 shadow-sm">
-                    <div>
+                  <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <p className="text-sm font-medium text-foreground">
                         {selectedProjectIds.length > 0
                           ? `${selectedProjectIds.length} selected`
@@ -322,7 +322,7 @@ export default function Settings() {
                       className="rounded-lg border border-border/60 bg-secondary/15 overflow-hidden"
                     >
                       <div className="flex flex-col gap-4 border-b border-border/40 bg-white/70 px-4 py-4">
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                           <div className="pt-7">
                             <Checkbox
                               checked={
@@ -374,7 +374,7 @@ export default function Settings() {
                             </p>
                           </div>
 
-                          <div className="flex items-center gap-1">
+                          <div className="flex flex-wrap items-center gap-1">
                             <button
                               type="button"
                               onClick={() => void handleRemoveCollection(collection.id)}
@@ -404,7 +404,7 @@ export default function Settings() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           <Layers3 className="h-3.5 w-3.5" />
                           {collection.projects.length}{" "}
                           {collection.projects.length === 1 ? "project" : "projects"}
@@ -415,7 +415,7 @@ export default function Settings() {
                         {collection.projects.map((project, projectIndex) => (
                           <div
                             key={project.localPath ?? project.id}
-                            className="flex items-center justify-between gap-4 px-4 py-3"
+                            className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                           >
                             <div className="flex min-w-0 items-start gap-3">
                               <Checkbox
@@ -439,7 +439,7 @@ export default function Settings() {
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-1">
+                            <div className="flex flex-wrap items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => void handleMoveProject(project.id, "up")}
@@ -509,7 +509,7 @@ export default function Settings() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => void refetch()}
@@ -553,8 +553,8 @@ export default function Settings() {
           <div className="p-2">
             <div className="space-y-1">
               <div className="p-3 rounded-md border border-border/50 bg-secondary/20 space-y-4 mb-2">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
                     <p className="font-medium text-sm text-foreground">Auto Refresh Workspace</p>
                     <p className="text-xs text-muted-foreground">
                       Keep local Git and GitHub metadata fresh without leaving the app open on manual refresh.
@@ -604,8 +604,8 @@ export default function Settings() {
                 </div>
               </div>
               {toggleSettings.map((setting) => (
-                <div key={setting.id} className="flex items-center justify-between gap-4 p-3 rounded-md hover:bg-secondary/30 transition-colors">
-                  <div>
+                <div key={setting.id} className="flex flex-col gap-3 p-3 rounded-md transition-colors hover:bg-secondary/30 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
                     <label htmlFor={setting.id} className="font-medium text-sm text-foreground cursor-pointer">{setting.label}</label>
                     <p className="text-xs text-muted-foreground">{setting.desc}</p>
                   </div>
@@ -625,8 +625,8 @@ export default function Settings() {
               ))}
               
               <div className="pt-4 mt-2 border-t border-border/40">
-                <div className="flex items-center justify-between gap-4 p-3 rounded-md hover:bg-secondary/30 transition-colors">
-                  <div>
+                <div className="flex flex-col gap-3 p-3 rounded-md transition-colors hover:bg-secondary/30 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
                     <p className="font-medium text-sm text-foreground">Reset Onboarding</p>
                     <p className="text-xs text-muted-foreground">Show the welcome screens again.</p>
                   </div>

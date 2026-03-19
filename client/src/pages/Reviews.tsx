@@ -141,9 +141,9 @@ export default function Reviews() {
   return (
     <AppLayout>
       <>
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        <div className="min-w-0 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">
               Pull Requests
             </h1>
@@ -242,10 +242,10 @@ export default function Reviews() {
                     <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[10px] font-semibold">
                       {filter.count}
                     </span>
-                  </button>
-                ))}
-              </div>
-              <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl px-4 py-1 shadow-sm overflow-hidden">
+              </button>
+            ))}
+          </div>
+              <div className="overflow-hidden rounded-xl border border-border/60 bg-white/60 px-4 py-1 shadow-sm backdrop-blur-md">
                 <div className="flex flex-col">
                   {openPullRequestsPagination.paginatedItems.map((pullRequest) => (
                     <div
@@ -263,37 +263,52 @@ export default function Reviews() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-4 mb-0.5">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-semibold text-[13px] text-foreground truncate">
+                        <div className="mb-0.5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 space-y-2">
+                            <span className="block font-semibold text-[13px] text-foreground break-words">
                               #{pullRequest.number} {pullRequest.title}
                             </span>
-                            <span
-                              className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestStatusMeta(pullRequest.status).className}`}
-                            >
-                              {getPullRequestStatusMeta(pullRequest.status).label}
-                            </span>
-                            <span
-                              className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestReviewSummary(pullRequest).className}`}
-                            >
-                              {getPullRequestReviewSummary(pullRequest).label}
-                            </span>
-                            <span
-                              className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestFollowUpMeta(pullRequest).className}`}
-                            >
-                              {getPullRequestFollowUpMeta(pullRequest).label}
-                            </span>
-                            <span
-                              className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestCiStatusMeta(pullRequest.ciStatus).className}`}
-                            >
-                              {getPullRequestCiStatusMeta(pullRequest.ciStatus).label}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestStatusMeta(pullRequest.status).className}`}
+                              >
+                                {getPullRequestStatusMeta(pullRequest.status).label}
+                              </span>
+                              <span
+                                className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestReviewSummary(pullRequest).className}`}
+                              >
+                                {getPullRequestReviewSummary(pullRequest).label}
+                              </span>
+                              <span
+                                className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestFollowUpMeta(pullRequest).className}`}
+                              >
+                                {getPullRequestFollowUpMeta(pullRequest).label}
+                              </span>
+                              <span
+                                className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestCiStatusMeta(pullRequest.ciStatus).className}`}
+                              >
+                                {getPullRequestCiStatusMeta(pullRequest.ciStatus).label}
+                              </span>
+                            </div>
                           </div>
-                          <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0">
-                            {formatDistanceToNow(new Date(pullRequest.updatedAt), {
-                              addSuffix: true,
-                            })}
-                          </span>
+                          <div className="flex flex-shrink-0 items-center gap-2 self-start sm:flex-col sm:items-end sm:gap-1">
+                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                              {formatDistanceToNow(new Date(pullRequest.updatedAt), {
+                                addSuffix: true,
+                              })}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleOpenPullRequest(pullRequest.url);
+                              }}
+                              className="inline-flex h-8 items-center rounded-md border border-border bg-white px-2.5 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
+                            >
+                              <span className="mr-1.5">Open</span>
+                              <ArrowUpRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground mt-1">
@@ -311,18 +326,6 @@ export default function Reviews() {
                           )}
                         </div>
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleOpenPullRequest(pullRequest.url);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity pl-2 flex items-center h-8 px-2.5 rounded-md text-[11px] font-medium bg-white border border-border shadow-sm text-foreground hover:bg-secondary"
-                      >
-                        <span className="mr-1.5">Open</span>
-                        <ArrowUpRight className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   ))}
                   {filteredPullRequests.length === 0 && (
@@ -372,9 +375,9 @@ export default function Reviews() {
                         <CheckCircle2 className="w-4 h-4 text-chart-1" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-4 mb-0.5">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="font-semibold text-[13px] text-foreground truncate">
+                        <div className="mb-0.5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="font-semibold text-[13px] text-foreground break-words">
                               {review.branch}
                             </span>
                             <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border bg-chart-1/10 text-chart-1 border-chart-1/20">
@@ -388,7 +391,7 @@ export default function Reviews() {
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-4 text-[11px] text-muted-foreground mt-1">
+                        <div className="mt-1 flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
                           <span className="font-mono bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50 text-foreground/80">
                             {review.repo}
                           </span>
@@ -443,8 +446,8 @@ export default function Reviews() {
                           <p className="text-[12px] font-medium text-foreground truncate">
                             {review.branch}
                           </p>
-                          <div className="flex items-center justify-between mt-1 gap-2">
-                            <span className="text-[10px] text-muted-foreground font-mono truncate mr-2">
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <span className="mr-2 min-w-0 break-all text-[10px] font-mono text-muted-foreground">
                               {review.repo}
                             </span>
                             <span className="text-[10px] font-medium text-chart-3 whitespace-nowrap bg-chart-3/10 px-1 py-0.5 rounded border border-chart-3/20">

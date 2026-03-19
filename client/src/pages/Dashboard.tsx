@@ -21,7 +21,6 @@ import { formatDistanceToNow } from "date-fns";
 import { Link, useSearch } from "wouter";
 import {
   Activity,
-  AlertTriangle,
   ArrowUpRight,
   ChevronLeft,
   Clock3,
@@ -36,7 +35,6 @@ import {
   MessageSquare,
   RefreshCw,
   Users,
-  Zap,
 } from "lucide-react";
 
 const PullRequestDetailDialog = lazy(
@@ -112,23 +110,6 @@ export default function Dashboard() {
     (pullRequest) => (pullRequest.reviewedByOthersCount ?? 0) > 0,
   ).length;
   const workspaceLabel = workspaceSelection?.rootPath ?? workspaceSelection?.rootName ?? "~/Developer";
-  const needsAttention = focusedProject
-    ? {
-        title: focusedProject.remoteUrl
-          ? `${focusedProject.name} status: ${focusedProject.status}`
-          : `${focusedProject.name} has no origin remote`,
-        description: focusedProject.remoteUrl
-          ? focusedProject.lastActivityMessage ?? `Current branch: ${focusedProject.currentBranch}`
-          : "Connect a remote if you want hosted review and sync metadata.",
-      }
-    : snapshot?.insights.needsAttention[0] ?? null;
-  const recentHighlight = focusedProject
-    ? {
-        title: `${focusedProject.name} was active ${focusedProject.status === "healthy" ? "recently" : "earlier"}`,
-        description:
-          focusedProject.lastActivityMessage ?? `Current branch: ${focusedProject.currentBranch}`,
-      }
-    : snapshot?.insights.recentHighlights[0] ?? null;
   const overviewPullRequestsPagination = usePagination(
     visiblePullRequests,
     6,
@@ -175,9 +156,9 @@ export default function Dashboard() {
   return (
     <AppLayout>
       <>
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className="min-w-0 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">
               {focusedProject ? `${focusedProject.name} Overview` : "Project Overview"}
             </h1>
@@ -189,7 +170,7 @@ export default function Dashboard() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {focusedProject && (
               <Link href="/">
                 <a className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5">
@@ -275,49 +256,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-sm font-semibold tracking-tight">System Signals</h2>
-            <div className="h-px flex-1 bg-border/50 ml-2"></div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-red-50/50 dark:bg-red-950/10 border border-red-100 dark:border-red-900/30 rounded-xl p-4 relative overflow-hidden group hover:border-red-200 transition-colors shadow-sm backdrop-blur-sm">
-              <div className="flex items-start gap-3">
-                <div className="bg-white/80 dark:bg-black/20 p-1.5 rounded-lg text-red-600 shadow-sm border border-red-100/50 dark:border-red-900/30">
-                  <AlertTriangle className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-red-700 dark:text-red-400 mb-0.5 text-sm">
-                    {needsAttention?.title ?? "No urgent repository issues detected"}
-                  </h3>
-                  <p className="text-xs text-muted-foreground/80">
-                    {needsAttention?.description ?? "Connect a workspace to surface stale branches and missing remotes here."}
-                  </p>
-                </div>
-              </div>
-              <ArrowUpRight className="w-4 h-4 text-red-500 absolute top-4 right-4 opacity-0 -translate-y-1 translate-x-1 group-hover:opacity-100 group-hover:translate-y-0 group-hover:translate-x-0 transition-all" />
-            </div>
-
-            <div className="bg-secondary/30 dark:bg-secondary/10 border border-border/60 rounded-xl p-4 relative overflow-hidden group hover:border-border transition-colors shadow-sm backdrop-blur-sm">
-              <div className="flex items-start gap-3">
-                <div className="bg-white/80 dark:bg-black/20 p-1.5 rounded-lg text-foreground shadow-sm border border-border/50">
-                  <Zap className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-foreground mb-0.5 text-sm">
-                    {recentHighlight?.title ?? "Waiting for your first workspace scan"}
-                  </h3>
-                  <p className="text-xs text-muted-foreground/80">
-                    {recentHighlight?.description ?? "Once DevDeck indexes your repositories, this panel will highlight fresh activity."}
-                  </p>
-                </div>
-              </div>
-              <ArrowUpRight className="w-4 h-4 text-muted-foreground absolute top-4 right-4 opacity-0 -translate-y-1 translate-x-1 group-hover:opacity-100 group-hover:translate-y-0 group-hover:translate-x-0 transition-all" />
-            </div>
-          </div>
-        </section>
-
         {focusedProject ? (
           <>
             <section>
@@ -335,17 +273,17 @@ export default function Dashboard() {
                     Branch Context
                   </div>
                   <div className="space-y-3 text-sm">
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Current branch</span>
-                      <span className="font-mono text-foreground">{focusedProject.currentBranch}</span>
+                      <span className="min-w-0 break-all text-right font-mono text-foreground">{focusedProject.currentBranch}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Default branch</span>
-                      <span className="font-mono text-foreground">{focusedProject.defaultBranch}</span>
+                      <span className="min-w-0 break-all text-right font-mono text-foreground">{focusedProject.defaultBranch}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Tracked branches</span>
-                      <span className="font-semibold text-foreground">{focusedProject.branchCount}</span>
+                      <span className="min-w-0 text-right font-semibold text-foreground">{focusedProject.branchCount}</span>
                     </div>
                   </div>
                 </div>
@@ -356,25 +294,25 @@ export default function Dashboard() {
                     Collaboration Pulse
                   </div>
                   <div className="space-y-3 text-sm">
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Contributors (7d)</span>
-                      <span className="font-semibold text-foreground">{focusedProject.contributorCount7d}</span>
+                      <span className="min-w-0 text-right font-semibold text-foreground">{focusedProject.contributorCount7d}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Open pull requests</span>
-                      <span className="font-semibold text-foreground">{focusedProjectPullRequests.length}</span>
+                      <span className="min-w-0 text-right font-semibold text-foreground">{focusedProjectPullRequests.length}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Needs your review</span>
-                      <span className="font-semibold text-foreground">
+                      <span className="min-w-0 text-right font-semibold text-foreground">
                         {focusedProjectPullRequests.filter(
                           pullRequestNeedsViewerReview,
                         ).length}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Needs your follow-up</span>
-                      <span className="font-semibold text-foreground">
+                      <span className="min-w-0 text-right font-semibold text-foreground">
                         {focusedProjectPullRequests.filter(
                           pullRequestNeedsAuthorFollowUp,
                         ).length}
@@ -389,7 +327,7 @@ export default function Dashboard() {
                     Repository Wiring
                   </div>
                   <div className="space-y-3 text-sm">
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Default branch checks</span>
                       <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
                         getCiStatusMeta(focusedProject.ciStatus).className
@@ -397,28 +335,28 @@ export default function Dashboard() {
                         {getCiStatusMeta(focusedProject.ciStatus).label}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Language</span>
-                      <span className="font-semibold text-foreground">{focusedProject.language}</span>
+                      <span className="min-w-0 text-right font-semibold text-foreground">{focusedProject.language}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Branch sync</span>
-                      <span className="font-semibold text-foreground">
+                      <span className="min-w-0 text-right font-semibold text-foreground">
                         {focusedProject.hasUpstream
                           ? `${focusedProject.aheadBy} ahead · ${focusedProject.behindBy} behind`
                           : "No upstream"}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Remote</span>
-                      <span className="inline-flex items-center gap-1.5 text-foreground">
+                      <span className="inline-flex min-w-0 items-center gap-1.5 text-right text-foreground">
                         {focusedProject.remoteUrl ? <Globe className="w-3.5 h-3.5 text-chart-1" /> : <Link2Off className="w-3.5 h-3.5 text-chart-3" />}
                         {focusedProject.remoteUrl ? "Configured" : "Missing"}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Last updated</span>
-                      <span className="font-semibold text-foreground">
+                      <span className="min-w-0 text-right font-semibold text-foreground">
                         {formatDistanceToNow(new Date(focusedProject.lastUpdated), { addSuffix: true })}
                       </span>
                     </div>
@@ -438,8 +376,8 @@ export default function Dashboard() {
                   <div className="space-y-3">
                     {focusedActivityPagination.paginatedItems.map((activity) => (
                       <div key={activity.id} className="rounded-lg border border-border/60 p-3 bg-secondary/20">
-                        <div className="flex items-start justify-between gap-4">
-                          <p className="text-sm font-medium text-foreground">{activity.title}</p>
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                          <p className="min-w-0 text-sm font-medium text-foreground break-words">{activity.title}</p>
                           <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                             {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
                           </span>
@@ -481,16 +419,16 @@ export default function Dashboard() {
                           className="rounded-lg border border-border/60 p-3 bg-secondary/20 cursor-pointer hover:border-black/15 transition-colors"
                           onClick={() => setSelectedPullRequestId(pullRequest.id)}
                         >
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">
+                        <div className="flex flex-col gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground break-words">
                               #{pullRequest.number} {pullRequest.title}
                             </p>
                             <p className="text-xs text-muted-foreground mt-1">
                               {pullRequest.headBranch} into {pullRequest.baseBranch}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${statusMeta.className}`}>
                               {statusMeta.label}
                             </span>
@@ -522,8 +460,8 @@ export default function Dashboard() {
                             </button>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between gap-3 mt-3 text-[11px] text-muted-foreground">
-                          <span>{pullRequest.authoredByViewer ? "Opened by you" : pullRequest.author ?? "Unknown author"}</span>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                          <span className="min-w-0 break-words">{pullRequest.authoredByViewer ? "Opened by you" : pullRequest.author ?? "Unknown author"}</span>
                           <span>{formatDistanceToNow(new Date(pullRequest.updatedAt), { addSuffix: true })}</span>
                         </div>
                       </div>
@@ -616,16 +554,16 @@ export default function Dashboard() {
                         className="rounded-lg border border-border/60 p-3 bg-secondary/20 cursor-pointer hover:border-black/15 transition-colors"
                         onClick={() => setSelectedPullRequestId(pullRequest.id)}
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">
+                        <div className="flex flex-col gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground break-words">
                               #{pullRequest.number} {pullRequest.title}
                             </p>
                             <p className="text-xs text-muted-foreground mt-1">
                               {pullRequest.repo} · {pullRequest.headBranch} into {pullRequest.baseBranch}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2 flex-wrap justify-end">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${statusMeta.className}`}>
                               {statusMeta.label}
                             </span>
@@ -657,8 +595,8 @@ export default function Dashboard() {
                             </button>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between gap-3 mt-3 text-[11px] text-muted-foreground">
-                          <span>{pullRequest.authoredByViewer ? "Opened by you" : pullRequest.author ?? "Unknown author"}</span>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                          <span className="min-w-0 break-words">{pullRequest.authoredByViewer ? "Opened by you" : pullRequest.author ?? "Unknown author"}</span>
                           <span>{formatDistanceToNow(new Date(pullRequest.updatedAt), { addSuffix: true })}</span>
                         </div>
                       </div>
@@ -715,18 +653,22 @@ export default function Dashboard() {
                   ))}
                 </div>
               ) : (
-                <div className="bg-white border border-border/60 rounded-xl px-4 py-1 shadow-sm overflow-hidden">
-                  <div className="hidden md:grid grid-cols-12 gap-4 py-2.5 border-b border-border/40 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    <div className="col-span-4 lg:col-span-3 ml-5">Repository</div>
-                    <div className="col-span-3 lg:col-span-2">Branches</div>
-                    <div className="col-span-2 lg:col-span-2">Contributors</div>
-                    <div className="hidden lg:block col-span-3">Remote</div>
-                    <div className="col-span-3 lg:col-span-2 text-right">Last Updated</div>
-                  </div>
-                  <div className="flex flex-col">
-                    {activeProjectsPagination.paginatedItems.map((project) => (
-                      <ProjectRow key={project.id} project={project} />
-                    ))}
+                <div className="overflow-hidden rounded-xl border border-border/60 bg-white px-4 py-1 shadow-sm">
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[820px]">
+                      <div className="hidden md:grid grid-cols-12 gap-4 py-2.5 border-b border-border/40 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        <div className="col-span-4 lg:col-span-3 ml-5">Repository</div>
+                        <div className="col-span-3 lg:col-span-2">Branches</div>
+                        <div className="col-span-2 lg:col-span-2">Contributors</div>
+                        <div className="hidden lg:block col-span-3">Remote</div>
+                        <div className="col-span-3 lg:col-span-2 text-right">Last Updated</div>
+                      </div>
+                      <div className="flex flex-col">
+                        {activeProjectsPagination.paginatedItems.map((project) => (
+                          <ProjectRow key={project.id} project={project} />
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

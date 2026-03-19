@@ -137,15 +137,15 @@ export default function Projects() {
   return (
     <AppLayout>
       <>
-        <div className="h-full flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-500 max-w-[1200px] mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
+        <div className="mx-auto flex h-full w-full min-w-0 max-w-[1200px] flex-col animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Local Projects</h1>
             <p className="text-muted-foreground text-sm">Browse repositories and local workspaces tracked by DevDeck.</p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative w-64">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative w-full sm:w-64">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
@@ -166,54 +166,60 @@ export default function Projects() {
           </div>
         </div>
 
-        <div className="flex flex-1 gap-6 min-h-0">
-          <div className="flex-1 bg-white/60 backdrop-blur-md border border-border/60 rounded-xl shadow-sm overflow-hidden flex flex-col">
-            <div className="grid grid-cols-12 gap-4 px-5 py-3 border-b border-border/40 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider bg-secondary/30 backdrop-blur-md">
-              <div className="col-span-5">Repository</div>
-              <div className="col-span-2">Language</div>
-              <div className="col-span-2">Health</div>
-              <div className="col-span-3 text-right">Last Updated</div>
-            </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-6 xl:flex-row">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-white/60 backdrop-blur-md shadow-sm">
+            <div className="flex-1 overflow-auto">
+              <div className="min-w-[720px]">
+                <div className="grid grid-cols-12 gap-4 border-b border-border/40 bg-secondary/30 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-md">
+                  <div className="col-span-5">Repository</div>
+                  <div className="col-span-2">Language</div>
+                  <div className="col-span-2">Health</div>
+                  <div className="col-span-3 text-right">Last Updated</div>
+                </div>
 
-              <div className="flex-1 overflow-y-auto">
-              {projectsPagination.paginatedItems.map((project) => (
-                <div
-                  key={project.id}
-                  onClick={() => setSelectedProjectId(project.id)}
-                  className={`grid grid-cols-12 gap-4 px-5 py-3 border-b border-border/40 last:border-0 cursor-pointer transition-colors items-center ${selectedProject?.id === project.id ? "bg-primary/[0.04]" : "hover:bg-black/[0.02]"}`}
-                >
-                  <div className="col-span-5 flex flex-col min-w-0 pr-4">
-                    <span className="font-semibold text-[13px] text-foreground truncate">{project.name}</span>
-                    <span className="text-[10px] text-muted-foreground truncate font-mono mt-0.5 flex items-center gap-1">
-                      <HardDrive className="w-2.5 h-2.5" />
-                      {project.localPath}
-                    </span>
-                  </div>
+                <div className="flex flex-col">
+                  {projectsPagination.paginatedItems.map((project) => (
+                    <div
+                      key={project.id}
+                      onClick={() => setSelectedProjectId(project.id)}
+                      className={`grid grid-cols-12 gap-4 px-5 py-3 border-b border-border/40 last:border-0 cursor-pointer transition-colors items-center ${selectedProject?.id === project.id ? "bg-primary/[0.04]" : "hover:bg-black/[0.02]"}`}
+                    >
+                      <div className="col-span-5 flex min-w-0 flex-col pr-4">
+                        <span className="font-semibold text-[13px] text-foreground truncate">{project.name}</span>
+                        <span className="text-[10px] text-muted-foreground truncate font-mono mt-0.5 flex items-center gap-1">
+                          <HardDrive className="w-2.5 h-2.5 flex-shrink-0" />
+                          {project.localPath}
+                        </span>
+                      </div>
 
-                  <div className="col-span-2 text-[12px] text-muted-foreground">
-                    {project.language}
-                  </div>
+                      <div className="col-span-2 text-[12px] text-muted-foreground">
+                        {project.language}
+                      </div>
 
-                  <div className="col-span-2">
-                    <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-sm border ${project.status === "healthy" ? "bg-chart-1/10 text-chart-1 border-chart-1/20" : project.status === "warning" ? "bg-chart-2/10 text-chart-2 border-chart-2/20" : "bg-chart-3/10 text-chart-3 border-chart-3/20"}`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${project.status === "healthy" ? "bg-chart-1" : project.status === "warning" ? "bg-chart-2" : "bg-chart-3"}`} />
-                      <span className="capitalize">{project.status}</span>
-                    </span>
-                  </div>
+                      <div className="col-span-2">
+                        <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-sm border ${project.status === "healthy" ? "bg-chart-1/10 text-chart-1 border-chart-1/20" : project.status === "warning" ? "bg-chart-2/10 text-chart-2 border-chart-2/20" : "bg-chart-3/10 text-chart-3 border-chart-3/20"}`}>
+                          <div className={`w-1.5 h-1.5 rounded-full ${project.status === "healthy" ? "bg-chart-1" : project.status === "warning" ? "bg-chart-2" : "bg-chart-3"}`} />
+                          <span className="capitalize">{project.status}</span>
+                        </span>
+                      </div>
 
-                  <div className="col-span-3 text-[11px] text-muted-foreground text-right flex items-center justify-end gap-3">
-                    {formatDistanceToNow(new Date(project.lastUpdated), { addSuffix: true })}
-                    <div className="p-1 rounded hover:bg-black/5 text-muted-foreground/50 hover:text-foreground transition-colors" onClick={(event) => event.stopPropagation()}>
-                      <MoreHorizontal className="w-4 h-4" />
+                      <div className="col-span-3 flex items-center justify-end gap-3 text-right text-[11px] text-muted-foreground">
+                        <span className="whitespace-nowrap">
+                          {formatDistanceToNow(new Date(project.lastUpdated), { addSuffix: true })}
+                        </span>
+                        <div className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-black/5 hover:text-foreground" onClick={(event) => event.stopPropagation()}>
+                          <MoreHorizontal className="w-4 h-4" />
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  ))}
+                  {filteredProjects.length === 0 && (
+                    <div className="p-8 text-center text-muted-foreground text-sm">
+                      {isLoading ? "Scanning your workspace..." : `No repositories found matching "${searchQuery}"`}
+                    </div>
+                  )}
                 </div>
-              ))}
-              {filteredProjects.length === 0 && (
-                <div className="p-8 text-center text-muted-foreground text-sm">
-                  {isLoading ? "Scanning your workspace..." : `No repositories found matching "${searchQuery}"`}
-                </div>
-              )}
+              </div>
             </div>
             <div className="border-t border-border/40 px-5 py-3">
               <PaginationControls
@@ -227,7 +233,7 @@ export default function Projects() {
           </div>
 
           {selectedProject ? (
-            <div className="w-[320px] bg-white/60 backdrop-blur-md border border-border/60 rounded-xl shadow-sm flex flex-col flex-shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="flex w-full min-w-0 flex-col rounded-xl border border-border/60 bg-white/60 shadow-sm backdrop-blur-md xl:w-[320px] xl:max-w-[320px] xl:flex-shrink-0 animate-in fade-in slide-in-from-right-4 duration-300">
               <div className="p-5 border-b border-border/40 bg-secondary/20 backdrop-blur-sm">
                 <div className="flex items-start justify-between gap-4 mb-3">
                   <div className="bg-primary/10 p-2.5 rounded-lg border border-primary/20">
@@ -256,8 +262,8 @@ export default function Projects() {
                   </div>
                 </div>
 
-                <h2 className="text-lg font-bold text-foreground mb-1">{selectedProject.name}</h2>
-                <p className="text-[12px] text-muted-foreground mb-3">{selectedProject.description}</p>
+                <h2 className="text-lg font-bold text-foreground mb-1 break-words">{selectedProject.name}</h2>
+                <p className="text-[12px] text-muted-foreground mb-3 break-words">{selectedProject.description}</p>
 
                 <div className="text-[10px] font-mono bg-white p-2 rounded-md border border-border text-muted-foreground break-all leading-tight shadow-inner">
                   {selectedProject.localPath}
@@ -268,31 +274,31 @@ export default function Projects() {
                 <div>
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Repository Info</h3>
                   <div className="space-y-2.5">
-                    <div className="flex items-center justify-between text-[12px] gap-3">
+                    <div className="flex items-start justify-between text-[12px] gap-3">
                       <span className="text-muted-foreground flex items-center gap-2"><MessageSquare className="w-3.5 h-3.5" /> Pull Requests</span>
-                      <span className="text-foreground font-medium">{selectedProject.openPullRequestCount} open · {selectedProject.awaitingReviewCount} waiting</span>
+                      <span className="min-w-0 text-right text-foreground font-medium break-words">{selectedProject.openPullRequestCount} open · {selectedProject.awaitingReviewCount} waiting</span>
                     </div>
-                    <div className="flex items-center justify-between text-[12px] gap-3">
+                    <div className="flex items-start justify-between text-[12px] gap-3">
                       <span className="text-muted-foreground flex items-center gap-2"><GitBranch className="w-3.5 h-3.5" /> Branch Sync</span>
-                      <span className="text-foreground">{selectedProject.hasUpstream ? `${selectedProject.aheadBy} ahead · ${selectedProject.behindBy} behind` : "No upstream"}</span>
+                      <span className="min-w-0 text-right text-foreground break-words">{selectedProject.hasUpstream ? `${selectedProject.aheadBy} ahead · ${selectedProject.behindBy} behind` : "No upstream"}</span>
                     </div>
-                    <div className="flex items-center justify-between text-[12px] gap-3">
+                    <div className="flex items-start justify-between text-[12px] gap-3">
                       <span className="text-muted-foreground flex items-center gap-2"><GitBranch className="w-3.5 h-3.5" /> Current Branch</span>
-                      <span className="font-mono bg-secondary px-1.5 py-0.5 rounded text-foreground break-all">{selectedProject.currentBranch}</span>
+                      <span className="min-w-0 break-all bg-secondary px-1.5 py-0.5 rounded text-right font-mono text-foreground">{selectedProject.currentBranch}</span>
                     </div>
-                    <div className="flex items-center justify-between text-[12px] gap-3">
+                    <div className="flex items-start justify-between text-[12px] gap-3">
                       <span className="text-muted-foreground flex items-center gap-2"><GitBranch className="w-3.5 h-3.5" /> Default Branch</span>
-                      <span className="font-mono bg-secondary px-1.5 py-0.5 rounded text-foreground break-all">{selectedProject.defaultBranch}</span>
+                      <span className="min-w-0 break-all bg-secondary px-1.5 py-0.5 rounded text-right font-mono text-foreground">{selectedProject.defaultBranch}</span>
                     </div>
-                    <div className="flex items-center justify-between text-[12px]">
+                    <div className="flex items-start justify-between text-[12px] gap-3">
                       <span className="text-muted-foreground flex items-center gap-2"><Calendar className="w-3.5 h-3.5" /> Last Activity</span>
-                      <span className="text-foreground">{formatDistanceToNow(new Date(selectedProject.lastUpdated))} ago</span>
+                      <span className="min-w-0 text-right text-foreground break-words">{formatDistanceToNow(new Date(selectedProject.lastUpdated))} ago</span>
                     </div>
-                    <div className="flex items-center justify-between text-[12px]">
+                    <div className="flex items-start justify-between text-[12px] gap-3">
                       <span className="text-muted-foreground flex items-center gap-2"><Users className="w-3.5 h-3.5" /> Contributors</span>
-                      <span className="text-foreground font-medium">{selectedProject.contributorCount7d} in the last 7 days</span>
+                      <span className="min-w-0 text-right text-foreground font-medium break-words">{selectedProject.contributorCount7d} in the last 7 days</span>
                     </div>
-                    <div className="flex items-center justify-between text-[12px]">
+                    <div className="flex items-start justify-between text-[12px] gap-3">
                       <span className="text-muted-foreground flex items-center gap-2"><Globe className="w-3.5 h-3.5" /> CI Status</span>
                       <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getCiStatusMeta(selectedProject.ciStatus).className}`}>
                         {getCiStatusMeta(selectedProject.ciStatus).label}
@@ -407,7 +413,7 @@ export default function Projects() {
               </div>
             </div>
           ) : (
-            <div className="w-[320px] bg-secondary/30 border border-border/40 rounded-xl flex items-center justify-center flex-shrink-0 border-dashed">
+            <div className="flex w-full min-w-0 items-center justify-center rounded-xl border border-border/40 border-dashed bg-secondary/30 xl:w-[320px] xl:max-w-[320px] xl:flex-shrink-0">
               <p className="text-sm text-muted-foreground font-medium">Select a project to inspect</p>
             </div>
           )}

@@ -31,7 +31,7 @@ export default function ProjectRow({ project }: ProjectRowProps) {
           setLocation(projectHref);
         }
       }}
-      className="group flex items-center gap-4 py-2.5 px-4 -mx-4 hover:bg-black/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-md transition-colors border-b border-border/40 last:border-0 cursor-pointer"
+      className="group flex items-start gap-4 py-2.5 px-4 -mx-4 border-b border-border/40 last:border-0 cursor-pointer rounded-md transition-colors hover:bg-black/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:items-center"
         aria-label={`Open ${project.name} overview`}
     >
         <div className={`w-1.5 h-1.5 rounded-full ${statusColors[project.status]}`} />

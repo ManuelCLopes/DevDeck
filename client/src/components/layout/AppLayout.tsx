@@ -257,11 +257,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
                         onClick={() =>
                           setLocation(`/?project=${encodeURIComponent(project.id)}`)
                         }
-                        className="flex min-w-0 flex-1 items-center gap-2 px-0.5 py-0.5 text-left"
+                        className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-0.5 py-0.5 text-left"
                         title={project.localPath ?? project.name}
                       >
                         <HardDrive className="w-3.5 h-3.5 opacity-60 text-primary group-hover:opacity-100 transition-opacity" />
-                        <span className="truncate">{project.name}</span>
+                        <span className="block min-w-0 truncate leading-tight">
+                          {project.name}
+                        </span>
                       </button>
                       {project.localPath ? (
                         <ProjectQuickActions
@@ -305,8 +307,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <main className="flex-1 flex flex-col min-w-0 bg-[#fbfbfb] shadow-[-1px_0_0_0_rgba(0,0,0,0.1)] z-10">
           
           {/* Top Titlebar / Toolbar */}
-          <header className="h-[52px] border-b border-black/10 flex items-center justify-between px-4 titlebar-drag-region bg-white/60 backdrop-blur-md sticky top-0 z-50">
-            <div className="flex items-center gap-4 no-drag">
+          <header className="h-[52px] border-b border-black/10 flex items-center justify-between gap-3 px-3 sm:px-4 titlebar-drag-region bg-white/60 backdrop-blur-md sticky top-0 z-50">
+            <div className="flex min-w-0 items-center gap-3 sm:gap-4 no-drag">
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -330,7 +332,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <h1 className="font-semibold text-sm">DevDeck</h1>
             </div>
 
-            <div className="flex items-center gap-3 no-drag">
+            <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3 no-drag">
               <div className="hidden xl:flex items-center gap-2 rounded-md border border-black/5 bg-secondary/60 px-2.5 py-1 text-[11px] text-muted-foreground">
                 <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
                 <span>
@@ -344,10 +346,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <button
                 type="button"
                 onClick={() => setIsSearchOpen(true)}
-                className="relative w-64 h-7 pl-8 pr-12 rounded-md bg-secondary/70 border border-black/5 hover:bg-background text-left focus:bg-background focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none text-xs transition-all text-muted-foreground"
+                className="relative hidden lg:block h-7 w-full max-w-64 min-w-0 pl-8 pr-12 rounded-md bg-secondary/70 border border-black/5 hover:bg-background text-left focus:bg-background focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none text-xs transition-all text-muted-foreground"
               >
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <span>Search projects, PRs, activity...</span>
+                <span className="block truncate">Search projects, PRs, activity...</span>
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground/80">
                   {typeof navigator !== "undefined" && navigator.platform.includes("Mac")
                     ? "⌘K"
@@ -376,8 +378,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </header>
 
           {/* Scrollable Content */}
-          <div className="flex-1 overflow-auto bg-white p-6 md:p-8 no-drag">
-            <div className="max-w-[1200px] mx-auto">
+          <div className="flex-1 overflow-x-hidden overflow-y-auto bg-white p-4 sm:p-6 lg:p-8 no-drag">
+            <div className="mx-auto w-full min-w-0 max-w-[1200px]">
               {children}
             </div>
           </div>

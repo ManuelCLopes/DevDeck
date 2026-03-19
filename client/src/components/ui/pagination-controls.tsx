@@ -29,24 +29,24 @@ export default function PaginationControls({
   const endItem = totalItems === 0 ? 0 : Math.min(currentPage * pageSize, totalItems);
 
   return (
-    <div className={cn("flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between", className)}>
-      <p className="text-xs text-muted-foreground">
+    <div className={cn("flex flex-col gap-3 pt-4", className)}>
+      <p className="min-w-0 break-words text-xs leading-relaxed text-muted-foreground">
         Showing {startItem}-{endItem} of {totalItems} {label}
       </p>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
           variant="outline"
           size="sm"
           disabled={currentPage === 1}
           onClick={() => onPageChange(currentPage - 1)}
-          className="gap-1.5"
+          className="shrink-0 gap-1.5"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
           Previous
         </Button>
-        <span className="min-w-[88px] text-center text-xs font-medium text-muted-foreground">
+        <span className="min-w-[88px] flex-1 text-center text-xs font-medium text-muted-foreground">
           Page {currentPage} of {totalPages}
         </span>
         <Button
@@ -55,7 +55,7 @@ export default function PaginationControls({
           size="sm"
           disabled={currentPage === totalPages}
           onClick={() => onPageChange(currentPage + 1)}
-          className="gap-1.5"
+          className="shrink-0 gap-1.5"
         >
           Next
           <ChevronRight className="w-3.5 h-3.5" />

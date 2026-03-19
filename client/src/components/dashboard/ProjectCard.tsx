@@ -43,9 +43,9 @@ export default function ProjectCard({ project }: ProjectCardProps) {
         <div className="p-4 flex flex-col gap-4 flex-1">
           {/* Header */}
           <div className="flex justify-between items-start gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-semibold text-[15px] tracking-tight text-foreground">{project.name}</h3>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                <h3 className="min-w-0 truncate font-semibold text-[15px] tracking-tight text-foreground">{project.name}</h3>
                 <span className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-[1px] rounded-sm border ${statusColors[project.status]}`}>
                   {project.status}
                 </span>
@@ -74,9 +74,9 @@ export default function ProjectCard({ project }: ProjectCardProps) {
               <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
                 <GitBranch className="w-3.5 h-3.5" /> Branches
               </span>
-              <div className="flex items-baseline gap-2">
-                <span className="text-lg font-bold">{project.branchCount}</span>
-                <span className="text-[10px] text-muted-foreground font-medium">
+            <div className="flex items-baseline gap-2">
+              <span className="text-lg font-bold">{project.branchCount}</span>
+                <span className="min-w-0 truncate text-[10px] text-muted-foreground font-medium">
                   current {project.currentBranch}
                 </span>
               </div>

@@ -47,9 +47,9 @@ export default function Activity() {
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-        <div className="flex items-center justify-between gap-4">
-          <div>
+      <div className="mx-auto w-full max-w-4xl min-w-0 space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Activity Inbox</h1>
             <p className="text-muted-foreground text-sm">Recent local Git activity across repositories tracked by DevDeck.</p>
           </div>
@@ -102,8 +102,8 @@ export default function Activity() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-4 mb-1">
-                      <p className="text-[13px] font-semibold text-foreground">
+                    <div className="mb-1 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                      <p className="min-w-0 text-[13px] font-semibold text-foreground break-words">
                         {activity.title}
                       </p>
                       <span className="text-[11px] text-muted-foreground whitespace-nowrap">
@@ -115,7 +115,7 @@ export default function Activity() {
                       {activity.description}
                     </p>
 
-                    <div className="flex items-center gap-3 text-[11px] font-medium text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-3 text-[11px] font-medium text-muted-foreground">
                       <span className="font-mono bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50 text-foreground/80">
                         {activity.repo}
                       </span>

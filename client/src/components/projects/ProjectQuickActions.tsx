@@ -1,6 +1,7 @@
 import type { MouseEvent } from "react";
 import { Copy, FolderOpen, Trash2 } from "lucide-react";
 import { useProjectActions } from "@/hooks/use-project-actions";
+import vsCodeLogo from "@/assets/vscode.svg";
 
 interface ProjectQuickActionsProps {
   className?: string;
@@ -19,7 +20,7 @@ export default function ProjectQuickActions({
 }: ProjectQuickActionsProps) {
   const { copyPath, openInCode, removeProject, revealInFinder } = useProjectActions();
   const buttonClassName = compact
-    ? "rounded-md border border-border/60 bg-white/90 px-2 py-1 text-[10px] font-medium text-muted-foreground shadow-sm transition-colors hover:bg-secondary hover:text-foreground"
+    ? "flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-white/90 text-muted-foreground shadow-sm transition-colors hover:bg-secondary hover:text-foreground"
     : "rounded-md border border-border/60 bg-white/90 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:bg-secondary hover:text-foreground";
 
   const handleAction =
@@ -32,7 +33,11 @@ export default function ProjectQuickActions({
 
   return (
     <div
-      className={`no-drag flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 ${className}`}
+      className={`no-drag flex items-center overflow-hidden transition-[max-width,opacity,transform] duration-200 ${
+        compact
+          ? "max-w-0 gap-1 opacity-0 -translate-x-1 pointer-events-none group-hover:max-w-32 group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto focus-within:max-w-32 focus-within:opacity-100 focus-within:translate-x-0 focus-within:pointer-events-auto"
+          : "max-w-0 gap-1 opacity-0 translate-x-1 pointer-events-none group-hover:max-w-72 group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto focus-within:max-w-72 focus-within:opacity-100 focus-within:translate-x-0 focus-within:pointer-events-auto"
+      } ${className}`}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -45,7 +50,16 @@ export default function ProjectQuickActions({
         aria-label={`Open ${projectName} in VS Code`}
         title="Open in VS Code"
       >
-        {compact ? "VS" : "Code"}
+        {compact ? (
+          <img
+            src={vsCodeLogo}
+            alt=""
+            aria-hidden="true"
+            className="h-3.5 w-3.5 object-contain"
+          />
+        ) : (
+          "Code"
+        )}
       </button>
       <button
         type="button"
