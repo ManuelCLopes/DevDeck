@@ -12,15 +12,16 @@ The app now runs through Electron on top of the existing React and Vite UI, so i
 - Includes a local-first onboarding flow and preferences screen
 - Packages as a native macOS app bundle
 
-## Current state
+## Open-source status
 
-This repository is still a prototype:
+DevDeck is open-source and usable today, but it should still be treated as an experimental alpha:
 
-- No production API routes are implemented yet
-- Some repository insights are still inferred from local Git metadata only
-- macOS packaging is unsigned by default unless you provide Apple signing credentials
+- local repository scanning and GitHub PR sync are real
+- some repository insights are still inferred from local Git metadata only
+- release signing and notarization depend on maintainers providing Apple credentials
+- the app is currently macOS-first
 
-That means DevDeck now scans real local repositories and can sync hosted pull request state from GitHub, but parts of the experience are still evolving.
+If you are opening issues or pull requests, expect active iteration and some rough edges around platform support and workflow polish.
 
 ## Requirements
 
@@ -154,7 +155,7 @@ If you also want the produced `.app` and `.dmg` signed, provide `CSC_LINK` and `
 
 ## GitHub Actions release
 
-There is also a macOS release workflow at [.github/workflows/release-mac.yml](/Users/manuellopes/Desktop/DevDeck/.github/workflows/release-mac.yml).
+There is also a macOS release workflow at [.github/workflows/release-mac.yml](.github/workflows/release-mac.yml).
 
 It can be triggered manually or by pushing a tag like `v1.0.0`, and it will:
 
@@ -170,6 +171,15 @@ Repository secrets expected by that workflow:
 - `CSC_LINK`
 - `CSC_KEY_PASSWORD`
 - `APPLE_NOTARY_PROFILE`, or `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`
+
+## Contributing
+
+If you want to contribute, start here:
+
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- [SECURITY.md](SECURITY.md)
+- [LICENSE](LICENSE)
 
 ## Type check
 
