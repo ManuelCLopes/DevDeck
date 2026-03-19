@@ -103,6 +103,7 @@ export interface WorkspacePullRequestItem {
   number: number;
   projectId: string;
   repo: string;
+  repositorySlug: string;
   reviewCount: number;
   reviewState: WorkspacePullRequestReviewState;
   reviewTimeline: WorkspacePullRequestReviewEvent[];

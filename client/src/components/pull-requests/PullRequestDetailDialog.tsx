@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
+import { useEffect, useState } from "react";
 import {
   ArrowUpRight,
   CheckCheck,
@@ -6,11 +7,14 @@ import {
   GitBranch,
   Github,
   ListChecks,
+  MessageSquare,
   Route,
   User2,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -26,7 +30,9 @@ import {
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
 } from "@/lib/pull-request-utils";
+import { parseReviewerLogins } from "@/lib/pull-request-actions";
 import { setStoredReviewFocus } from "@/lib/review-focus";
+import { toast } from "@/hooks/use-toast";
 import type { WorkspacePullRequestItem } from "@shared/workspace";
 import { useLocation } from "wouter";
 
@@ -42,6 +48,11 @@ export default function PullRequestDetailDialog({
   pullRequest,
 }: PullRequestDetailDialogProps) {
   const [, setLocation] = useLocation();
+  const [commentBody, setCommentBody] = useState("");
+  const [reviewerInput, setReviewerInput] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [isSubmittingReviewers, setIsSubmittingReviewers] = useState(false);
   const statusMeta = pullRequest
     ? getPullRequestStatusMeta(pullRequest.status)
     : null;
@@ -54,13 +65,25 @@ export default function PullRequestDetailDialog({
   const ciStatusMeta = pullRequest
     ? getPullRequestCiStatusMeta(pullRequest.ciStatus)
     : null;
+  const desktopApi = getDesktopApi();
+  const reviewerLogins = parseReviewerLogins(reviewerInput);
+  const canRunGitHubActions = Boolean(desktopApi && pullRequest?.repositorySlug);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setCommentBody("");
+    setReviewerInput("");
+    setActionError(null);
+  }, [open, pullRequest?.id]);
 
   const handleOpenPullRequest = async () => {
     if (!pullRequest) {
       return;
     }
 
-    const desktopApi = getDesktopApi();
     if (desktopApi) {
       await desktopApi.openExternal(pullRequest.url);
       return;
@@ -74,7 +97,6 @@ export default function PullRequestDetailDialog({
       return;
     }
 
-    const desktopApi = getDesktopApi();
     if (desktopApi?.copyToClipboard) {
       await desktopApi.copyToClipboard(pullRequest.url);
       return;
@@ -88,7 +110,6 @@ export default function PullRequestDetailDialog({
       return;
     }
 
-    const desktopApi = getDesktopApi();
     if (desktopApi?.copyToClipboard) {
       await desktopApi.copyToClipboard(pullRequest.headBranch);
       return;
@@ -101,6 +122,77 @@ export default function PullRequestDetailDialog({
     setStoredReviewFocus(focus);
     onOpenChange(false);
     setLocation("/reviews");
+  };
+
+  const handleAddComment = async () => {
+    const activeDesktopApi = getDesktopApi();
+    if (!pullRequest || !pullRequest.repositorySlug || !activeDesktopApi) {
+      return;
+    }
+
+    const trimmedCommentBody = commentBody.trim();
+    if (!trimmedCommentBody) {
+      setActionError("Write a comment before sending it to GitHub.");
+      return;
+    }
+
+    setActionError(null);
+    setIsSubmittingComment(true);
+    try {
+      await activeDesktopApi.addPullRequestComment({
+        body: trimmedCommentBody,
+        pullRequestNumber: pullRequest.number,
+        repositorySlug: pullRequest.repositorySlug,
+      });
+      setCommentBody("");
+      toast({
+        title: "Comment added",
+        description: `Posted to ${pullRequest.repo} #${pullRequest.number}.`,
+      });
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "DevDeck could not post that GitHub comment.",
+      );
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
+  const handleRequestReviewers = async () => {
+    const activeDesktopApi = getDesktopApi();
+    if (!pullRequest || !pullRequest.repositorySlug || !activeDesktopApi) {
+      return;
+    }
+
+    if (reviewerLogins.length === 0) {
+      setActionError("Enter at least one reviewer login.");
+      return;
+    }
+
+    setActionError(null);
+    setIsSubmittingReviewers(true);
+    try {
+      await activeDesktopApi.requestPullRequestReviewers({
+        pullRequestNumber: pullRequest.number,
+        repositorySlug: pullRequest.repositorySlug,
+        reviewers: reviewerLogins,
+      });
+      setReviewerInput("");
+      toast({
+        title: "Reviewers requested",
+        description: `Updated ${pullRequest.repo} #${pullRequest.number}.`,
+      });
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "DevDeck could not request those reviewers.",
+      );
+    } finally {
+      setIsSubmittingReviewers(false);
+    }
   };
 
   return (
@@ -284,6 +376,89 @@ export default function PullRequestDetailDialog({
                 </p>
               )}
             </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <MessageSquare className="w-3.5 h-3.5 text-primary" />
+                  GitHub Comment
+                </div>
+                <Textarea
+                  value={commentBody}
+                  onChange={(event) => setCommentBody(event.target.value)}
+                  placeholder="Leave a follow-up note for the PR thread."
+                  className="min-h-[108px] bg-white"
+                  disabled={!canRunGitHubActions || isSubmittingComment || isSubmittingReviewers}
+                />
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground">
+                    Add a comment without leaving DevDeck.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleAddComment()}
+                    disabled={
+                      !canRunGitHubActions ||
+                      isSubmittingComment ||
+                      isSubmittingReviewers ||
+                      commentBody.trim().length === 0
+                    }
+                  >
+                    {isSubmittingComment ? "Sending..." : "Post Comment"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Users className="w-3.5 h-3.5 text-primary" />
+                  Request Reviewers
+                </div>
+                <Input
+                  value={reviewerInput}
+                  onChange={(event) => setReviewerInput(event.target.value)}
+                  placeholder="@manuel, teammate"
+                  className="bg-white"
+                  disabled={!canRunGitHubActions || isSubmittingComment || isSubmittingReviewers}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separate GitHub logins with commas or spaces. Existing review requests stay visible above.
+                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground">
+                    {reviewerLogins.length > 0
+                      ? `Will request: ${reviewerLogins.join(", ")}`
+                      : "Add one or more reviewers to this PR."}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleRequestReviewers()}
+                    disabled={
+                      !canRunGitHubActions ||
+                      isSubmittingComment ||
+                      isSubmittingReviewers ||
+                      reviewerLogins.length === 0
+                    }
+                  >
+                    {isSubmittingReviewers ? "Requesting..." : "Request Review"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {!canRunGitHubActions && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
+                GitHub actions are only available in the desktop app after connecting GitHub in Preferences.
+              </div>
+            )}
+
+            {actionError && (
+              <div className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700">
+                {actionError}
+              </div>
+            )}
 
             <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 space-y-3">
               <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

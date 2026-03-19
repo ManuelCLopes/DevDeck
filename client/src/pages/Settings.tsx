@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import GitHubConnectDialog from "@/components/settings/GitHubConnectDialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import {
   Select,
@@ -36,15 +37,19 @@ import {
   moveManagedProject,
   moveManagedProjectCollection,
   removeManagedProject,
+  removeManagedProjectCollection,
+  removeManagedProjects,
   renameManagedProjectCollection,
   setWorkspaceSelection,
 } from "@/lib/workspace-selection";
+import type { WorkspaceSelection } from "@shared/workspace";
 
 export default function Settings() {
   const [, setLocation] = useLocation();
   const { data: snapshot, isFetching, refetch } = useWorkspaceSnapshot();
   const { preferences, setPreference } = useAppPreferences();
   const [isGitHubConnectOpen, setIsGitHubConnectOpen] = useState(false);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const workspaceSelection = useWorkspaceSelection();
   const managedCollections = getManagedProjectCollections(workspaceSelection);
   const githubStatus = snapshot?.githubStatus;
@@ -54,7 +59,7 @@ export default function Settings() {
   const desktopApi = getDesktopApi();
 
   const persistWorkspaceSelection = async (
-    nextSelection: ReturnType<typeof renameManagedProjectCollection>,
+    nextSelection: WorkspaceSelection | null,
   ) => {
     if (!nextSelection) {
       clearWorkspaceSelection();
@@ -67,6 +72,14 @@ export default function Settings() {
     setWorkspaceSelection(nextSelection);
     void queryClient.invalidateQueries({ queryKey: ["workspace", "snapshot"] });
   };
+
+  useEffect(() => {
+    setSelectedProjectIds((currentSelection) =>
+      currentSelection.filter((projectId) =>
+        workspaceSelection?.projects.some((project) => project.id === projectId),
+      ),
+    );
+  }, [workspaceSelection]);
 
   const handleResetOnboarding = () => {
     clearCompletedOnboarding();
@@ -108,7 +121,73 @@ export default function Settings() {
   };
 
   const handleRemoveProject = async (projectId: string) => {
+    setSelectedProjectIds((currentSelection) =>
+      currentSelection.filter((selectedProjectId) => selectedProjectId !== projectId),
+    );
     await persistWorkspaceSelection(removeManagedProject(workspaceSelection, projectId));
+  };
+
+  const handleToggleProjectSelection = (projectId: string, checked: boolean) => {
+    setSelectedProjectIds((currentSelection) => {
+      if (checked) {
+        return currentSelection.includes(projectId)
+          ? currentSelection
+          : [...currentSelection, projectId];
+      }
+
+      return currentSelection.filter((selectedProjectId) => selectedProjectId !== projectId);
+    });
+  };
+
+  const handleToggleCollectionSelection = (
+    collectionId: string,
+    checked: boolean,
+  ) => {
+    const collection = managedCollections.find(
+      (managedCollection) => managedCollection.id === collectionId,
+    );
+    if (!collection) {
+      return;
+    }
+
+    const collectionProjectIds = collection.projects.map((project) => project.id);
+    setSelectedProjectIds((currentSelection) => {
+      if (checked) {
+        return Array.from(new Set([...currentSelection, ...collectionProjectIds]));
+      }
+
+      return currentSelection.filter(
+        (selectedProjectId) => !collectionProjectIds.includes(selectedProjectId),
+      );
+    });
+  };
+
+  const handleRemoveSelectedProjects = async () => {
+    if (selectedProjectIds.length === 0) {
+      return;
+    }
+
+    await persistWorkspaceSelection(
+      removeManagedProjects(workspaceSelection, selectedProjectIds),
+    );
+    setSelectedProjectIds([]);
+  };
+
+  const handleRemoveCollection = async (collectionId: string) => {
+    const collection = managedCollections.find(
+      (managedCollection) => managedCollection.id === collectionId,
+    );
+    if (!collection) {
+      return;
+    }
+
+    await persistWorkspaceSelection(
+      removeManagedProjectCollection(workspaceSelection, collectionId),
+    );
+    const collectionProjectIds = new Set(collection.projects.map((project) => project.id));
+    setSelectedProjectIds((currentSelection) =>
+      currentSelection.filter((projectId) => !collectionProjectIds.has(projectId)),
+    );
   };
 
   const lastWorkspaceSyncLabel = snapshot
@@ -217,6 +296,26 @@ export default function Settings() {
 
               {workspaceSelection ? (
                 <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-white px-4 py-3 shadow-sm">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {selectedProjectIds.length > 0
+                          ? `${selectedProjectIds.length} selected`
+                          : "Bulk curation"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Select projects across collections to remove them in one step.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleRemoveSelectedProjects()}
+                      disabled={selectedProjectIds.length === 0}
+                      className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Remove Selected
+                    </button>
+                  </div>
                   {managedCollections.map((collection, collectionIndex) => (
                     <div
                       key={collection.id}
@@ -224,6 +323,28 @@ export default function Settings() {
                     >
                       <div className="flex flex-col gap-4 border-b border-border/40 bg-white/70 px-4 py-4">
                         <div className="flex items-start justify-between gap-4">
+                          <div className="pt-7">
+                            <Checkbox
+                              checked={
+                                collection.projects.every((project) =>
+                                  selectedProjectIds.includes(project.id),
+                                )
+                                  ? true
+                                  : collection.projects.some((project) =>
+                                        selectedProjectIds.includes(project.id),
+                                      )
+                                    ? "indeterminate"
+                                    : false
+                              }
+                              onCheckedChange={(checked) =>
+                                handleToggleCollectionSelection(
+                                  collection.id,
+                                  checked === true,
+                                )
+                              }
+                              aria-label={`Select ${collection.name}`}
+                            />
+                          </div>
                           <div className="min-w-0 flex-1">
                             <label
                               htmlFor={`collection-${collection.id}`}
@@ -254,6 +375,14 @@ export default function Settings() {
                           </div>
 
                           <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => void handleRemoveCollection(collection.id)}
+                              className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-red-50 hover:text-red-600"
+                              aria-label={`Remove ${collection.name}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => void handleMoveCollection(collection.id, "up")}
@@ -288,7 +417,16 @@ export default function Settings() {
                             key={project.localPath ?? project.id}
                             className="flex items-center justify-between gap-4 px-4 py-3"
                           >
-                            <div className="min-w-0">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <Checkbox
+                                checked={selectedProjectIds.includes(project.id)}
+                                onCheckedChange={(checked) =>
+                                  handleToggleProjectSelection(project.id, checked === true)
+                                }
+                                aria-label={`Select ${project.name}`}
+                                className="mt-0.5"
+                              />
+                              <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-foreground">
                                 {project.name}
                               </p>
@@ -298,6 +436,7 @@ export default function Settings() {
                               >
                                 {project.localPath ?? project.relativePath ?? project.name}
                               </p>
+                              </div>
                             </div>
 
                             <div className="flex items-center gap-1">

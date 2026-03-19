@@ -28,6 +28,7 @@ export interface GitHubApiPullRequest {
 }
 
 interface GitHubApiRequestOptions {
+  body?: string;
   method?: string;
   timeoutMs?: number;
 }
@@ -55,9 +56,11 @@ async function githubApiRequest<T>(
 
   try {
     const response = await fetch(`${GITHUB_API_BASE_URL}${pathname}`, {
+      body: options?.body,
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${token}`,
+        ...(options?.body ? { "Content-Type": "application/json" } : {}),
         "X-GitHub-Api-Version": GITHUB_API_VERSION,
       },
       method: options?.method ?? "GET",
@@ -114,4 +117,36 @@ export async function fetchGitHubCommitStatus(
   );
 
   return response.state ?? null;
+}
+
+export async function createGitHubPullRequestComment(
+  repositorySlug: string,
+  pullRequestNumber: number,
+  body: string,
+  token: string,
+) {
+  await githubApiRequest<{ id: number }>(
+    `/repos/${repositorySlug}/issues/${pullRequestNumber}/comments`,
+    token,
+    {
+      body: JSON.stringify({ body }),
+      method: "POST",
+    },
+  );
+}
+
+export async function requestGitHubPullRequestReviewers(
+  repositorySlug: string,
+  pullRequestNumber: number,
+  reviewers: string[],
+  token: string,
+) {
+  await githubApiRequest<{ requested_reviewers: Array<{ login: string }> }>(
+    `/repos/${repositorySlug}/pulls/${pullRequestNumber}/requested_reviewers`,
+    token,
+    {
+      body: JSON.stringify({ reviewers }),
+      method: "POST",
+    },
+  );
 }

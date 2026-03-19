@@ -18,6 +18,13 @@ interface WorkspaceMonitorState {
 }
 
 const devdeck = {
+  addPullRequestComment(payload: {
+    body: string;
+    pullRequestNumber: number;
+    repositorySlug: string;
+  }): Promise<void> {
+    return ipcRenderer.invoke("devdeck:add-pull-request-comment", payload);
+  },
   clearGitHubToken(): Promise<void> {
     return ipcRenderer.invoke("devdeck:clear-github-token");
   },
@@ -60,6 +67,13 @@ const devdeck = {
   },
   pickWorkspaceDirectory(): Promise<WorkspaceDiscoveryResult | null> {
     return ipcRenderer.invoke("devdeck:pick-workspace");
+  },
+  requestPullRequestReviewers(payload: {
+    pullRequestNumber: number;
+    repositorySlug: string;
+    reviewers: string[];
+  }): Promise<void> {
+    return ipcRenderer.invoke("devdeck:request-pull-request-reviewers", payload);
   },
   getGitHubAuthCapabilities() {
     return ipcRenderer.invoke("devdeck:get-github-auth-capabilities");

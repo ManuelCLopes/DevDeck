@@ -696,6 +696,7 @@ async function fetchPullRequests(
         number: normalizedPullRequest.number,
         projectId: project.id,
         repo: project.name,
+        repositorySlug: githubRepository.slug,
         reviewCount: reviewerLogins.length,
         reviewState: getPullRequestReviewState(
           reviewedByViewer,

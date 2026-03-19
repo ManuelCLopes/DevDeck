@@ -17,6 +17,11 @@ interface WorkspaceMonitorState {
 }
 
 interface DevDeckDesktopApi {
+  addPullRequestComment(payload: {
+    body: string;
+    pullRequestNumber: number;
+    repositorySlug: string;
+  }): Promise<void>;
   clearGitHubToken(): Promise<void>;
   copyToClipboard(value: string): Promise<void>;
   getGitHubAuthCapabilities(): Promise<{ deviceFlowAvailable: boolean }>;
@@ -29,6 +34,11 @@ interface DevDeckDesktopApi {
   openInCode(targetPath: string): Promise<void>;
   openInTerminal(targetPath: string): Promise<void>;
   pickWorkspaceDirectory(): Promise<WorkspaceDiscoveryResult | null>;
+  requestPullRequestReviewers(payload: {
+    pullRequestNumber: number;
+    repositorySlug: string;
+    reviewers: string[];
+  }): Promise<void>;
   pollGitHubDeviceAuth(deviceCode: string): Promise<{
     intervalSeconds?: number;
     message: string;

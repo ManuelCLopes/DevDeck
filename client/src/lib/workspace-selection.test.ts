@@ -6,6 +6,8 @@ import {
   mergeWorkspaceSelection,
   moveManagedProject,
   moveManagedProjectCollection,
+  removeManagedProjectCollection,
+  removeManagedProjects,
   removeManagedProject,
 } from "./workspace-selection";
 
@@ -217,4 +219,87 @@ test("removeManagedProject returns null when the last project is removed", () =>
   });
 
   assert.equal(removeManagedProject(selection, "Desktop/client"), null);
+});
+
+test("removeManagedProjects removes multiple selections at once", () => {
+  const selection = buildWorkspaceSelectionFromImport({
+    candidates: [
+      {
+        id: "Desktop/client",
+        localPath: "/Users/manuellopes/Desktop/client",
+        name: "client",
+        relativePath: "client",
+        repositoryCount: 1,
+      },
+      {
+        id: "Desktop/web",
+        localPath: "/Users/manuellopes/Desktop/web",
+        name: "web",
+        relativePath: "web",
+        repositoryCount: 1,
+      },
+      {
+        id: "Desktop/api",
+        localPath: "/Users/manuellopes/Desktop/api",
+        name: "api",
+        relativePath: "api",
+        repositoryCount: 1,
+      },
+    ],
+    collectionName: "Frontend",
+    rootName: "Desktop",
+    rootPath: "/Users/manuellopes/Desktop",
+    selectedProjectIds: ["Desktop/client", "Desktop/web", "Desktop/api"],
+  });
+
+  const nextSelection = removeManagedProjects(selection, ["Desktop/client", "Desktop/api"]);
+
+  assert.equal(nextSelection?.projects.length, 1);
+  assert.equal(nextSelection?.projects[0]?.name, "web");
+});
+
+test("removeManagedProjectCollection removes an entire collection", () => {
+  const frontendSelection = buildWorkspaceSelectionFromImport({
+    candidates: [
+      {
+        id: "Desktop/client",
+        localPath: "/Users/manuellopes/Desktop/client",
+        name: "client",
+        relativePath: "client",
+        repositoryCount: 1,
+      },
+    ],
+    collectionName: "Frontend",
+    rootName: "Desktop",
+    rootPath: "/Users/manuellopes/Desktop",
+    selectedProjectIds: ["Desktop/client"],
+  });
+  const backendSelection = buildWorkspaceSelectionFromImport({
+    candidates: [
+      {
+        id: "Services/api",
+        localPath: "/Users/manuellopes/Services/api",
+        name: "api",
+        relativePath: "api",
+        repositoryCount: 1,
+      },
+    ],
+    collectionName: "Backend",
+    rootName: "Services",
+    rootPath: "/Users/manuellopes/Services",
+    selectedProjectIds: ["Services/api"],
+  });
+
+  const mergedSelection = mergeWorkspaceSelection(frontendSelection, backendSelection);
+  const frontendCollectionId =
+    getManagedProjectCollections(mergedSelection).find(
+      (collection) => collection.name === "Frontend",
+    )?.id ?? "";
+  const nextSelection = removeManagedProjectCollection(
+    mergedSelection,
+    frontendCollectionId,
+  );
+
+  assert.equal(nextSelection?.projects.length, 1);
+  assert.equal(nextSelection?.projects[0]?.name, "api");
 });

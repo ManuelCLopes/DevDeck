@@ -24,9 +24,14 @@ import {
   clearStoredGitHubToken,
   getGitHubAuthCapabilities,
   pollGitHubDeviceAuth,
+  readStoredGitHubToken,
   startGitHubDeviceAuth,
   validateAndStoreGitHubToken,
 } from "./github-auth";
+import {
+  createGitHubPullRequestComment,
+  requestGitHubPullRequestReviewers,
+} from "./github-api";
 import {
   clearWorkspaceSnapshotCaches,
   discoverWorkspace,
@@ -438,6 +443,22 @@ function applyWorkspaceMonitorState(nextState: {
   }
 }
 
+async function runGitHubWorkspaceMutation(
+  mutation: (token: string) => Promise<void>,
+) {
+  const token = await readStoredGitHubToken();
+  if (!token) {
+    throw new Error("Connect GitHub in Preferences before using pull request actions.");
+  }
+
+  await mutation(token);
+  clearWorkspaceSnapshotCaches();
+
+  if (workspaceMonitorState.selection) {
+    await refreshWorkspaceSnapshot("settings");
+  }
+}
+
 ipcMain.handle("devdeck:pick-workspace", async () => {
   const result = await dialog.showOpenDialog({
     buttonLabel: "Choose Workspace",
@@ -514,6 +535,60 @@ ipcMain.handle("devdeck:clear-github-token", async () => {
   await clearStoredGitHubToken();
   clearWorkspaceSnapshotCaches();
 });
+
+ipcMain.handle(
+  "devdeck:add-pull-request-comment",
+  async (
+    _event,
+    payload: {
+      body: string;
+      pullRequestNumber: number;
+      repositorySlug: string;
+    },
+  ) => {
+    const body = payload.body.trim();
+    if (!body) {
+      throw new Error("Write a comment before sending it to GitHub.");
+    }
+
+    await runGitHubWorkspaceMutation((token) =>
+      createGitHubPullRequestComment(
+        payload.repositorySlug,
+        payload.pullRequestNumber,
+        body,
+        token,
+      ),
+    );
+  },
+);
+
+ipcMain.handle(
+  "devdeck:request-pull-request-reviewers",
+  async (
+    _event,
+    payload: {
+      pullRequestNumber: number;
+      repositorySlug: string;
+      reviewers: string[];
+    },
+  ) => {
+    const reviewers = payload.reviewers
+      .map((reviewer) => reviewer.trim())
+      .filter(Boolean);
+    if (reviewers.length === 0) {
+      throw new Error("Enter at least one reviewer login.");
+    }
+
+    await runGitHubWorkspaceMutation((token) =>
+      requestGitHubPullRequestReviewers(
+        payload.repositorySlug,
+        payload.pullRequestNumber,
+        reviewers,
+        token,
+      ),
+    );
+  },
+);
 
 ipcMain.handle("devdeck:start-github-device-auth", async () => {
   return startGitHubDeviceAuth();

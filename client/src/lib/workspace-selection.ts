@@ -536,15 +536,45 @@ export function removeManagedProject(
   selection: WorkspaceSelection | null,
   projectId: string,
 ) {
+  return removeManagedProjects(selection, [projectId]);
+}
+
+export function removeManagedProjects(
+  selection: WorkspaceSelection | null,
+  projectIds: string[],
+) {
   const normalizedSelection = normalizeWorkspaceSelection(selection);
   if (!normalizedSelection) {
     return null;
   }
 
-  const remainingProjects = normalizedSelection.projects.filter((project) => project.id !== projectId);
+  const projectIdsToRemove = new Set(projectIds);
+  if (projectIdsToRemove.size === 0) {
+    return normalizedSelection;
+  }
+
+  const remainingProjects = normalizedSelection.projects.filter(
+    (project) => !projectIdsToRemove.has(project.id),
+  );
   if (remainingProjects.length === 0) {
     return null;
   }
 
   return buildSelectionFromOrderedProjects(normalizedSelection, remainingProjects);
+}
+
+export function removeManagedProjectCollection(
+  selection: WorkspaceSelection | null,
+  collectionId: string,
+) {
+  const normalizedSelection = normalizeWorkspaceSelection(selection);
+  if (!normalizedSelection) {
+    return null;
+  }
+
+  const projectIds = normalizedSelection.projects
+    .filter((project) => project.collectionId === collectionId)
+    .map((project) => project.id);
+
+  return removeManagedProjects(normalizedSelection, projectIds);
 }
