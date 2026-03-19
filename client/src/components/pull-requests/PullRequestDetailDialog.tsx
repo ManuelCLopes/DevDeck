@@ -2,6 +2,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useEffect, useState } from "react";
 import {
   ArrowUpRight,
+  Bookmark,
   CheckCheck,
   Copy,
   GitBranch,
@@ -22,13 +23,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
 import { getDesktopApi } from "@/lib/desktop";
+import {
+  isPullRequestMarkedForReview,
+  setPullRequestMarkedForReview,
+} from "@/lib/pull-request-watchlist";
 import {
   getPullRequestCiStatusMeta,
   getPullRequestReviewEventMeta,
   getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
+  getPullRequestWatchMeta,
 } from "@/lib/pull-request-utils";
 import { parseReviewerLogins } from "@/lib/pull-request-actions";
 import { setStoredReviewFocus } from "@/lib/review-focus";
@@ -53,6 +60,7 @@ export default function PullRequestDetailDialog({
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isSubmittingReviewers, setIsSubmittingReviewers] = useState(false);
+  const pullRequestWatchlist = usePullRequestWatchlist();
   const statusMeta = pullRequest
     ? getPullRequestStatusMeta(pullRequest.status)
     : null;
@@ -68,6 +76,10 @@ export default function PullRequestDetailDialog({
   const desktopApi = getDesktopApi();
   const reviewerLogins = parseReviewerLogins(reviewerInput);
   const canRunGitHubActions = Boolean(desktopApi && pullRequest?.repositorySlug);
+  const markedForReview = pullRequest
+    ? isPullRequestMarkedForReview(pullRequest.id, pullRequestWatchlist)
+    : false;
+  const watchMeta = getPullRequestWatchMeta(markedForReview);
 
   useEffect(() => {
     if (!open) {
@@ -118,10 +130,27 @@ export default function PullRequestDetailDialog({
     await navigator.clipboard.writeText(pullRequest.headBranch);
   };
 
-  const handleOpenReviewFocus = (focus: "needs_my_review" | "changes_requested") => {
+  const handleOpenReviewFocus = (
+    focus: "marked_for_review" | "needs_my_review" | "changes_requested",
+  ) => {
     setStoredReviewFocus(focus);
     onOpenChange(false);
     setLocation("/reviews");
+  };
+
+  const handleToggleMarkedForReview = () => {
+    if (!pullRequest) {
+      return;
+    }
+
+    const nextMarkedState = !markedForReview;
+    setPullRequestMarkedForReview(pullRequest.id, nextMarkedState);
+    toast({
+      title: nextMarkedState ? "Marked for review" : "Removed from review list",
+      description: `${pullRequest.repo} #${pullRequest.number} ${
+        nextMarkedState ? "is now on" : "was removed from"
+      } your review shortlist.`,
+    });
   };
 
   const handleAddComment = async () => {
@@ -213,6 +242,9 @@ export default function PullRequestDetailDialog({
                 </span>
                 <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border ${ciStatusMeta?.className}`}>
                   {ciStatusMeta?.label}
+                </span>
+                <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border ${watchMeta.className}`}>
+                  {watchMeta.label}
                 </span>
                 {pullRequest.authoredByViewer && (
                   <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border bg-secondary text-muted-foreground border-border/60">
@@ -466,6 +498,23 @@ export default function PullRequestDetailDialog({
                 Follow-Up Shortcuts
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleToggleMarkedForReview}
+                  className="gap-1.5"
+                >
+                  <Bookmark className="w-3.5 h-3.5" />
+                  {markedForReview ? "Unmark Review" : "Mark for Review"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleOpenReviewFocus("marked_for_review")}
+                  className="gap-1.5"
+                >
+                  My Review List
+                </Button>
                 <Button
                   type="button"
                   variant="outline"

@@ -1,19 +1,25 @@
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useMemo, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import ProjectCard from "@/components/dashboard/ProjectCard";
 import ProjectRow from "@/components/dashboard/ProjectRow";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
+import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
+import {
+  getMarkedPullRequestIds,
+  setPullRequestMarkedForReview,
+} from "@/lib/pull-request-watchlist";
 import { getCiStatusMeta } from "@/lib/project-health";
 import {
   getPullRequestCiStatusMeta,
   getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
+  getPullRequestWatchMeta,
   pullRequestNeedsAuthorFollowUp,
   pullRequestNeedsViewerReview,
 } from "@/lib/pull-request-utils";
@@ -22,6 +28,7 @@ import { Link, useSearch } from "wouter";
 import {
   Activity,
   ArrowUpRight,
+  Bookmark,
   ChevronLeft,
   Clock3,
   Filter,
@@ -55,6 +62,7 @@ export default function Dashboard() {
   const focusedProjectId = new URLSearchParams(search).get("project");
   const workspaceSelection = useWorkspaceSelection();
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
+  const pullRequestWatchlist = usePullRequestWatchlist();
 
   const projects = snapshot?.projects ?? [];
   const pullRequests = snapshot?.pullRequests ?? [];
@@ -63,6 +71,10 @@ export default function Dashboard() {
   const visiblePullRequests = focusedProject
     ? pullRequests.filter((pullRequest) => pullRequest.projectId === focusedProject.id)
     : pullRequests;
+  const markedPullRequestIds = useMemo(
+    () => getMarkedPullRequestIds(pullRequestWatchlist),
+    [pullRequestWatchlist],
+  );
   const selectedPullRequest =
     visiblePullRequests.find((pullRequest) => pullRequest.id === selectedPullRequestId) ??
     null;
@@ -105,6 +117,9 @@ export default function Dashboard() {
   ).length;
   const reviewedByViewerCount = visiblePullRequests.filter(
     (pullRequest) => pullRequest.reviewedByViewer,
+  ).length;
+  const markedPullRequestCount = visiblePullRequests.filter((pullRequest) =>
+    markedPullRequestIds.has(pullRequest.id),
   ).length;
   const reviewedByOthersCount = visiblePullRequests.filter(
     (pullRequest) => (pullRequest.reviewedByOthersCount ?? 0) > 0,
@@ -151,6 +166,13 @@ export default function Dashboard() {
     }
 
     window.open(targetUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const handleToggleMarkedPullRequest = (pullRequestId: string) => {
+    setPullRequestMarkedForReview(
+      pullRequestId,
+      !markedPullRequestIds.has(pullRequestId),
+    );
   };
 
   return (
@@ -303,6 +325,14 @@ export default function Dashboard() {
                       <span className="min-w-0 text-right font-semibold text-foreground">{focusedProjectPullRequests.length}</span>
                     </div>
                     <div className="flex items-start justify-between gap-4">
+                      <span className="text-muted-foreground">Marked by you</span>
+                      <span className="min-w-0 text-right font-semibold text-foreground">
+                        {focusedProjectPullRequests.filter((pullRequest) =>
+                          markedPullRequestIds.has(pullRequest.id),
+                        ).length}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">Needs your review</span>
                       <span className="min-w-0 text-right font-semibold text-foreground">
                         {focusedProjectPullRequests.filter(
@@ -412,6 +442,8 @@ export default function Dashboard() {
                       const followUpMeta = getPullRequestFollowUpMeta(pullRequest);
                       const reviewSummary = getPullRequestReviewSummary(pullRequest);
                       const statusMeta = getPullRequestStatusMeta(pullRequest.status);
+                      const markedForReview = markedPullRequestIds.has(pullRequest.id);
+                      const watchMeta = getPullRequestWatchMeta(markedForReview);
 
                       return (
                         <div
@@ -443,6 +475,11 @@ export default function Dashboard() {
                             <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${ciStatusMeta.className}`}>
                               {ciStatusMeta.label}
                             </span>
+                            {markedForReview && (
+                              <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${watchMeta.className}`}>
+                                {watchMeta.label}
+                              </span>
+                            )}
                             {pullRequest.authoredByViewer && (
                               <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap bg-secondary text-muted-foreground border-border/60">
                                 you opened
@@ -457,6 +494,20 @@ export default function Dashboard() {
                               className="h-8 px-2.5 rounded-md text-[11px] font-medium bg-white border border-border/60 hover:bg-black/5 transition-colors"
                             >
                               Open
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleToggleMarkedPullRequest(pullRequest.id);
+                              }}
+                              className={`h-8 rounded-md border px-2.5 text-[11px] font-medium transition-colors ${
+                                markedForReview
+                                  ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                  : "border-border/60 bg-white text-foreground hover:bg-black/5"
+                              }`}
+                            >
+                              {markedForReview ? "Marked" : "Mark"}
                             </button>
                           </div>
                         </div>
@@ -502,7 +553,7 @@ export default function Dashboard() {
                 </Link>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
                 <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                     Needs Your Review
@@ -527,6 +578,17 @@ export default function Dashboard() {
                 </div>
                 <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Marked For Review
+                  </h3>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold tracking-tight text-primary">
+                      {markedPullRequestCount}
+                    </span>
+                    <span className="text-xs text-muted-foreground">your shortlist</span>
+                  </div>
+                </div>
+                <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
+                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                     Reviewed By You
                   </h3>
                   <div className="flex items-baseline gap-2">
@@ -547,6 +609,8 @@ export default function Dashboard() {
                       const followUpMeta = getPullRequestFollowUpMeta(pullRequest);
                       const reviewSummary = getPullRequestReviewSummary(pullRequest);
                       const statusMeta = getPullRequestStatusMeta(pullRequest.status);
+                      const markedForReview = markedPullRequestIds.has(pullRequest.id);
+                      const watchMeta = getPullRequestWatchMeta(markedForReview);
 
                       return (
                       <div
@@ -578,6 +642,11 @@ export default function Dashboard() {
                             <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${ciStatusMeta.className}`}>
                               {ciStatusMeta.label}
                             </span>
+                            {markedForReview && (
+                              <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${watchMeta.className}`}>
+                                {watchMeta.label}
+                              </span>
+                            )}
                             {pullRequest.authoredByViewer && (
                               <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap bg-secondary text-muted-foreground border-border/60">
                                 you opened
@@ -592,6 +661,21 @@ export default function Dashboard() {
                               className="h-8 px-2.5 rounded-md text-[11px] font-medium bg-white border border-border/60 hover:bg-black/5 transition-colors"
                             >
                               Open
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleToggleMarkedPullRequest(pullRequest.id);
+                              }}
+                              className={`inline-flex h-8 items-center rounded-md border px-2.5 text-[11px] font-medium transition-colors ${
+                                markedForReview
+                                  ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                  : "border-border/60 bg-white text-foreground hover:bg-black/5"
+                              }`}
+                            >
+                              <Bookmark className="mr-1.5 h-3.5 w-3.5" />
+                              {markedForReview ? "Marked" : "Mark"}
                             </button>
                           </div>
                         </div>

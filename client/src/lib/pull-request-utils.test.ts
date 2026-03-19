@@ -134,3 +134,25 @@ test("filterPullRequestsByFocus narrows changes requested pull requests", () => 
     1,
   );
 });
+
+test("filterPullRequestsByFocus narrows marked pull requests", () => {
+  const pullRequests = [
+    {
+      id: "repo-one#12",
+      status: "open",
+    },
+    {
+      id: "repo-two#8",
+      status: "review_required",
+    },
+  ];
+
+  assert.equal(
+    filterPullRequestsByFocus(
+      pullRequests as never,
+      "marked_for_review",
+      new Set(["repo-two#8"]),
+    ).length,
+    1,
+  );
+});

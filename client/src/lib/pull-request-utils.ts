@@ -6,6 +6,7 @@ import type {
 
 export type PullRequestFocus =
   | "all"
+  | "marked_for_review"
   | "needs_my_review"
   | "needs_my_follow_up"
   | "authored_by_me"
@@ -193,8 +194,18 @@ export function pullRequestWaitingOnOthers(
 export function filterPullRequestsByFocus(
   pullRequests: WorkspacePullRequestItem[],
   focus: PullRequestFocus,
+  markedPullRequestIds: Iterable<string> = [],
 ) {
+  const markedPullRequestIdSet =
+    markedPullRequestIds instanceof Set
+      ? markedPullRequestIds
+      : new Set(markedPullRequestIds);
+
   switch (focus) {
+    case "marked_for_review":
+      return pullRequests.filter((pullRequest) =>
+        markedPullRequestIdSet.has(pullRequest.id),
+      );
     case "needs_my_review":
       return pullRequests.filter(pullRequestNeedsViewerReview);
     case "needs_my_follow_up":
@@ -250,5 +261,19 @@ export function getPullRequestFollowUpMeta(
   return {
     className: "bg-secondary text-muted-foreground border-border/60",
     label: "waiting on others",
+  };
+}
+
+export function getPullRequestWatchMeta(markedForReview: boolean) {
+  if (markedForReview) {
+    return {
+      className: "bg-primary/10 text-primary border-primary/20",
+      label: "marked by you",
+    };
+  }
+
+  return {
+    className: "bg-secondary text-muted-foreground border-border/60",
+    label: "not marked",
   };
 }

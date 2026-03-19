@@ -1,16 +1,22 @@
 import AppLayout from "@/components/layout/AppLayout";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
+import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
 import { getGitHubStatusMeta } from "@/lib/github-status";
+import {
+  getMarkedPullRequestIds,
+  setPullRequestMarkedForReview,
+} from "@/lib/pull-request-watchlist";
 import {
   filterPullRequestsByFocus,
   getPullRequestCiStatusMeta,
   getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
   getPullRequestStatusMeta,
+  getPullRequestWatchMeta,
   pullRequestNeedsAuthorFollowUp,
   pullRequestNeedsViewerReview,
   type PullRequestFocus,
@@ -20,6 +26,7 @@ import { formatDistanceToNow } from "date-fns";
 import {
   AlertCircle,
   ArrowUpRight,
+  Bookmark,
   CheckCircle2,
   Clock,
   Github,
@@ -41,11 +48,16 @@ export default function Reviews() {
     "all",
   );
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
+  const pullRequestWatchlist = usePullRequestWatchlist();
   const pullRequests = snapshot?.pullRequests ?? [];
   const reviews = snapshot?.reviews ?? [];
+  const markedPullRequestIds = useMemo(
+    () => getMarkedPullRequestIds(pullRequestWatchlist),
+    [pullRequestWatchlist],
+  );
   const filteredPullRequests = useMemo(
-    () => filterPullRequestsByFocus(pullRequests, focusFilter),
-    [focusFilter, pullRequests],
+    () => filterPullRequestsByFocus(pullRequests, focusFilter, markedPullRequestIds),
+    [focusFilter, markedPullRequestIds, pullRequests],
   );
   const activeReviews = reviews.filter((review) => review.status === "active");
   const staleReviews = reviews.filter((review) => review.status === "stale");
@@ -54,6 +66,9 @@ export default function Reviews() {
   const needsAuthorFollowUpCount = pullRequests.filter(pullRequestNeedsAuthorFollowUp).length;
   const reviewedByViewerCount = pullRequests.filter(
     (pullRequest) => pullRequest.reviewedByViewer,
+  ).length;
+  const markedPullRequestCount = pullRequests.filter((pullRequest) =>
+    markedPullRequestIds.has(pullRequest.id),
   ).length;
   const authoredByViewerCount = pullRequests.filter(
     (pullRequest) => pullRequest.authoredByViewer,
@@ -79,6 +94,7 @@ export default function Reviews() {
     const nextFocus = new URLSearchParams(search).get("focus");
     if (
       nextFocus === "all" ||
+      nextFocus === "marked_for_review" ||
       nextFocus === "needs_my_review" ||
       nextFocus === "needs_my_follow_up" ||
       nextFocus === "authored_by_me" ||
@@ -104,12 +120,24 @@ export default function Reviews() {
     setLocation(`/reviews?pr=${encodeURIComponent(pullRequestId)}`);
   };
 
+  const handleToggleMarkedPullRequest = (pullRequestId: string) => {
+    setPullRequestMarkedForReview(
+      pullRequestId,
+      !markedPullRequestIds.has(pullRequestId),
+    );
+  };
+
   const pullRequestFilters: Array<{
     count: number;
     id: PullRequestFocus;
     label: string;
   }> = [
     { count: pullRequests.length, id: "all", label: "All PRs" },
+    {
+      count: markedPullRequestCount,
+      id: "marked_for_review",
+      label: "Marked For Review",
+    },
     { count: needsViewerReviewCount, id: "needs_my_review", label: "Needs My Review" },
     { count: needsAuthorFollowUpCount, id: "needs_my_follow_up", label: "Needs My Follow-Up" },
     { count: authoredByViewerCount, id: "authored_by_me", label: "Authored By Me" },
@@ -132,6 +160,7 @@ export default function Reviews() {
     all: "No open pull requests were found for the connected repositories.",
     authored_by_me: "You do not currently have open pull requests in this workspace.",
     changes_requested: "No pull requests are currently waiting on requested changes.",
+    marked_for_review: "You have not marked any pull requests for review yet.",
     needs_my_follow_up: "Nothing currently needs your follow-up.",
     needs_my_review: "You do not currently have a review queue here.",
     reviewed_by_me: "You have not reviewed any of the current open pull requests yet.",
@@ -162,7 +191,7 @@ export default function Reviews() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
           <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
               Open Pull Requests
@@ -192,6 +221,17 @@ export default function Reviews() {
                 {needsAuthorFollowUpCount}
               </span>
               <span className="text-xs text-muted-foreground">author action</span>
+            </div>
+          </div>
+          <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
+            <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+              Marked For Review
+            </h3>
+            <div className="flex items-baseline gap-2 mt-auto">
+              <span className="text-3xl font-bold tracking-tight text-primary">
+                {markedPullRequestCount}
+              </span>
+              <span className="text-xs text-muted-foreground">your shortlist</span>
             </div>
           </div>
           <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
@@ -242,12 +282,17 @@ export default function Reviews() {
                     <span className="rounded-full bg-black/5 px-1.5 py-0.5 text-[10px] font-semibold">
                       {filter.count}
                     </span>
-              </button>
-            ))}
-          </div>
+                  </button>
+                ))}
+              </div>
               <div className="overflow-hidden rounded-xl border border-border/60 bg-white/60 px-4 py-1 shadow-sm backdrop-blur-md">
                 <div className="flex flex-col">
                   {openPullRequestsPagination.paginatedItems.map((pullRequest) => (
+                    (() => {
+                      const markedForReview = markedPullRequestIds.has(pullRequest.id);
+                      const watchMeta = getPullRequestWatchMeta(markedForReview);
+
+                      return (
                     <div
                       key={pullRequest.id}
                       className="group flex items-start gap-3 py-3 px-4 -mx-4 hover:bg-black/[0.03] rounded-md transition-colors border-b border-border/40 last:border-0 cursor-pointer"
@@ -289,6 +334,13 @@ export default function Reviews() {
                               >
                                 {getPullRequestCiStatusMeta(pullRequest.ciStatus).label}
                               </span>
+                              {markedForReview && (
+                                <span
+                                  className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${watchMeta.className}`}
+                                >
+                                  {watchMeta.label}
+                                </span>
+                              )}
                             </div>
                           </div>
                           <div className="flex flex-shrink-0 items-center gap-2 self-start sm:flex-col sm:items-end sm:gap-1">
@@ -307,6 +359,21 @@ export default function Reviews() {
                             >
                               <span className="mr-1.5">Open</span>
                               <ArrowUpRight className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleToggleMarkedPullRequest(pullRequest.id);
+                              }}
+                              className={`inline-flex h-8 items-center rounded-md border px-2.5 text-[11px] font-medium shadow-sm transition-colors ${
+                                markedForReview
+                                  ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                  : "border-border bg-white text-foreground hover:bg-secondary"
+                              }`}
+                            >
+                              <Bookmark className="mr-1.5 h-3.5 w-3.5" />
+                              {markedForReview ? "Marked" : "Mark"}
                             </button>
                           </div>
                         </div>
@@ -327,6 +394,8 @@ export default function Reviews() {
                         </div>
                       </div>
                     </div>
+                      );
+                    })()
                   ))}
                   {filteredPullRequests.length === 0 && (
                     <div className="py-6 text-center text-muted-foreground text-sm">
