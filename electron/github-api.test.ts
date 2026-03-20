@@ -4,6 +4,7 @@ import {
   createGitHubPullRequestComment,
   fetchGitHubPullRequests,
   GitHubApiError,
+  GitHubConnectivityError,
   requestGitHubPullRequestReviewers,
 } from "./github-api";
 
@@ -120,4 +121,27 @@ test("fetchGitHubPullRequests retries without auth when a scoped token cannot re
   }
 
   assert.deepEqual(seenAuthorizations, ["Bearer scoped-token", null]);
+});
+
+test("fetchGitHubPullRequests surfaces connectivity failures as GitHubConnectivityError", async () => {
+  const originalFetch = globalThis.fetch;
+  const fetchError = new TypeError("fetch failed");
+  (fetchError as TypeError & { cause?: { code: string } }).cause = {
+    code: "ENOTFOUND",
+  };
+
+  globalThis.fetch = (async () => {
+    throw fetchError;
+  }) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      fetchGitHubPullRequests("acme/repo", "test-token"),
+      (error: unknown) =>
+        error instanceof GitHubConnectivityError &&
+        error.message === "GitHub could not be reached. Check your connection and retry.",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

@@ -32,6 +32,29 @@ function createSnapshot(overrides?: Partial<WorkspaceSnapshot>): WorkspaceSnapsh
       repositories: 0,
       staleBranches: 0,
     },
+    userActivity: {
+      last7Days: {
+        commits: 0,
+        linesAdded: 0,
+        linesDeleted: 0,
+        pullRequestsMerged: 0,
+        pullRequestsReviewed: 0,
+      },
+      last30Days: {
+        commits: 0,
+        linesAdded: 0,
+        linesDeleted: 0,
+        pullRequestsMerged: 0,
+        pullRequestsReviewed: 0,
+      },
+      last90Days: {
+        commits: 0,
+        linesAdded: 0,
+        linesDeleted: 0,
+        pullRequestsMerged: 0,
+        pullRequestsReviewed: 0,
+      },
+    },
     ...overrides,
   };
 }

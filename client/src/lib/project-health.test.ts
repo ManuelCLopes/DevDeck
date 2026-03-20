@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getCiStatusMeta, getProjectAttentionSummary } from "./project-health";
+import {
+  getCiStatusMeta,
+  getProjectAttentionMeta,
+  getProjectAttentionSummary,
+} from "./project-health";
 
 test("getCiStatusMeta exposes failing CI as critical", () => {
   assert.deepEqual(getCiStatusMeta("failing"), {
@@ -9,7 +13,7 @@ test("getCiStatusMeta exposes failing CI as critical", () => {
   });
 });
 
-test("getProjectAttentionSummary prioritizes waiting pull requests", () => {
+test("getProjectAttentionSummary prioritizes failing CI", () => {
   assert.equal(
     getProjectAttentionSummary({
       awaitingReviewCount: 2,
@@ -17,7 +21,7 @@ test("getProjectAttentionSummary prioritizes waiting pull requests", () => {
       staleBranchCount: 1,
       unpushedCommitCount: 4,
     }),
-    "2 PRs waiting",
+    "CI failing",
   );
 });
 
@@ -30,5 +34,20 @@ test("getProjectAttentionSummary falls back to branch sync and stale work", () =
       unpushedCommitCount: 3,
     }),
     "3 unpushed",
+  );
+});
+
+test("getProjectAttentionMeta exposes badge styling for waiting work", () => {
+  assert.deepEqual(
+    getProjectAttentionMeta({
+      awaitingReviewCount: 1,
+      ciStatus: "passing",
+      staleBranchCount: 0,
+      unpushedCommitCount: 0,
+    }),
+    {
+      className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
+      label: "1 PR waiting",
+    },
   );
 });

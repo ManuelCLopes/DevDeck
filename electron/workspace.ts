@@ -8,6 +8,7 @@ import {
   fetchGitHubPullRequests,
   fetchGitHubViewer,
   GitHubApiError,
+  GitHubConnectivityError,
   type GitHubApiPullRequest,
   type GitHubApiPullRequestReview,
 } from "./github-api";
@@ -28,6 +29,7 @@ import type {
   WorkspacePullRequestStatus,
   WorkspaceReviewItem,
   WorkspaceSnapshot,
+  WorkspaceUserActivitySummary,
 } from "../shared/workspace";
 
 interface ReflogEntry {
@@ -45,6 +47,7 @@ interface RepositoryScanResult {
   project: WorkspaceProject;
   pullRequests: WorkspacePullRequestItem[];
   reviews: WorkspaceReviewItem[];
+  userActivity: WorkspaceUserActivitySummary;
 }
 
 interface RepositorySyncStatus {
@@ -98,8 +101,15 @@ const DIRECTORY_NAMES_TO_IGNORE = new Set([
 const MAX_DISCOVERY_DEPTH = 2;
 const MAX_DISCOVERY_DIRECTORIES = 400;
 const GITHUB_AUTH_CACHE_TTL_MS = 1000 * 60 * 5;
+const GITHUB_CONNECTIVITY_ERROR_TTL_MS = 1000 * 30;
 const PULL_REQUEST_CACHE_TTL_MS = 1000 * 60 * 2;
 const CI_STATUS_CACHE_TTL_MS = 1000 * 60 * 2;
+const USER_ACTIVITY_CACHE_TTL_MS = 1000 * 60 * 2;
+const USER_ACTIVITY_WINDOWS = [
+  { days: 7, key: "last7Days" },
+  { days: 30, key: "last30Days" },
+  { days: 90, key: "last90Days" },
+] as const;
 
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   cjs: "JavaScript",
@@ -133,6 +143,9 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
 let cachedGitHubAuthStatus:
   | (GitHubAuthStatus & { expiresAt: number })
   | null = null;
+let cachedGitHubConnectivityFailure:
+  | { expiresAt: number; message: string }
+  | null = null;
 const pullRequestCache = new Map<
   string,
   { expiresAt: number; pullRequests: WorkspacePullRequestItem[] }
@@ -145,6 +158,143 @@ const ciStatusCache = new Map<
   string,
   { expiresAt: number; status: WorkspaceCiStatus }
 >();
+const userActivityCache = new Map<
+  string,
+  { expiresAt: number; summary: WorkspaceUserActivitySummary }
+>();
+
+function createEmptyUserActivitySummary(): WorkspaceUserActivitySummary {
+  return {
+    last7Days: {
+      commits: 0,
+      linesAdded: 0,
+      linesDeleted: 0,
+      pullRequestsMerged: 0,
+      pullRequestsReviewed: 0,
+    },
+    last30Days: {
+      commits: 0,
+      linesAdded: 0,
+      linesDeleted: 0,
+      pullRequestsMerged: 0,
+      pullRequestsReviewed: 0,
+    },
+    last90Days: {
+      commits: 0,
+      linesAdded: 0,
+      linesDeleted: 0,
+      pullRequestsMerged: 0,
+      pullRequestsReviewed: 0,
+    },
+  };
+}
+
+function markGitHubConnectivityFailure(
+  message = "GitHub is temporarily unavailable. DevDeck will retry automatically.",
+) {
+  cachedGitHubConnectivityFailure = {
+    expiresAt: Date.now() + GITHUB_CONNECTIVITY_ERROR_TTL_MS,
+    message,
+  };
+}
+
+function getRecentGitHubConnectivityFailure() {
+  if (
+    cachedGitHubConnectivityFailure &&
+    cachedGitHubConnectivityFailure.expiresAt > Date.now()
+  ) {
+    return cachedGitHubConnectivityFailure;
+  }
+
+  cachedGitHubConnectivityFailure = null;
+  return null;
+}
+
+function mergeUserActivitySummaries(
+  summaries: WorkspaceUserActivitySummary[],
+): WorkspaceUserActivitySummary {
+  return summaries.reduce<WorkspaceUserActivitySummary>((accumulator, summary) => {
+    for (const window of USER_ACTIVITY_WINDOWS) {
+      accumulator[window.key].commits += summary[window.key].commits;
+      accumulator[window.key].linesAdded += summary[window.key].linesAdded;
+      accumulator[window.key].linesDeleted += summary[window.key].linesDeleted;
+      accumulator[window.key].pullRequestsMerged +=
+        summary[window.key].pullRequestsMerged;
+      accumulator[window.key].pullRequestsReviewed +=
+        summary[window.key].pullRequestsReviewed;
+    }
+
+    return accumulator;
+  }, createEmptyUserActivitySummary());
+}
+
+function forEachMatchingUserActivityWindow(
+  timestamp: string | null | undefined,
+  callback: (
+    key: (typeof USER_ACTIVITY_WINDOWS)[number]["key"],
+  ) => void,
+) {
+  if (!timestamp) {
+    return;
+  }
+
+  const eventTime = new Date(timestamp).getTime();
+  if (!Number.isFinite(eventTime)) {
+    return;
+  }
+
+  const now = Date.now();
+  for (const window of USER_ACTIVITY_WINDOWS) {
+    if (eventTime >= now - window.days * 24 * 60 * 60 * 1000) {
+      callback(window.key);
+    }
+  }
+}
+
+function parseCommitDiffStats(output: string) {
+  const statsByCommit = new Map<
+    string,
+    { linesAdded: number; linesDeleted: number }
+  >();
+  let currentCommitSha: string | null = null;
+
+  for (const line of output.split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    if (line.startsWith("commit\t")) {
+      currentCommitSha = line.split("\t")[1] ?? null;
+      if (currentCommitSha && !statsByCommit.has(currentCommitSha)) {
+        statsByCommit.set(currentCommitSha, {
+          linesAdded: 0,
+          linesDeleted: 0,
+        });
+      }
+      continue;
+    }
+
+    if (!currentCommitSha) {
+      continue;
+    }
+
+    const [addedRaw, deletedRaw] = line.split("\t");
+    const linesAdded = Number.parseInt(addedRaw ?? "", 10);
+    const linesDeleted = Number.parseInt(deletedRaw ?? "", 10);
+    const currentStats = statsByCommit.get(currentCommitSha);
+
+    if (!currentStats) {
+      continue;
+    }
+
+    currentStats.linesAdded += Number.isFinite(linesAdded) ? linesAdded : 0;
+    currentStats.linesDeleted += Number.isFinite(linesDeleted)
+      ? linesDeleted
+      : 0;
+  }
+
+  return statsByCommit;
+}
 
 const execFileAsync = promisify(execFile);
 
@@ -673,9 +823,201 @@ function getAuthoredPullRequestStatus(
 
 export function clearWorkspaceSnapshotCaches() {
   cachedGitHubAuthStatus = null;
+  cachedGitHubConnectivityFailure = null;
   pullRequestCache.clear();
   authoredPullRequestCache.clear();
   ciStatusCache.clear();
+  userActivityCache.clear();
+}
+
+async function getLocalUserActivitySummary(
+  repositoryPath: string,
+  headLogText: string | null,
+) {
+  const summary = createEmptyUserActivitySummary();
+  const commitEntries = parseRecentReflogEntries(headLogText, 400).filter(
+    (entry) => entry.commitSha && entry.message.startsWith("commit"),
+  );
+
+  const commitTimestamps = new Map<string, string>();
+  for (const entry of commitEntries) {
+    if (entry.commitSha) {
+      commitTimestamps.set(entry.commitSha, entry.timestamp);
+    }
+  }
+
+  if (commitTimestamps.size === 0) {
+    return summary;
+  }
+
+  const commitShas = Array.from(commitTimestamps.keys());
+  let commitDiffStats = new Map<
+    string,
+    { linesAdded: number; linesDeleted: number }
+  >();
+
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["show", "--numstat", "--format=commit%x09%H", ...commitShas],
+      {
+        cwd: repositoryPath,
+        maxBuffer: 1024 * 1024 * 2,
+        timeout: 8000,
+      },
+    );
+    commitDiffStats = parseCommitDiffStats(stdout);
+  } catch {
+    // If diff stats cannot be read, keep commit counts and leave line totals at 0.
+  }
+
+  for (const [commitSha, timestamp] of Array.from(commitTimestamps.entries())) {
+    const diffStats = commitDiffStats.get(commitSha);
+
+    forEachMatchingUserActivityWindow(timestamp, (key) => {
+      summary[key].commits += 1;
+      summary[key].linesAdded += diffStats?.linesAdded ?? 0;
+      summary[key].linesDeleted += diffStats?.linesDeleted ?? 0;
+    });
+  }
+
+  return summary;
+}
+
+async function getGitHubUserActivitySummary(
+  repositorySlug: string | null,
+  githubAuthStatus: GitHubAuthStatus,
+) {
+  const summary = createEmptyUserActivitySummary();
+  if (
+    !repositorySlug ||
+    !githubAuthStatus.authenticated ||
+    !githubAuthStatus.token ||
+    !githubAuthStatus.viewerLogin
+  ) {
+    return summary;
+  }
+
+  const cacheKey = `${repositorySlug}:${githubAuthStatus.viewerLogin}`;
+  const cachedSummary = userActivityCache.get(cacheKey);
+  if (cachedSummary && cachedSummary.expiresAt > Date.now()) {
+    return cachedSummary.summary;
+  }
+
+  try {
+    const pullRequests = await fetchGitHubPullRequests(
+      repositorySlug,
+      githubAuthStatus.token,
+      {
+        perPage: 100,
+        state: "all",
+      },
+    );
+    const oldestWindowTime =
+      Date.now() - USER_ACTIVITY_WINDOWS[USER_ACTIVITY_WINDOWS.length - 1].days * 24 * 60 * 60 * 1000;
+
+    for (const pullRequest of pullRequests) {
+      if (
+        pullRequest.user?.login === githubAuthStatus.viewerLogin &&
+        pullRequest.merged_at
+      ) {
+        forEachMatchingUserActivityWindow(pullRequest.merged_at, (key) => {
+          summary[key].pullRequestsMerged += 1;
+        });
+      }
+    }
+
+    const reviewCandidates = pullRequests.filter((pullRequest) => {
+      const updatedAt = new Date(pullRequest.updated_at).getTime();
+      const mergedAt = pullRequest.merged_at
+        ? new Date(pullRequest.merged_at).getTime()
+        : 0;
+
+      return updatedAt >= oldestWindowTime || mergedAt >= oldestWindowTime;
+    });
+
+    const pullRequestReviews = await Promise.all(
+      reviewCandidates.map(async (pullRequest) => ({
+        number: pullRequest.number,
+        reviews: await fetchGitHubPullRequestReviews(
+          repositorySlug,
+          pullRequest.number,
+          githubAuthStatus.token!,
+        ),
+      })),
+    );
+
+    for (const pullRequestReview of pullRequestReviews) {
+      const reviewedWindows = new Set<
+        (typeof USER_ACTIVITY_WINDOWS)[number]["key"]
+      >();
+
+      for (const review of pullRequestReview.reviews) {
+        if (
+          review.user?.login !== githubAuthStatus.viewerLogin ||
+          !review.submitted_at
+        ) {
+          continue;
+        }
+
+        forEachMatchingUserActivityWindow(review.submitted_at, (key) => {
+          reviewedWindows.add(key);
+        });
+      }
+
+      for (const key of Array.from(reviewedWindows)) {
+        summary[key].pullRequestsReviewed += 1;
+      }
+    }
+
+    userActivityCache.set(cacheKey, {
+      expiresAt: Date.now() + USER_ACTIVITY_CACHE_TTL_MS,
+      summary,
+    });
+
+    return summary;
+  } catch (error) {
+    if (
+      error instanceof GitHubApiError &&
+      (error.status === 403 || error.status === 404)
+    ) {
+      userActivityCache.set(cacheKey, {
+        expiresAt: Date.now() + USER_ACTIVITY_CACHE_TTL_MS,
+        summary,
+      });
+      return summary;
+    }
+
+    if (error instanceof GitHubConnectivityError) {
+      markGitHubConnectivityFailure();
+      userActivityCache.set(cacheKey, {
+        expiresAt: Date.now() + USER_ACTIVITY_CACHE_TTL_MS,
+        summary,
+      });
+      return summary;
+    }
+
+    console.error(
+      `Failed to load user activity insights for ${repositorySlug}`,
+      error,
+    );
+    return summary;
+  }
+}
+
+async function getRepositoryUserActivitySummary(
+  repositoryPath: string,
+  headLogText: string | null,
+  remoteUrl: string | null,
+  githubAuthStatus: GitHubAuthStatus,
+) {
+  const githubRepository = parseGitHubRepository(remoteUrl);
+  const [localSummary, githubSummary] = await Promise.all([
+    getLocalUserActivitySummary(repositoryPath, headLogText),
+    getGitHubUserActivitySummary(githubRepository?.slug ?? null, githubAuthStatus),
+  ]);
+
+  return mergeUserActivitySummaries([localSummary, githubSummary]);
 }
 
 async function getGitHubAuthStatus(): Promise<GitHubAuthStatus> {
@@ -711,6 +1053,19 @@ async function getGitHubAuthStatus(): Promise<GitHubAuthStatus> {
       viewerLogin: viewer.login,
     };
   } catch (error) {
+    if (error instanceof GitHubConnectivityError) {
+      cachedGitHubAuthStatus = {
+        authenticated: false,
+        expiresAt: Date.now() + GITHUB_CONNECTIVITY_ERROR_TTL_MS,
+        message: error.message,
+        state: "error",
+        token: null,
+        viewerLogin: null,
+      };
+
+      return cachedGitHubAuthStatus;
+    }
+
     if (error instanceof GitHubApiError && error.status === 401) {
       cachedGitHubAuthStatus = {
         authenticated: false,
@@ -864,6 +1219,15 @@ async function fetchPullRequests(
       return [] as WorkspacePullRequestItem[];
     }
 
+    if (error instanceof GitHubConnectivityError) {
+      markGitHubConnectivityFailure();
+      pullRequestCache.set(githubRepository.slug, {
+        expiresAt: Date.now() + PULL_REQUEST_CACHE_TTL_MS,
+        pullRequests: [],
+      });
+      return [] as WorkspacePullRequestItem[];
+    }
+
     console.error(
       `Failed to load pull requests for ${githubRepository.slug}`,
       error,
@@ -954,6 +1318,15 @@ async function fetchAuthoredPullRequests(
       error instanceof GitHubApiError &&
       (error.status === 403 || error.status === 404)
     ) {
+      authoredPullRequestCache.set(githubRepository.slug, {
+        authoredPullRequests: [],
+        expiresAt: Date.now() + PULL_REQUEST_CACHE_TTL_MS,
+      });
+      return [] as WorkspaceAuthoredPullRequestItem[];
+    }
+
+    if (error instanceof GitHubConnectivityError) {
+      markGitHubConnectivityFailure();
       authoredPullRequestCache.set(githubRepository.slug, {
         authoredPullRequests: [],
         expiresAt: Date.now() + PULL_REQUEST_CACHE_TTL_MS,
@@ -1255,7 +1628,7 @@ async function scanRepository(
       team: inferTeam(monitoredProject.relativePath),
       unpushedCommitCount: syncStatus.aheadBy,
     };
-    const [pullRequests, authoredPullRequests] = await Promise.all([
+    const [pullRequests, authoredPullRequests, userActivity] = await Promise.all([
       fetchPullRequests(
         baseProject,
         remoteUrl,
@@ -1263,6 +1636,12 @@ async function scanRepository(
       ),
       fetchAuthoredPullRequests(
         baseProject,
+        remoteUrl,
+        githubAuthStatus,
+      ),
+      getRepositoryUserActivitySummary(
+        repositoryPath,
+        headLogText,
         remoteUrl,
         githubAuthStatus,
       ),
@@ -1334,6 +1713,7 @@ async function scanRepository(
       reviews: branchReviews.filter(
         (review): review is WorkspaceReviewItem => review !== null,
       ),
+      userActivity,
     } satisfies RepositoryScanResult;
   } catch (error) {
     console.error(`Failed to scan repository at ${repositoryPath}`, error);
@@ -1412,6 +1792,9 @@ function buildWorkspaceSnapshot(
       (left, right) =>
         new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
     );
+  const userActivity = mergeUserActivitySummaries(
+    results.map((result) => result.userActivity),
+  );
 
   return {
     activities,
@@ -1433,6 +1816,7 @@ function buildWorkspaceSnapshot(
       repositories: projects.length,
       staleBranches: reviews.filter((review) => review.status === "stale").length,
     },
+    userActivity,
   } satisfies WorkspaceSnapshot;
 }
 
@@ -1458,14 +1842,20 @@ export async function loadWorkspaceSnapshot(selection: {
 
     return count + 1;
   }, 0);
+  const connectivityFailure = getRecentGitHubConnectivityFailure();
   const githubStatus: WorkspaceGitHubStatus = {
     authenticated: githubAuthStatus.authenticated,
     connectedRepositoryCount,
     message:
-      githubAuthStatus.authenticated && connectedRepositoryCount === 0
+      connectivityFailure && githubAuthStatus.state === "connected"
+        ? connectivityFailure.message
+        : githubAuthStatus.authenticated && connectedRepositoryCount === 0
         ? "No GitHub remotes were detected in the current workspace."
         : githubAuthStatus.message,
-    state: githubAuthStatus.state,
+    state:
+      connectivityFailure && githubAuthStatus.state === "connected"
+        ? "error"
+        : githubAuthStatus.state,
     viewerLogin: githubAuthStatus.viewerLogin,
   };
 

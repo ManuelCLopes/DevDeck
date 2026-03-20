@@ -4,6 +4,7 @@ import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
+import { getProjectTagClassName } from "@/lib/project-tag-color";
 import { formatDistanceToNow } from "date-fns";
 import {
   Bell,
@@ -14,11 +15,22 @@ import {
 } from "lucide-react";
 
 export default function Activity() {
+  const formatCount = (value: number) => new Intl.NumberFormat().format(value);
   const [filter, setFilter] = usePersistentState<"all" | "commit" | "checkout" | "repo">(
     "devdeck:activity:filter",
     "all",
   );
+  const [period, setPeriod] = usePersistentState<"7d" | "30d" | "90d">(
+    "devdeck:activity:period",
+    "7d",
+  );
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
+  const selectedUserActivity =
+    period === "30d"
+      ? snapshot?.userActivity.last30Days
+      : period === "90d"
+        ? snapshot?.userActivity.last90Days
+        : snapshot?.userActivity.last7Days;
 
   const filteredActivities = useMemo(
     () =>
@@ -63,6 +75,88 @@ export default function Activity() {
             Refresh
           </button>
         </div>
+
+        <section className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                Your Activity
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Personal output across the monitored workspace for the selected period.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                { id: "7d", label: "7 Days" },
+                { id: "30d", label: "30 Days" },
+                { id: "90d", label: "90 Days" },
+              ].map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setPeriod(option.id as typeof period)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    period === option.id
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border/60 bg-white text-muted-foreground hover:border-black/15 hover:text-foreground"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                PRs Merged
+              </h3>
+              <p className="mt-2 text-3xl font-bold tracking-tight">
+                {formatCount(selectedUserActivity?.pullRequestsMerged ?? 0)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                PRs Reviewed
+              </h3>
+              <p className="mt-2 text-3xl font-bold tracking-tight">
+                {formatCount(selectedUserActivity?.pullRequestsReviewed ?? 0)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Commits
+              </h3>
+              <p className="mt-2 text-3xl font-bold tracking-tight">
+                {formatCount(selectedUserActivity?.commits ?? 0)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Lines Added
+              </h3>
+              <p className="mt-2 text-3xl font-bold tracking-tight text-chart-1">
+                {formatCount(selectedUserActivity?.linesAdded ?? 0)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Lines Deleted
+              </h3>
+              <p className="mt-2 text-3xl font-bold tracking-tight text-chart-3">
+                {formatCount(selectedUserActivity?.linesDeleted ?? 0)}
+              </p>
+            </div>
+          </div>
+
+          {snapshot?.githubStatus.state !== "connected" ? (
+            <p className="text-xs text-muted-foreground">
+              GitHub must be connected in Preferences for PR merged/reviewed totals.
+            </p>
+          ) : null}
+        </section>
 
         <div className="flex gap-2 border-b border-border/40 pb-4 flex-wrap">
           {[
@@ -116,7 +210,7 @@ export default function Activity() {
                     </p>
 
                     <div className="flex flex-wrap items-center gap-3 text-[11px] font-medium text-muted-foreground">
-                      <span className="font-mono bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50 text-foreground/80">
+                      <span className={getProjectTagClassName(activity.repo)}>
                         {activity.repo}
                       </span>
                       {activity.author && <span>by {activity.author}</span>}

@@ -81,6 +81,7 @@ function getAuthoredPullRequestStatusMeta(status: string) {
 }
 
 export default function Dashboard() {
+  const formatCount = (value: number) => new Intl.NumberFormat().format(value);
   const [viewMode, setViewMode] = usePersistentState<"grid" | "list">(
     "devdeck:dashboard:view-mode",
     "grid",
@@ -119,13 +120,16 @@ export default function Dashboard() {
         ? visibleProjects
         : visibleProjects.filter((project) => project.team === filterTeam);
 
-  const healthyCount = visibleProjects.filter((project) => project.status === "healthy").length;
-  const warningCount = visibleProjects.filter((project) => project.status === "warning").length;
-  const criticalCount = visibleProjects.filter((project) => project.status === "critical").length;
-  const visibleBranchCount = visibleProjects.reduce(
-    (total, project) => total + project.branchCount,
+  const reposWithoutRemoteCount = visibleProjects.filter(
+    (project) => !project.remoteUrl,
+  ).length;
+  const staleBranchCount = visibleProjects.reduce(
+    (total, project) => total + project.staleBranchCount,
     0,
   );
+  const staleProjectsCount = visibleProjects.filter(
+    (project) => project.staleBranchCount > 0,
+  ).length;
   const focusedProjectActivities = focusedProject
     ? (snapshot?.activities ?? []).filter((activity) => activity.repo === focusedProject.name)
     : [];
@@ -134,14 +138,6 @@ export default function Dashboard() {
   );
   const focusedProjectPullRequests = focusedProject ? visiblePullRequests : [];
   const activeProjectsPageSize = viewMode === "grid" ? 6 : 8;
-  const draftPullRequestCount = visiblePullRequests.filter(
-    (pullRequest) => pullRequest.status === "draft",
-  ).length;
-  const attentionPullRequestCount = visiblePullRequests.filter(
-    (pullRequest) =>
-      pullRequestNeedsViewerReview(pullRequest) ||
-      pullRequestNeedsFollowUp(pullRequest),
-  ).length;
   const needsViewerReviewCount = visiblePullRequests.filter(
     pullRequestNeedsViewerReview,
   ).length;
@@ -259,56 +255,6 @@ export default function Dashboard() {
               >
                 <List className="w-4 h-4" />
               </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white/60 backdrop-blur-md border border-border/50 rounded-xl p-4 shadow-sm relative overflow-hidden">
-            <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Monitored Repos</h3>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold tracking-tight">{visibleProjects.length}</span>
-            </div>
-            <div className="absolute -right-4 -bottom-4 opacity-5">
-              <FolderGit2 className="w-24 h-24" />
-            </div>
-          </div>
-          <div className="bg-white/60 backdrop-blur-md border border-border/50 rounded-xl p-4 shadow-sm flex flex-col justify-between">
-            <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Repository Health</h3>
-            <div className="flex items-center gap-4 text-sm font-medium mt-auto pb-1">
-              <div className="flex items-center gap-1.5 text-chart-1"><div className="w-2 h-2 rounded-full bg-chart-1 shadow-[0_0_8px_rgba(39,201,63,0.5)]" />{healthyCount}</div>
-              <div className="flex items-center gap-1.5 text-chart-2"><div className="w-2 h-2 rounded-full bg-chart-2 shadow-[0_0_8px_rgba(255,189,46,0.5)]" />{warningCount}</div>
-              <div className="flex items-center gap-1.5 text-chart-3"><div className="w-2 h-2 rounded-full bg-chart-3 shadow-[0_0_8px_rgba(255,95,86,0.5)]" />{criticalCount}</div>
-            </div>
-          </div>
-          <div className="bg-white/60 backdrop-blur-md border border-border/50 rounded-xl p-4 shadow-sm">
-            <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Local Branches</h3>
-            <div className="flex items-baseline gap-2 mt-auto">
-              <span className="text-3xl font-bold tracking-tight">{visibleBranchCount}</span>
-              {!focusedProject ? (
-                <span className="text-xs text-muted-foreground">
-                  {snapshot?.summary.staleBranches ?? 0} stale
-                </span>
-              ) : (
-                <span className="text-xs text-muted-foreground">
-                  {focusedProject.branchCount} tracked
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="bg-white/60 backdrop-blur-md border border-border/50 rounded-xl p-4 shadow-sm">
-            <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Open Pull Requests</h3>
-            <div className="flex items-baseline gap-2 mt-auto">
-              <span className="text-3xl font-bold tracking-tight">
-                {visiblePullRequests.length}
-              </span>
-              <span className="text-[10px] font-semibold bg-secondary px-1.5 py-0.5 rounded-full border border-border/60 text-muted-foreground">
-                {attentionPullRequestCount > 0
-                  ? `${attentionPullRequestCount} need attention`
-                  : draftPullRequestCount > 0
-                    ? `${draftPullRequestCount} drafts`
-                    : "live on GitHub"}
-              </span>
             </div>
           </div>
         </div>
@@ -538,10 +484,10 @@ export default function Dashboard() {
                                   event.stopPropagation();
                                   void handleOpenPullRequest(pullRequest.url);
                                 }}
-                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2.5 text-[11px] font-medium transition-colors hover:bg-black/5"
+                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2 text-[11px] font-medium transition-colors hover:bg-black/5"
                               >
                                 <Github className="h-3.5 w-3.5" />
-                                View in GitHub
+                                View
                               </button>
                               <button
                                 type="button"
@@ -549,7 +495,7 @@ export default function Dashboard() {
                                   event.stopPropagation();
                                   handleToggleMarkedPullRequest(pullRequest.id);
                                 }}
-                                className={`h-8 rounded-md border px-2.5 text-[11px] font-medium transition-colors ${
+                                className={`h-8 rounded-md border px-2 text-[11px] font-medium transition-colors ${
                                   markedForReview
                                     ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
                                     : "border-border/60 bg-white text-foreground hover:bg-black/5"
@@ -596,6 +542,75 @@ export default function Dashboard() {
           </>
         ) : (
           <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="relative overflow-hidden rounded-xl border border-border/50 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Monitored Repos
+                  </h3>
+                  <span className="rounded-full border border-border/60 bg-secondary/50 px-2.5 py-1 text-sm font-semibold tabular-nums text-foreground/85">
+                    {formatCount(visibleProjects.length)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {reposWithoutRemoteCount > 0
+                    ? `${reposWithoutRemoteCount} without remote`
+                    : "all with origin remote"}
+                </p>
+                <div className="absolute -right-4 -bottom-4 opacity-5">
+                  <FolderGit2 className="w-24 h-24" />
+                </div>
+              </div>
+              <div className="rounded-xl border border-border/50 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Stale Branches
+                  </h3>
+                  <span className="rounded-full border border-border/60 bg-secondary/50 px-2.5 py-1 text-sm font-semibold tabular-nums text-foreground/85">
+                    {formatCount(staleBranchCount)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {staleProjectsCount > 0
+                    ? `${staleProjectsCount} repos affected`
+                    : "no stale local work"}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border/50 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Needs Review
+                  </h3>
+                  <span className="rounded-full border border-chart-2/20 bg-chart-2/10 px-2.5 py-1 text-sm font-semibold tabular-nums text-chart-2">
+                    {formatCount(needsViewerReviewCount)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">review queue</p>
+              </div>
+              <div className="rounded-xl border border-border/50 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Needs Your Follow-Up
+                  </h3>
+                  <span className="rounded-full border border-chart-3/20 bg-chart-3/10 px-2.5 py-1 text-sm font-semibold tabular-nums text-chart-3">
+                    {formatCount(needsFollowUpCount)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">updated since review</p>
+              </div>
+              <div className="rounded-xl border border-border/50 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Marked For Review
+                  </h3>
+                  <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-sm font-semibold tabular-nums text-primary">
+                    {formatCount(markedPullRequestCount)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">your shortlist</p>
+              </div>
+            </div>
+
             <section>
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-2">
@@ -610,55 +625,6 @@ export default function Dashboard() {
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </a>
                 </Link>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
-                <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
-                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Needs Review
-                  </h3>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-chart-2">
-                      {needsViewerReviewCount}
-                    </span>
-                    <span className="text-xs text-muted-foreground">review queue</span>
-                  </div>
-                </div>
-                <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
-                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Needs Your Follow-Up
-                  </h3>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-chart-3">
-                      {needsFollowUpCount}
-                    </span>
-                    <span className="text-xs text-muted-foreground">updated since review</span>
-                  </div>
-                </div>
-                <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
-                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Marked For Review
-                  </h3>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-primary">
-                      {markedPullRequestCount}
-                    </span>
-                    <span className="text-xs text-muted-foreground">your shortlist</span>
-                  </div>
-                </div>
-                <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
-                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Opened By You
-                  </h3>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight">
-                      {authoredPullRequests.length}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {authoredPullRequests.filter((pullRequest) => pullRequest.status === "merged").length} merged
-                    </span>
-                  </div>
-                </div>
               </div>
 
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
@@ -693,10 +659,10 @@ export default function Dashboard() {
                                   event.stopPropagation();
                                   void handleOpenPullRequest(pullRequest.url);
                                 }}
-                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2.5 text-[11px] font-medium transition-colors hover:bg-black/5"
+                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2 text-[11px] font-medium transition-colors hover:bg-black/5"
                               >
                                 <Github className="h-3.5 w-3.5" />
-                                View in GitHub
+                                View
                               </button>
                               <button
                                 type="button"
@@ -704,7 +670,7 @@ export default function Dashboard() {
                                   event.stopPropagation();
                                   handleToggleMarkedPullRequest(pullRequest.id);
                                 }}
-                                className={`inline-flex h-8 items-center rounded-md border px-2.5 text-[11px] font-medium transition-colors ${
+                                className={`inline-flex h-8 items-center rounded-md border px-2 text-[11px] font-medium transition-colors ${
                                   markedForReview
                                     ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
                                     : "border-border/60 bg-white text-foreground hover:bg-black/5"
@@ -783,10 +749,10 @@ export default function Dashboard() {
                               <button
                                 type="button"
                                 onClick={() => void handleOpenPullRequest(pullRequest.url)}
-                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2.5 text-[11px] font-medium transition-colors hover:bg-black/5"
+                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2 text-[11px] font-medium transition-colors hover:bg-black/5"
                               >
                                 <Github className="h-3.5 w-3.5" />
-                                View in GitHub
+                                View
                               </button>
                             </div>
                           </div>

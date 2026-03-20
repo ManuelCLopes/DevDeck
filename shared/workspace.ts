@@ -166,6 +166,20 @@ export interface WorkspaceInsight {
   title: string;
 }
 
+export interface WorkspaceUserActivityStats {
+  commits: number;
+  linesAdded: number;
+  linesDeleted: number;
+  pullRequestsMerged: number;
+  pullRequestsReviewed: number;
+}
+
+export interface WorkspaceUserActivitySummary {
+  last7Days: WorkspaceUserActivityStats;
+  last30Days: WorkspaceUserActivityStats;
+  last90Days: WorkspaceUserActivityStats;
+}
+
 export interface WorkspaceSnapshot {
   activities: WorkspaceActivityItem[];
   authoredPullRequests: WorkspaceAuthoredPullRequestItem[];
@@ -185,4 +199,5 @@ export interface WorkspaceSnapshot {
     repositories: number;
     staleBranches: number;
   };
+  userActivity: WorkspaceUserActivitySummary;
 }

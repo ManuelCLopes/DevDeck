@@ -6,6 +6,7 @@ import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
 import { getGitHubStatusMeta } from "@/lib/github-status";
+import { getProjectTagClassName } from "@/lib/project-tag-color";
 import {
   getMarkedPullRequestIds,
   setPullRequestMarkedForReview,
@@ -313,7 +314,7 @@ export default function Reviews() {
                       <div className="flex-1 min-w-0">
                         <div className="mb-0.5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                           <div className="min-w-0 space-y-2">
-                            <span className="block font-semibold text-[13px] text-foreground break-words">
+                            <span className="block break-words text-[13px] font-semibold leading-5 text-foreground">
                               #{pullRequest.number} {pullRequest.title}
                             </span>
                             {signalBadges.length > 0 && (
@@ -329,22 +330,17 @@ export default function Reviews() {
                               </div>
                             )}
                           </div>
-                          <div className="flex flex-shrink-0 items-center gap-2 self-start sm:flex-col sm:items-end sm:gap-1">
-                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                              {formatDistanceToNow(new Date(pullRequest.updatedAt), {
-                                addSuffix: true,
-                              })}
-                            </span>
+                          <div className="flex flex-shrink-0 flex-wrap items-center gap-2 self-start">
                             <button
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
                                 void handleOpenPullRequest(pullRequest.url);
                               }}
-                              className="inline-flex h-8 items-center rounded-md border border-border bg-white px-2.5 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
+                              className="inline-flex h-8 items-center rounded-md border border-border bg-white px-2 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
                             >
                               <Github className="mr-1.5 h-3.5 w-3.5" />
-                              <span>View in GitHub</span>
+                              <span>View</span>
                             </button>
                             <button
                               type="button"
@@ -352,7 +348,7 @@ export default function Reviews() {
                                 event.stopPropagation();
                                 handleToggleMarkedPullRequest(pullRequest.id);
                               }}
-                              className={`inline-flex h-8 items-center rounded-md border px-2.5 text-[11px] font-medium shadow-sm transition-colors ${
+                              className={`inline-flex h-8 items-center rounded-md border px-2 text-[11px] font-medium shadow-sm transition-colors ${
                                 markedForReview
                                   ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
                                   : "border-border bg-white text-foreground hover:bg-secondary"
@@ -364,14 +360,16 @@ export default function Reviews() {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground mt-1">
-                          <span className="font-mono bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50 text-foreground/80">
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                          <span className="whitespace-nowrap">
+                            {formatDistanceToNow(new Date(pullRequest.updatedAt), {
+                              addSuffix: true,
+                            })}
+                          </span>
+                          <span className={getProjectTagClassName(pullRequest.repo)}>
                             {pullRequest.repo}
                           </span>
-                          <span>
-                            {pullRequest.headBranch} into {pullRequest.baseBranch}
-                          </span>
-                          {pullRequest.author && <span>{pullRequest.author}</span>}
+                          {pullRequest.author && <span className="break-words">{pullRequest.author}</span>}
                           {pullRequest.isViewerRequestedReviewer && (
                             <span className="rounded-full border border-chart-2/20 bg-chart-2/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-chart-2">
                               requested from you
@@ -447,7 +445,7 @@ export default function Reviews() {
                         </div>
 
                         <div className="mt-1 flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
-                          <span className="font-mono bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50 text-foreground/80">
+                          <span className={getProjectTagClassName(review.repo)}>
                             {review.repo}
                           </span>
                           {review.author && <span>{review.author}</span>}
@@ -502,7 +500,12 @@ export default function Reviews() {
                             {review.branch}
                           </p>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
-                            <span className="mr-2 min-w-0 break-all text-[10px] font-mono text-muted-foreground">
+                            <span
+                              className={getProjectTagClassName(
+                                review.repo,
+                                "mr-2 min-w-0 max-w-full break-all text-[10px]",
+                              )}
+                            >
                               {review.repo}
                             </span>
                             <span className="text-[10px] font-medium text-chart-3 whitespace-nowrap bg-chart-3/10 px-1 py-0.5 rounded border border-chart-3/20">

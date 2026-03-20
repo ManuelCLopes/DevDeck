@@ -73,6 +73,80 @@ interface RepositoryScanResult {
   project: WorkspaceProject;
   pullRequests: WorkspacePullRequestItem[];
   reviews: WorkspaceReviewItem[];
+  userActivity: WorkspaceSnapshot["userActivity"];
+}
+
+function createEmptyUserActivitySummary(): WorkspaceSnapshot["userActivity"] {
+  return {
+    last7Days: {
+      commits: 0,
+      linesAdded: 0,
+      linesDeleted: 0,
+      pullRequestsMerged: 0,
+      pullRequestsReviewed: 0,
+    },
+    last30Days: {
+      commits: 0,
+      linesAdded: 0,
+      linesDeleted: 0,
+      pullRequestsMerged: 0,
+      pullRequestsReviewed: 0,
+    },
+    last90Days: {
+      commits: 0,
+      linesAdded: 0,
+      linesDeleted: 0,
+      pullRequestsMerged: 0,
+      pullRequestsReviewed: 0,
+    },
+  };
+}
+
+function addUserActivityCommit(
+  summary: WorkspaceSnapshot["userActivity"],
+  timestamp: string,
+) {
+  const eventTime = new Date(timestamp).getTime();
+  if (!Number.isFinite(eventTime)) {
+    return;
+  }
+
+  const now = Date.now();
+  if (eventTime >= now - 7 * 24 * 60 * 60 * 1000) {
+    summary.last7Days.commits += 1;
+  }
+  if (eventTime >= now - 30 * 24 * 60 * 60 * 1000) {
+    summary.last30Days.commits += 1;
+  }
+  if (eventTime >= now - 90 * 24 * 60 * 60 * 1000) {
+    summary.last90Days.commits += 1;
+  }
+}
+
+function mergeUserActivitySummaries(
+  summaries: WorkspaceSnapshot["userActivity"][],
+) {
+  return summaries.reduce<WorkspaceSnapshot["userActivity"]>((accumulator, summary) => {
+    accumulator.last7Days.commits += summary.last7Days.commits;
+    accumulator.last7Days.linesAdded += summary.last7Days.linesAdded;
+    accumulator.last7Days.linesDeleted += summary.last7Days.linesDeleted;
+    accumulator.last7Days.pullRequestsMerged += summary.last7Days.pullRequestsMerged;
+    accumulator.last7Days.pullRequestsReviewed += summary.last7Days.pullRequestsReviewed;
+
+    accumulator.last30Days.commits += summary.last30Days.commits;
+    accumulator.last30Days.linesAdded += summary.last30Days.linesAdded;
+    accumulator.last30Days.linesDeleted += summary.last30Days.linesDeleted;
+    accumulator.last30Days.pullRequestsMerged += summary.last30Days.pullRequestsMerged;
+    accumulator.last30Days.pullRequestsReviewed += summary.last30Days.pullRequestsReviewed;
+
+    accumulator.last90Days.commits += summary.last90Days.commits;
+    accumulator.last90Days.linesAdded += summary.last90Days.linesAdded;
+    accumulator.last90Days.linesDeleted += summary.last90Days.linesDeleted;
+    accumulator.last90Days.pullRequestsMerged += summary.last90Days.pullRequestsMerged;
+    accumulator.last90Days.pullRequestsReviewed += summary.last90Days.pullRequestsReviewed;
+
+    return accumulator;
+  }, createEmptyUserActivitySummary());
 }
 
 function isWorkspaceReviewItem(
@@ -508,6 +582,12 @@ async function scanRepository(
       type,
     } satisfies WorkspaceActivityItem;
   });
+  const userActivity = createEmptyUserActivitySummary();
+  for (const entry of parseRecentReflogEntries(headLogText, 400)) {
+    if (entry.message.startsWith("commit")) {
+      addUserActivityCommit(userActivity, entry.timestamp);
+    }
+  }
 
   return {
     activities,
@@ -516,6 +596,7 @@ async function scanRepository(
     project,
     pullRequests: [],
     reviews: branchReviews.filter(isWorkspaceReviewItem),
+    userActivity,
   } satisfies RepositoryScanResult;
 }
 
@@ -570,6 +651,9 @@ function buildWorkspaceSnapshot(results: RepositoryScanResult[]) {
   const authoredPullRequests = results.flatMap(
     (result) => result.authoredPullRequests,
   );
+  const userActivity = mergeUserActivitySummaries(
+    results.map((result) => result.userActivity),
+  );
 
   return {
     activities,
@@ -591,6 +675,7 @@ function buildWorkspaceSnapshot(results: RepositoryScanResult[]) {
       repositories: projects.length,
       staleBranches: reviews.filter((review) => review.status === "stale").length,
     },
+    userActivity,
   } satisfies WorkspaceSnapshot;
 }
 

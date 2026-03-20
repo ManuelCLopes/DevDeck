@@ -47,6 +47,34 @@ export class GitHubApiError extends Error {
   }
 }
 
+export class GitHubConnectivityError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "GitHubConnectivityError";
+  }
+}
+
+function isConnectivityFailure(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  const causeCode =
+    typeof (error as Error & { cause?: { code?: unknown } }).cause?.code === "string"
+      ? ((error as Error & { cause?: { code?: string } }).cause?.code ?? "").toUpperCase()
+      : "";
+
+  return (
+    message.includes("fetch failed") ||
+    message.includes("timed out") ||
+    causeCode === "ENOTFOUND" ||
+    causeCode === "ECONNRESET" ||
+    causeCode === "ECONNREFUSED" ||
+    causeCode === "ETIMEDOUT"
+  );
+}
+
 async function githubApiRequest<T>(
   pathname: string,
   token: string | null,
@@ -97,6 +125,19 @@ async function githubApiRequest<T>(
     }
 
     return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof GitHubApiError || error instanceof GitHubConnectivityError) {
+      throw error;
+    }
+
+    if (abortController.signal.aborted || isConnectivityFailure(error)) {
+      throw new GitHubConnectivityError(
+        "GitHub could not be reached. Check your connection and retry.",
+        { cause: error },
+      );
+    }
+
+    throw error;
   } finally {
     clearTimeout(timeoutId);
   }

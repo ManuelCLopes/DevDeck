@@ -6,7 +6,7 @@ import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
-import { getCiStatusMeta } from "@/lib/project-health";
+import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
 import { getMarkedPullRequestIds } from "@/lib/pull-request-watchlist";
 import {
   getPullRequestSignalBadges,
@@ -178,45 +178,50 @@ export default function Projects() {
                 <div className="grid grid-cols-12 gap-4 border-b border-border/40 bg-secondary/30 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-md">
                   <div className="col-span-5">Repository</div>
                   <div className="col-span-2">Language</div>
-                  <div className="col-span-2">Health</div>
+                  <div className="col-span-2">Attention</div>
                   <div className="col-span-3 text-right">Last Updated</div>
                 </div>
 
                 <div className="flex flex-col">
                   {projectsPagination.paginatedItems.map((project) => (
-                    <div
-                      key={project.id}
-                      onClick={() => setSelectedProjectId(project.id)}
-                      className={`grid grid-cols-12 gap-4 px-5 py-3 border-b border-border/40 last:border-0 cursor-pointer transition-colors items-center ${selectedProject?.id === project.id ? "bg-primary/[0.04]" : "hover:bg-black/[0.02]"}`}
-                    >
-                      <div className="col-span-5 flex min-w-0 flex-col pr-4">
-                        <span className="font-semibold text-[13px] text-foreground truncate">{project.name}</span>
-                        <span className="text-[10px] text-muted-foreground truncate font-mono mt-0.5 flex items-center gap-1">
-                          <HardDrive className="w-2.5 h-2.5 flex-shrink-0" />
-                          {project.localPath}
-                        </span>
-                      </div>
+                    (() => {
+                      const attentionMeta = getProjectAttentionMeta(project);
 
-                      <div className="col-span-2 text-[12px] text-muted-foreground">
-                        {project.language}
-                      </div>
+                      return (
+                        <div
+                          key={project.id}
+                          onClick={() => setSelectedProjectId(project.id)}
+                          className={`grid grid-cols-12 gap-4 px-5 py-3 border-b border-border/40 last:border-0 cursor-pointer transition-colors items-center ${selectedProject?.id === project.id ? "bg-primary/[0.04]" : "hover:bg-black/[0.02]"}`}
+                        >
+                          <div className="col-span-5 flex min-w-0 flex-col pr-4">
+                            <span className="font-semibold text-[13px] text-foreground truncate">{project.name}</span>
+                            <span className="text-[10px] text-muted-foreground truncate font-mono mt-0.5 flex items-center gap-1">
+                              <HardDrive className="w-2.5 h-2.5 flex-shrink-0" />
+                              {project.localPath}
+                            </span>
+                          </div>
 
-                      <div className="col-span-2">
-                        <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-sm border ${project.status === "healthy" ? "bg-chart-1/10 text-chart-1 border-chart-1/20" : project.status === "warning" ? "bg-chart-2/10 text-chart-2 border-chart-2/20" : "bg-chart-3/10 text-chart-3 border-chart-3/20"}`}>
-                          <div className={`w-1.5 h-1.5 rounded-full ${project.status === "healthy" ? "bg-chart-1" : project.status === "warning" ? "bg-chart-2" : "bg-chart-3"}`} />
-                          <span className="capitalize">{project.status}</span>
-                        </span>
-                      </div>
+                          <div className="col-span-2 text-[12px] text-muted-foreground">
+                            {project.language}
+                          </div>
 
-                      <div className="col-span-3 flex items-center justify-end gap-3 text-right text-[11px] text-muted-foreground">
-                        <span className="whitespace-nowrap">
-                          {formatDistanceToNow(new Date(project.lastUpdated), { addSuffix: true })}
-                        </span>
-                        <div className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-black/5 hover:text-foreground" onClick={(event) => event.stopPropagation()}>
-                          <MoreHorizontal className="w-4 h-4" />
+                          <div className="col-span-2">
+                            <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-sm border ${attentionMeta.className}`}>
+                              <span>{attentionMeta.label}</span>
+                            </span>
+                          </div>
+
+                          <div className="col-span-3 flex items-center justify-end gap-3 text-right text-[11px] text-muted-foreground">
+                            <span className="whitespace-nowrap">
+                              {formatDistanceToNow(new Date(project.lastUpdated), { addSuffix: true })}
+                            </span>
+                            <div className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-black/5 hover:text-foreground" onClick={(event) => event.stopPropagation()}>
+                              <MoreHorizontal className="w-4 h-4" />
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })()
                   ))}
                   {filteredProjects.length === 0 && (
                     <div className="p-8 text-center text-muted-foreground text-sm">

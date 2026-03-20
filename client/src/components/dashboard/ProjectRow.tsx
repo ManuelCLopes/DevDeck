@@ -1,5 +1,5 @@
 import type { WorkspaceProject } from "@shared/workspace";
-import { getCiStatusMeta, getProjectAttentionSummary } from "@/lib/project-health";
+import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
 import { formatDistanceToNow } from "date-fns";
 import { GitBranch, Globe, HardDrive, Link2Off, MessageSquare, Users } from "lucide-react";
 import { useLocation } from "wouter";
@@ -10,14 +10,9 @@ interface ProjectRowProps {
 
 export default function ProjectRow({ project }: ProjectRowProps) {
   const [, setLocation] = useLocation();
-  const statusColors = {
-    healthy: "bg-chart-1 flex-shrink-0 shadow-[0_0_8px_rgba(39,201,63,0.5)]",
-    warning: "bg-chart-2 flex-shrink-0 shadow-[0_0_8px_rgba(255,189,46,0.5)]",
-    critical: "bg-chart-3 flex-shrink-0 shadow-[0_0_8px_rgba(255,95,86,0.5)]",
-  };
   const projectHref = `/?project=${encodeURIComponent(project.id)}`;
   const ciStatusMeta = getCiStatusMeta(project.ciStatus);
-  const attentionSummary = getProjectAttentionSummary(project);
+  const attentionMeta = getProjectAttentionMeta(project);
 
   return (
     <div
@@ -33,8 +28,6 @@ export default function ProjectRow({ project }: ProjectRowProps) {
       className="flex cursor-pointer items-start gap-4 rounded-md border-b border-border/40 px-4 py-2.5 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:items-center"
       aria-label={`Open ${project.name} overview`}
     >
-        <div className={`w-1.5 h-1.5 rounded-full ${statusColors[project.status]}`} />
-
         <div className="flex-1 min-w-0 grid grid-cols-12 gap-4 items-center">
           {/* Project Name & Path */}
           <div className="col-span-12 md:col-span-4 lg:col-span-3 flex flex-col min-w-0">
@@ -97,7 +90,9 @@ export default function ProjectRow({ project }: ProjectRowProps) {
           {/* Activity */}
           <div className="hidden md:flex col-span-3 lg:col-span-2 flex-col items-end text-[11px] text-muted-foreground font-medium text-right">
             <span>{formatDistanceToNow(new Date(project.lastUpdated), { addSuffix: true })}</span>
-            <span className="text-[10px]">{attentionSummary}</span>
+            <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${attentionMeta.className}`}>
+              {attentionMeta.label}
+            </span>
           </div>
         </div>
       </div>

@@ -141,6 +141,52 @@ function createRepositoryAheadOfOriginMain(repositoryPath: string, remotePath: s
   );
 }
 
+function createRepositoryWithContributionStats(repositoryPath: string) {
+  mkdirSync(repositoryPath, { recursive: true });
+  execFileSync("git", ["init", "-b", "main"], {
+    cwd: repositoryPath,
+    stdio: "ignore",
+  });
+
+  writeFileSync(join(repositoryPath, "README.md"), "alpha\n", "utf8");
+  execFileSync("git", ["add", "README.md"], { cwd: repositoryPath, stdio: "ignore" });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=DevDeck Tests",
+      "-c",
+      "user.email=tests@devdeck.local",
+      "commit",
+      "-m",
+      "initial commit",
+    ],
+    {
+      cwd: repositoryPath,
+      stdio: "ignore",
+    },
+  );
+
+  writeFileSync(join(repositoryPath, "README.md"), "alpha updated\nbeta\n", "utf8");
+  execFileSync("git", ["add", "README.md"], { cwd: repositoryPath, stdio: "ignore" });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=DevDeck Tests",
+      "-c",
+      "user.email=tests@devdeck.local",
+      "commit",
+      "-m",
+      "expand readme",
+    ],
+    {
+      cwd: repositoryPath,
+      stdio: "ignore",
+    },
+  );
+}
+
 test("discoverWorkspace finds repositories and loadWorkspaceSnapshot scans them", async () => {
   const tempDirectory = mkdtempSync(join(tmpdir(), "devdeck-workspace-"));
   const workspaceRoot = join(tempDirectory, "workspace");
@@ -236,6 +282,33 @@ test("loadWorkspaceSnapshot compares commit activity against origin default bran
 
   assert.equal(localOnlyCommit?.commitIntegrationStatus, "not_in_default_branch");
   assert.equal(pushedCommit?.commitIntegrationStatus, "in_default_branch");
+
+  delete process.env.DEVDECK_GITHUB_STORAGE;
+  delete process.env.DEVDECK_GITHUB_TOKEN_PATH;
+  rmSync(tempDirectory, { force: true, recursive: true });
+});
+
+test("loadWorkspaceSnapshot aggregates user activity insights from local git history", async () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), "devdeck-user-activity-"));
+  const workspaceRoot = join(tempDirectory, "workspace");
+  const repositoryPath = join(workspaceRoot, "alpha");
+  process.env.DEVDECK_GITHUB_STORAGE = "file";
+  process.env.DEVDECK_GITHUB_TOKEN_PATH = join(tempDirectory, "github-token.json");
+
+  createRepositoryWithContributionStats(repositoryPath);
+
+  const discovery = await discoverWorkspace(workspaceRoot);
+  const snapshot = await loadWorkspaceSnapshot({
+    projects: discovery.candidates,
+    rootName: discovery.rootName,
+    rootPath: discovery.rootPath,
+  });
+
+  assert.equal(snapshot.userActivity.last7Days.commits, 2);
+  assert.equal(snapshot.userActivity.last7Days.linesAdded, 3);
+  assert.equal(snapshot.userActivity.last7Days.linesDeleted, 1);
+  assert.equal(snapshot.userActivity.last7Days.pullRequestsMerged, 0);
+  assert.equal(snapshot.userActivity.last7Days.pullRequestsReviewed, 0);
 
   delete process.env.DEVDECK_GITHUB_STORAGE;
   delete process.env.DEVDECK_GITHUB_TOKEN_PATH;

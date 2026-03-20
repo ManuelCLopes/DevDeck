@@ -1,5 +1,5 @@
 import type { WorkspaceProject } from "@shared/workspace";
-import { getCiStatusMeta, getProjectAttentionSummary } from "@/lib/project-health";
+import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
 import {
   GitBranch,
   Globe,
@@ -16,14 +16,9 @@ interface ProjectCardProps {
 
 export default function ProjectCard({ project }: ProjectCardProps) {
   const [, setLocation] = useLocation();
-  const statusColors = {
-    healthy: "bg-chart-1/10 text-chart-1 border-chart-1/20",
-    warning: "bg-chart-2/10 text-chart-2 border-chart-2/20",
-    critical: "bg-chart-3/10 text-chart-3 border-chart-3/20",
-  };
   const projectHref = `/?project=${encodeURIComponent(project.id)}`;
   const ciStatusMeta = getCiStatusMeta(project.ciStatus);
-  const attentionSummary = getProjectAttentionSummary(project);
+  const attentionMeta = getProjectAttentionMeta(project);
 
   return (
     <div
@@ -44,8 +39,8 @@ export default function ProjectCard({ project }: ProjectCardProps) {
           <div className="min-w-0">
               <div className="mb-1 flex flex-wrap items-center gap-2">
                 <h3 className="min-w-0 truncate text-[15px] font-semibold tracking-tight text-foreground">{project.name}</h3>
-                <span className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-[1px] rounded-sm border ${statusColors[project.status]}`}>
-                  {project.status}
+                <span className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-[1px] rounded-sm border ${attentionMeta.className}`}>
+                  {attentionMeta.label}
                 </span>
                 <span className="text-[9px] text-muted-foreground/80 font-semibold bg-secondary/80 px-1.5 py-[1px] rounded-sm border border-border/50 uppercase tracking-wider">
                   {project.team}
@@ -98,10 +93,12 @@ export default function ProjectCard({ project }: ProjectCardProps) {
 
             <div className="flex flex-col gap-1">
               <span className="text-[11px] font-medium text-muted-foreground">
-                Attention
+                Sync
               </span>
               <span className="text-sm font-semibold text-foreground capitalize">
-                {attentionSummary}
+                {project.hasUpstream
+                  ? `${project.aheadBy} ahead · ${project.behindBy} behind`
+                  : "No upstream"}
               </span>
             </div>
           </div>
