@@ -5,6 +5,7 @@ import {
   getPullRequestCiStatusMeta,
   getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
+  getPullRequestSignalBadges,
   getPullRequestStatusMeta,
   pullRequestNeedsAuthorFollowUp,
   pullRequestNeedsViewerReview,
@@ -48,6 +49,35 @@ test("getPullRequestStatusMeta exposes readable labels", () => {
 test("getPullRequestCiStatusMeta exposes readable CI labels", () => {
   assert.equal(getPullRequestCiStatusMeta("passing").label, "checks passing");
   assert.equal(getPullRequestCiStatusMeta("failing").label, "checks failing");
+});
+
+test("getPullRequestSignalBadges keeps only key PR signals", () => {
+  assert.deepEqual(
+    getPullRequestSignalBadges(
+      {
+        ciStatus: "passing",
+        reviewCount: 0,
+        reviewState: "unreviewed",
+        reviewedByOthersCount: 0,
+        reviewedByViewer: false,
+      },
+      true,
+    ),
+    [
+      {
+        className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
+        label: "no reviews",
+      },
+      {
+        className: "bg-chart-1/10 text-chart-1 border-chart-1/20",
+        label: "checks passing",
+      },
+      {
+        className: "bg-primary/10 text-primary border-primary/20",
+        label: "marked for review",
+      },
+    ],
+  );
 });
 
 test("pullRequestNeedsViewerReview prefers direct review responsibility", () => {

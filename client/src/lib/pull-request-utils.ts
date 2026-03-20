@@ -14,6 +14,11 @@ export type PullRequestFocus =
   | "reviewed_by_me"
   | "waiting_on_others";
 
+interface PullRequestBadgeMeta {
+  className: string;
+  label: string;
+}
+
 export function getPullRequestStatusMeta(status: WorkspacePullRequestStatus) {
   switch (status) {
     case "approved":
@@ -87,6 +92,31 @@ export function getPullRequestReviewSummary(
     className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
     label: "no reviews yet",
   };
+}
+
+export function pullRequestHasNoReviews(
+  pullRequest: Pick<
+    WorkspacePullRequestItem,
+    | "reviewCount"
+    | "reviewState"
+    | "reviewedByOthersCount"
+    | "reviewedByViewer"
+  >,
+) {
+  const reviewedByViewer = pullRequest.reviewedByViewer ?? false;
+  const reviewedByOthersCount = pullRequest.reviewedByOthersCount ?? 0;
+  const reviewCount =
+    pullRequest.reviewCount ??
+    reviewedByOthersCount + (reviewedByViewer ? 1 : 0);
+  const reviewState =
+    pullRequest.reviewState ??
+    (reviewedByViewer
+      ? "reviewed_by_you"
+      : reviewCount > 0
+        ? "reviewed"
+        : "unreviewed");
+
+  return reviewState === "unreviewed";
 }
 
 export function getPullRequestCiStatusMeta(status: WorkspaceCiStatus) {
@@ -268,7 +298,7 @@ export function getPullRequestWatchMeta(markedForReview: boolean) {
   if (markedForReview) {
     return {
       className: "bg-primary/10 text-primary border-primary/20",
-      label: "marked by you",
+      label: "marked for review",
     };
   }
 
@@ -276,4 +306,35 @@ export function getPullRequestWatchMeta(markedForReview: boolean) {
     className: "bg-secondary text-muted-foreground border-border/60",
     label: "not marked",
   };
+}
+
+export function getPullRequestSignalBadges(
+  pullRequest: Pick<
+    WorkspacePullRequestItem,
+    | "ciStatus"
+    | "reviewCount"
+    | "reviewState"
+    | "reviewedByOthersCount"
+    | "reviewedByViewer"
+  >,
+  markedForReview: boolean,
+): PullRequestBadgeMeta[] {
+  const badges: PullRequestBadgeMeta[] = [];
+
+  if (pullRequestHasNoReviews(pullRequest)) {
+    badges.push({
+      className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
+      label: "no reviews",
+    });
+  }
+
+  if (pullRequest.ciStatus === "passing" || pullRequest.ciStatus === "failing") {
+    badges.push(getPullRequestCiStatusMeta(pullRequest.ciStatus));
+  }
+
+  if (markedForReview) {
+    badges.push(getPullRequestWatchMeta(true));
+  }
+
+  return badges;
 }

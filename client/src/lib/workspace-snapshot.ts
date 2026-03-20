@@ -61,6 +61,7 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
 interface ReflogEntry {
   authorEmail: string | null;
   authorName: string | null;
+  commitSha: string | null;
   message: string;
   timestamp: string;
 }
@@ -225,7 +226,7 @@ function parseLastReflogEntry(logText: string | null) {
   }
 
   const match = lastLine.match(
-    /^[0-9a-f]{40} [0-9a-f]{40} (.+) <([^>]+)> (\d+) [+-]\d+\t(.+)$/,
+    /^([0-9a-f]{40}) ([0-9a-f]{40}) (.+) <([^>]+)> (\d+) [+-]\d+\t(.+)$/,
   );
 
   if (!match) {
@@ -233,10 +234,11 @@ function parseLastReflogEntry(logText: string | null) {
   }
 
   return {
-    authorEmail: match[2],
-    authorName: match[1],
-    message: match[4],
-    timestamp: new Date(Number.parseInt(match[3], 10) * 1000).toISOString(),
+    authorEmail: match[4],
+    authorName: match[3],
+    commitSha: match[2],
+    message: match[6],
+    timestamp: new Date(Number.parseInt(match[5], 10) * 1000).toISOString(),
   } satisfies ReflogEntry;
 }
 
@@ -251,14 +253,17 @@ function parseRecentReflogEntries(logText: string | null, limit = 5) {
     .filter(Boolean)
     .slice(-limit)
     .map((line) =>
-      line.match(/^[0-9a-f]{40} [0-9a-f]{40} (.+) <([^>]+)> (\d+) [+-]\d+\t(.+)$/),
+      line.match(
+        /^([0-9a-f]{40}) ([0-9a-f]{40}) (.+) <([^>]+)> (\d+) [+-]\d+\t(.+)$/,
+      ),
     )
     .filter((match): match is RegExpMatchArray => Boolean(match))
     .map((match) => ({
-      authorEmail: match[2],
-      authorName: match[1],
-      message: match[4],
-      timestamp: new Date(Number.parseInt(match[3], 10) * 1000).toISOString(),
+      authorEmail: match[4],
+      authorName: match[3],
+      commitSha: match[2],
+      message: match[6],
+      timestamp: new Date(Number.parseInt(match[5], 10) * 1000).toISOString(),
     }));
 }
 
@@ -479,14 +484,16 @@ async function scanRepository(
   };
 
   const activities = parseRecentReflogEntries(headLogText, 5).map((entry, index) => {
-    const type = entry.message.startsWith("checkout:")
-      ? "checkout"
-      : entry.message.startsWith("commit:")
-        ? "commit"
-        : "repo";
+  const type = entry.message.startsWith("checkout:")
+    ? "checkout"
+    : entry.message.startsWith("commit")
+      ? "commit"
+      : "repo";
 
     return {
       author: entry.authorName,
+      commitIntegrationStatus: type === "commit" ? "unknown" : null,
+      commitSha: type === "commit" ? entry.commitSha : null,
       description: entry.message,
       id: `${project.id}:activity:${index}:${entry.timestamp}`,
       repo: project.name,

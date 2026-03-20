@@ -361,7 +361,7 @@ export default function Onboarding() {
         
         {/* Titlebar */}
         <div className="h-[40px] titlebar-drag-region flex items-center justify-center relative border-b border-black/5 bg-white/50">
-          <div className="absolute left-4">
+          <div className="absolute left-[18px] top-[14px]">
             <WindowControls dimmed />
           </div>
           <span className="font-semibold text-xs text-muted-foreground">Welcome to DevDeck</span>

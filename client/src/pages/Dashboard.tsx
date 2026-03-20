@@ -15,11 +15,7 @@ import {
 } from "@/lib/pull-request-watchlist";
 import { getCiStatusMeta } from "@/lib/project-health";
 import {
-  getPullRequestCiStatusMeta,
-  getPullRequestFollowUpMeta,
-  getPullRequestReviewSummary,
-  getPullRequestStatusMeta,
-  getPullRequestWatchMeta,
+  getPullRequestSignalBadges,
   pullRequestNeedsAuthorFollowUp,
   pullRequestNeedsViewerReview,
 } from "@/lib/pull-request-utils";
@@ -96,6 +92,9 @@ export default function Dashboard() {
   const focusedProjectActivities = focusedProject
     ? (snapshot?.activities ?? []).filter((activity) => activity.repo === focusedProject.name)
     : [];
+  const focusedProjectHasBranchOnlyActivity = focusedProjectActivities.some(
+    (activity) => activity.commitIntegrationStatus === "not_in_default_branch",
+  );
   const focusedProjectPullRequests = focusedProject ? visiblePullRequests : [];
   const activeProjectsPageSize = viewMode === "grid" ? 6 : 8;
   const draftPullRequestCount = visiblePullRequests.filter(
@@ -398,23 +397,59 @@ export default function Dashboard() {
             <section>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Activity className="w-4 h-4 text-primary" />
-                    <h2 className="text-sm font-semibold tracking-tight">Recent Local Activity</h2>
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-primary" />
+                      <h2 className="text-sm font-semibold tracking-tight">Recent Local Activity</h2>
+                    </div>
+                    {focusedProjectHasBranchOnlyActivity ? (
+                      <div className="inline-flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <span className="h-0.5 w-4 rounded-full bg-chart-2" />
+                        {focusedProject.defaultBranch === "main"
+                          ? "Not in main"
+                          : `Not in ${focusedProject.defaultBranch}`}
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="space-y-3">
-                    {focusedActivityPagination.paginatedItems.map((activity) => (
-                      <div key={activity.id} className="rounded-lg border border-border/60 p-3 bg-secondary/20">
-                        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                          <p className="min-w-0 text-sm font-medium text-foreground break-words">{activity.title}</p>
-                          <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                            {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
-                          </span>
+                    {focusedActivityPagination.paginatedItems.map((activity) => {
+                      const shortCommitSha = activity.commitSha?.slice(0, 7) ?? null;
+                      const hasBranchOnlyCommit =
+                        activity.commitIntegrationStatus === "not_in_default_branch";
+
+                      return (
+                        <div
+                          key={activity.id}
+                          className={`relative overflow-hidden rounded-lg border border-border/60 p-3 ${
+                            hasBranchOnlyCommit ? "bg-chart-2/5" : "bg-secondary/20"
+                          }`}
+                        >
+                          {hasBranchOnlyCommit ? (
+                            <div
+                              aria-hidden="true"
+                              className="absolute inset-y-0 left-0 w-1.5 rounded-l-lg bg-chart-2"
+                            />
+                          ) : null}
+                          <div className={hasBranchOnlyCommit ? "pl-1" : ""}>
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                              <p className="min-w-0 text-sm font-medium text-foreground break-words">{activity.title}</p>
+                              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">{activity.description}</p>
+                            {shortCommitSha && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <span className="inline-flex items-center rounded-full border border-border/60 bg-white px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                  {shortCommitSha}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">{activity.description}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                     {focusedProjectActivities.length === 0 && (
                       <div className="rounded-lg border border-border/60 border-dashed p-4 text-sm text-muted-foreground">
                         No recent local activity was detected for this repository.
@@ -438,12 +473,11 @@ export default function Dashboard() {
 
                   <div className="space-y-3">
                     {focusedPullRequestsPagination.paginatedItems.map((pullRequest) => {
-                      const ciStatusMeta = getPullRequestCiStatusMeta(pullRequest.ciStatus);
-                      const followUpMeta = getPullRequestFollowUpMeta(pullRequest);
-                      const reviewSummary = getPullRequestReviewSummary(pullRequest);
-                      const statusMeta = getPullRequestStatusMeta(pullRequest.status);
                       const markedForReview = markedPullRequestIds.has(pullRequest.id);
-                      const watchMeta = getPullRequestWatchMeta(markedForReview);
+                      const signalBadges = getPullRequestSignalBadges(
+                        pullRequest,
+                        markedForReview,
+                      );
 
                       return (
                         <div
@@ -461,30 +495,14 @@ export default function Dashboard() {
                             </p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${statusMeta.className}`}>
-                              {statusMeta.label}
-                            </span>
-                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${
-                              reviewSummary.className
-                            }`}>
-                              {reviewSummary.label}
-                            </span>
-                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${followUpMeta.className}`}>
-                              {followUpMeta.label}
-                            </span>
-                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${ciStatusMeta.className}`}>
-                              {ciStatusMeta.label}
-                            </span>
-                            {markedForReview && (
-                              <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${watchMeta.className}`}>
-                                {watchMeta.label}
+                            {signalBadges.map((badge) => (
+                              <span
+                                key={badge.label}
+                                className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${badge.className}`}
+                              >
+                                {badge.label}
                               </span>
-                            )}
-                            {pullRequest.authoredByViewer && (
-                              <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap bg-secondary text-muted-foreground border-border/60">
-                                you opened
-                              </span>
-                            )}
+                            ))}
                             <button
                               type="button"
                               onClick={(event) => {
@@ -605,12 +623,11 @@ export default function Dashboard() {
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                 <div className="space-y-3">
                     {overviewPullRequestsPagination.paginatedItems.map((pullRequest) => {
-                      const ciStatusMeta = getPullRequestCiStatusMeta(pullRequest.ciStatus);
-                      const followUpMeta = getPullRequestFollowUpMeta(pullRequest);
-                      const reviewSummary = getPullRequestReviewSummary(pullRequest);
-                      const statusMeta = getPullRequestStatusMeta(pullRequest.status);
                       const markedForReview = markedPullRequestIds.has(pullRequest.id);
-                      const watchMeta = getPullRequestWatchMeta(markedForReview);
+                      const signalBadges = getPullRequestSignalBadges(
+                        pullRequest,
+                        markedForReview,
+                      );
 
                       return (
                       <div
@@ -628,30 +645,14 @@ export default function Dashboard() {
                             </p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${statusMeta.className}`}>
-                              {statusMeta.label}
-                            </span>
-                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${
-                              reviewSummary.className
-                            }`}>
-                              {reviewSummary.label}
-                            </span>
-                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${followUpMeta.className}`}>
-                              {followUpMeta.label}
-                            </span>
-                            <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${ciStatusMeta.className}`}>
-                              {ciStatusMeta.label}
-                            </span>
-                            {markedForReview && (
-                              <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${watchMeta.className}`}>
-                                {watchMeta.label}
+                            {signalBadges.map((badge) => (
+                              <span
+                                key={badge.label}
+                                className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${badge.className}`}
+                              >
+                                {badge.label}
                               </span>
-                            )}
-                            {pullRequest.authoredByViewer && (
-                              <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap bg-secondary text-muted-foreground border-border/60">
-                                you opened
-                              </span>
-                            )}
+                            ))}
                             <button
                               type="button"
                               onClick={(event) => {

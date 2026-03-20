@@ -1,6 +1,10 @@
 export type WorkspaceProjectStatus = "healthy" | "warning" | "critical";
 export type WorkspaceReviewStatus = "active" | "stale";
 export type WorkspaceActivityType = "commit" | "checkout" | "repo";
+export type WorkspaceCommitIntegrationStatus =
+  | "in_default_branch"
+  | "not_in_default_branch"
+  | "unknown";
 export type WorkspaceCiStatus = "passing" | "failing" | "pending" | "unknown";
 export type WorkspacePullRequestStatus =
   | "open"
@@ -84,6 +88,8 @@ export interface WorkspaceReviewItem {
 
 export interface WorkspaceActivityItem {
   author: string | null;
+  commitIntegrationStatus?: WorkspaceCommitIntegrationStatus | null;
+  commitSha?: string | null;
   description: string;
   id: string;
   repo: string;

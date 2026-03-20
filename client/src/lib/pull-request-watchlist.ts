@@ -6,15 +6,16 @@ export type PullRequestWatchlist = Record<string, PullRequestWatchlistEntry>;
 
 const PULL_REQUEST_WATCHLIST_KEY = "devdeck:pull-request-watchlist";
 const PULL_REQUEST_WATCHLIST_EVENT = "devdeck:pull-request-watchlist-updated";
+const EMPTY_PULL_REQUEST_WATCHLIST = Object.freeze({}) as PullRequestWatchlist;
 
 let cachedWatchlistRaw: string | null = null;
-let cachedWatchlist: PullRequestWatchlist = {};
+let cachedWatchlist: PullRequestWatchlist = EMPTY_PULL_REQUEST_WATCHLIST;
 
 function normalizePullRequestWatchlist(
   value: PullRequestWatchlist | string[] | null | undefined,
 ) {
   if (!value) {
-    return {} satisfies PullRequestWatchlist;
+    return EMPTY_PULL_REQUEST_WATCHLIST;
   }
 
   if (Array.isArray(value)) {
@@ -86,13 +87,13 @@ export function subscribePullRequestWatchlist(listener: () => void) {
 
 export function getPullRequestWatchlist() {
   if (typeof window === "undefined") {
-    return {} satisfies PullRequestWatchlist;
+    return EMPTY_PULL_REQUEST_WATCHLIST;
   }
 
   const rawWatchlist = localStorage.getItem(PULL_REQUEST_WATCHLIST_KEY);
   if (!rawWatchlist) {
     cachedWatchlistRaw = null;
-    cachedWatchlist = {};
+    cachedWatchlist = EMPTY_PULL_REQUEST_WATCHLIST;
     return cachedWatchlist;
   }
 
@@ -108,7 +109,7 @@ export function getPullRequestWatchlist() {
     return cachedWatchlist;
   } catch {
     cachedWatchlistRaw = null;
-    cachedWatchlist = {};
+    cachedWatchlist = EMPTY_PULL_REQUEST_WATCHLIST;
     return cachedWatchlist;
   }
 }

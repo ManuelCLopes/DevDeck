@@ -1,5 +1,4 @@
 import type { WorkspaceProject } from "@shared/workspace";
-import ProjectQuickActions from "@/components/projects/ProjectQuickActions";
 import { getCiStatusMeta, getProjectAttentionSummary } from "@/lib/project-health";
 import {
   GitBranch,
@@ -37,15 +36,14 @@ export default function ProjectCard({ project }: ProjectCardProps) {
           setLocation(projectHref);
         }
       }}
-      className="group block bg-white border border-border/60 hover:border-black/20 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-xl transition-all duration-200 overflow-hidden flex flex-col relative cursor-pointer"
-        aria-label={`Open ${project.name} overview`}
+      className="block cursor-pointer overflow-hidden rounded-xl border border-border/60 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+      aria-label={`Open ${project.name} overview`}
     >
-        <div className="p-4 flex flex-col gap-4 flex-1">
+        <div className="flex flex-1 flex-col gap-4 p-4">
           {/* Header */}
-          <div className="flex justify-between items-start gap-4">
-            <div className="min-w-0 flex-1">
+          <div className="min-w-0">
               <div className="mb-1 flex flex-wrap items-center gap-2">
-                <h3 className="min-w-0 truncate font-semibold text-[15px] tracking-tight text-foreground">{project.name}</h3>
+                <h3 className="min-w-0 truncate text-[15px] font-semibold tracking-tight text-foreground">{project.name}</h3>
                 <span className={`text-[9px] uppercase font-bold tracking-wider px-1.5 py-[1px] rounded-sm border ${statusColors[project.status]}`}>
                   {project.status}
                 </span>
@@ -54,12 +52,6 @@ export default function ProjectCard({ project }: ProjectCardProps) {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground line-clamp-1">{project.description}</p>
-            </div>
-            <ProjectQuickActions
-              projectId={project.id}
-              projectName={project.name}
-              projectPath={project.localPath}
-            />
           </div>
 
           {/* Local Path */}

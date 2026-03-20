@@ -183,13 +183,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <>
-      <div className="flex h-screen bg-[#ececec] overflow-hidden text-[13px] font-sans">
-      <div className="flex w-full h-full border border-black/10 rounded-lg shadow-2xl overflow-hidden bg-white/50 backdrop-blur-3xl m-0 sm:m-4 sm:rounded-xl">
+      <div className="flex h-screen overflow-hidden bg-[#f4f4f3] text-[13px] font-sans">
+      <div className="flex h-full w-full overflow-hidden bg-[#f4f4f3]">
         
         {/* Sidebar - macOS visual style */}
-        <aside className="w-[240px] bg-[#f5f5f5]/80 border-r border-black/10 flex flex-col flex-shrink-0">
+        <aside className="w-[240px] flex-shrink-0 border-r border-black/10 bg-[#f2f2f0] flex flex-col">
           {/* Traffic Lights & Titlebar Drag Area */}
-          <div className="h-[52px] titlebar-drag-region flex items-center px-4 gap-2">
+          <div className="titlebar-drag-region flex h-[52px] items-start pl-[18px] pt-[16px]">
             <WindowControls />
           </div>
           
@@ -304,7 +304,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 flex flex-col min-w-0 bg-[#fbfbfb] shadow-[-1px_0_0_0_rgba(0,0,0,0.1)] z-10">
+        <main className="z-10 flex min-w-0 flex-1 flex-col bg-[#fbfbfb]">
           
           {/* Top Titlebar / Toolbar */}
           <header className="h-[52px] border-b border-black/10 flex items-center justify-between gap-3 px-3 sm:px-4 titlebar-drag-region bg-white/60 backdrop-blur-md sticky top-0 z-50">

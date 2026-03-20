@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createGitHubPullRequestComment,
+  fetchGitHubPullRequests,
   GitHubApiError,
   requestGitHubPullRequestReviewers,
 } from "./github-api";
@@ -88,4 +89,35 @@ test("requestGitHubPullRequestReviewers surfaces GitHub API errors", async () =>
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("fetchGitHubPullRequests retries without auth when a scoped token cannot read a public repo", async () => {
+  const originalFetch = globalThis.fetch;
+  const seenAuthorizations: Array<string | null> = [];
+
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const authorization =
+      ((init?.headers as Record<string, string> | undefined)?.Authorization as
+        | string
+        | undefined) ?? null;
+    seenAuthorizations.push(authorization);
+
+    if (authorization) {
+      return new Response("Not Found", { status: 404 });
+    }
+
+    return new Response(JSON.stringify([]), {
+      headers: { "Content-Type": "application/json" },
+      status: 200,
+    });
+  }) as typeof fetch;
+
+  try {
+    const pullRequests = await fetchGitHubPullRequests("acme/repo", "scoped-token");
+    assert.deepEqual(pullRequests, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(seenAuthorizations, ["Bearer scoped-token", null]);
 });

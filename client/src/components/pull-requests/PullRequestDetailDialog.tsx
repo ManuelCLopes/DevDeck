@@ -4,12 +4,10 @@ import {
   ArrowUpRight,
   Bookmark,
   CheckCheck,
-  Copy,
   GitBranch,
   Github,
   ListChecks,
   MessageSquare,
-  Route,
   User2,
   Users,
 } from "lucide-react";
@@ -32,16 +30,11 @@ import {
 import {
   getPullRequestCiStatusMeta,
   getPullRequestReviewEventMeta,
-  getPullRequestFollowUpMeta,
-  getPullRequestReviewSummary,
-  getPullRequestStatusMeta,
-  getPullRequestWatchMeta,
+  getPullRequestSignalBadges,
 } from "@/lib/pull-request-utils";
 import { parseReviewerLogins } from "@/lib/pull-request-actions";
-import { setStoredReviewFocus } from "@/lib/review-focus";
 import { toast } from "@/hooks/use-toast";
 import type { WorkspacePullRequestItem } from "@shared/workspace";
-import { useLocation } from "wouter";
 
 interface PullRequestDetailDialogProps {
   open: boolean;
@@ -54,22 +47,12 @@ export default function PullRequestDetailDialog({
   onOpenChange,
   pullRequest,
 }: PullRequestDetailDialogProps) {
-  const [, setLocation] = useLocation();
   const [commentBody, setCommentBody] = useState("");
   const [reviewerInput, setReviewerInput] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isSubmittingReviewers, setIsSubmittingReviewers] = useState(false);
   const pullRequestWatchlist = usePullRequestWatchlist();
-  const statusMeta = pullRequest
-    ? getPullRequestStatusMeta(pullRequest.status)
-    : null;
-  const reviewSummary = pullRequest
-    ? getPullRequestReviewSummary(pullRequest)
-    : null;
-  const followUpMeta = pullRequest
-    ? getPullRequestFollowUpMeta(pullRequest)
-    : null;
   const ciStatusMeta = pullRequest
     ? getPullRequestCiStatusMeta(pullRequest.ciStatus)
     : null;
@@ -79,7 +62,9 @@ export default function PullRequestDetailDialog({
   const markedForReview = pullRequest
     ? isPullRequestMarkedForReview(pullRequest.id, pullRequestWatchlist)
     : false;
-  const watchMeta = getPullRequestWatchMeta(markedForReview);
+  const signalBadges = pullRequest
+    ? getPullRequestSignalBadges(pullRequest, markedForReview)
+    : [];
 
   useEffect(() => {
     if (!open) {
@@ -104,38 +89,21 @@ export default function PullRequestDetailDialog({
     window.open(pullRequest.url, "_blank", "noopener,noreferrer");
   };
 
-  const handleCopyLink = async () => {
+  const handleCopyBranch = async (branchName: string) => {
     if (!pullRequest) {
       return;
     }
 
     if (desktopApi?.copyToClipboard) {
-      await desktopApi.copyToClipboard(pullRequest.url);
-      return;
+      await desktopApi.copyToClipboard(branchName);
+    } else {
+      await navigator.clipboard.writeText(branchName);
     }
 
-    await navigator.clipboard.writeText(pullRequest.url);
-  };
-
-  const handleCopyBranch = async () => {
-    if (!pullRequest) {
-      return;
-    }
-
-    if (desktopApi?.copyToClipboard) {
-      await desktopApi.copyToClipboard(pullRequest.headBranch);
-      return;
-    }
-
-    await navigator.clipboard.writeText(pullRequest.headBranch);
-  };
-
-  const handleOpenReviewFocus = (
-    focus: "marked_for_review" | "needs_my_review" | "changes_requested",
-  ) => {
-    setStoredReviewFocus(focus);
-    onOpenChange(false);
-    setLocation("/reviews");
+    toast({
+      title: "Branch copied",
+      description: `${branchName} copied to your clipboard.`,
+    });
   };
 
   const handleToggleMarkedForReview = () => {
@@ -226,43 +194,49 @@ export default function PullRequestDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl border-border/60 bg-white/95 backdrop-blur-md">
+      <DialogContent className="max-h-[min(90vh,840px)] max-w-[min(92vw,52rem)] overflow-hidden border-border/60 bg-white/95 p-0 backdrop-blur-md">
         {pullRequest && (
-          <>
-            <DialogHeader className="space-y-3 pr-10">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border ${statusMeta?.className}`}>
-                  {statusMeta?.label}
-                </span>
-                <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border ${reviewSummary?.className}`}>
-                  {reviewSummary?.label}
-                </span>
-                <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border ${followUpMeta?.className}`}>
-                  {followUpMeta?.label}
-                </span>
-                <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border ${ciStatusMeta?.className}`}>
-                  {ciStatusMeta?.label}
-                </span>
-                <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border ${watchMeta.className}`}>
-                  {watchMeta.label}
-                </span>
-                {pullRequest.authoredByViewer && (
-                  <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border bg-secondary text-muted-foreground border-border/60">
-                    you opened
-                  </span>
-                )}
+          <div className="flex min-h-0 min-w-0 flex-col">
+            <DialogHeader className="space-y-4 border-b border-border/60 px-6 pb-5 pt-6 pr-14">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  {signalBadges.map((badge) => (
+                    <span
+                      key={badge.label}
+                      className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border ${badge.className}`}
+                    >
+                      {badge.label}
+                    </span>
+                  ))}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleToggleMarkedForReview}
+                  className={`h-9 shrink-0 gap-1.5 ${
+                    markedForReview
+                      ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                      : ""
+                  }`}
+                >
+                  <Bookmark className="w-3.5 h-3.5" />
+                  {markedForReview ? "Marked for Review" : "Mark for Review"}
+                </Button>
               </div>
-              <DialogTitle className="text-xl leading-snug">
-                #{pullRequest.number} {pullRequest.title}
-              </DialogTitle>
-              <DialogDescription className="text-sm">
-                {pullRequest.repo} · updated{" "}
-                {formatDistanceToNow(new Date(pullRequest.updatedAt), {
-                  addSuffix: true,
-                })}
-              </DialogDescription>
+              <div className="space-y-2">
+                <DialogTitle className="text-xl leading-snug break-words">
+                  #{pullRequest.number} {pullRequest.title}
+                </DialogTitle>
+                <DialogDescription className="text-sm">
+                  {pullRequest.repo} · updated{" "}
+                  {formatDistanceToNow(new Date(pullRequest.updatedAt), {
+                    addSuffix: true,
+                  })}
+                </DialogDescription>
+              </div>
             </DialogHeader>
 
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 pb-6 pt-5">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 space-y-4">
                 <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -270,23 +244,37 @@ export default function PullRequestDetailDialog({
                   Branch Routing
                 </div>
                 <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-start justify-between gap-4">
                     <span className="text-muted-foreground">Head branch</span>
-                    <span className="font-mono text-foreground">{pullRequest.headBranch}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyBranch(pullRequest.headBranch)}
+                      className="min-w-0 max-w-[65%] break-all text-right font-mono text-foreground transition hover:text-primary hover:underline"
+                      title={`Copy ${pullRequest.headBranch}`}
+                    >
+                      {pullRequest.headBranch}
+                    </button>
                   </div>
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-start justify-between gap-4">
                     <span className="text-muted-foreground">Base branch</span>
-                    <span className="font-mono text-foreground">{pullRequest.baseBranch}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyBranch(pullRequest.baseBranch)}
+                      className="min-w-0 max-w-[65%] break-all text-right font-mono text-foreground transition hover:text-primary hover:underline"
+                      title={`Copy ${pullRequest.baseBranch}`}
+                    >
+                      {pullRequest.baseBranch}
+                    </button>
                   </div>
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-start justify-between gap-4">
                     <span className="text-muted-foreground">Author</span>
-                    <span className="text-foreground">
+                    <span className="min-w-0 max-w-[65%] break-words text-right text-foreground">
                       {pullRequest.authoredByViewer
                         ? "You"
                         : pullRequest.author ?? "Unknown author"}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-start justify-between gap-4">
                     <span className="text-muted-foreground">Head checks</span>
                     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-semibold ${ciStatusMeta?.className}`}>
                       {ciStatusMeta?.label}
@@ -301,23 +289,23 @@ export default function PullRequestDetailDialog({
                   Review Coverage
                 </div>
                 <div className="space-y-3 text-sm">
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-start justify-between gap-4">
                     <span className="text-muted-foreground">Total reviewers</span>
                     <span className="font-semibold text-foreground">{pullRequest.reviewCount}</span>
                   </div>
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-start justify-between gap-4">
                     <span className="text-muted-foreground">Requested from you</span>
                     <span className="font-semibold text-foreground">
                       {pullRequest.isViewerRequestedReviewer ? "Yes" : "No"}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-start justify-between gap-4">
                     <span className="text-muted-foreground">Reviewed by you</span>
                     <span className="font-semibold text-foreground">
                       {pullRequest.reviewedByViewer ? "Yes" : "No"}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-start justify-between gap-4">
                     <span className="text-muted-foreground">Other reviewers</span>
                     <span className="font-semibold text-foreground">
                       {pullRequest.reviewedByOthersCount}
@@ -382,7 +370,7 @@ export default function PullRequestDetailDialog({
                         className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-secondary/20 px-3 py-2"
                       >
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground">
+                          <p className="text-sm font-medium text-foreground break-words">
                             {reviewEvent.reviewerLogin ?? "Unknown reviewer"}
                           </p>
                           <p className="text-xs text-muted-foreground">
@@ -492,67 +480,7 @@ export default function PullRequestDetailDialog({
               </div>
             )}
 
-            <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 space-y-3">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                <Route className="w-3.5 h-3.5 text-primary" />
-                Follow-Up Shortcuts
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleToggleMarkedForReview}
-                  className="gap-1.5"
-                >
-                  <Bookmark className="w-3.5 h-3.5" />
-                  {markedForReview ? "Unmark Review" : "Mark for Review"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleOpenReviewFocus("marked_for_review")}
-                  className="gap-1.5"
-                >
-                  My Review List
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleOpenReviewFocus("needs_my_review")}
-                  className="gap-1.5"
-                >
-                  Needs My Review
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleOpenReviewFocus("changes_requested")}
-                  className="gap-1.5"
-                >
-                  Changes Requested
-                </Button>
-              </div>
-            </div>
-
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void handleCopyLink()}
-                className="gap-1.5"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                Copy Link
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void handleCopyBranch()}
-                className="gap-1.5"
-              >
-                <GitBranch className="w-3.5 h-3.5" />
-                Copy Branch
-              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -564,7 +492,8 @@ export default function PullRequestDetailDialog({
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </Button>
             </div>
-          </>
+            </div>
+          </div>
         )}
       </DialogContent>
     </Dialog>

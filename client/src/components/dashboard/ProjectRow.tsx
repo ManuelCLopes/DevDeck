@@ -1,5 +1,4 @@
 import type { WorkspaceProject } from "@shared/workspace";
-import ProjectQuickActions from "@/components/projects/ProjectQuickActions";
 import { getCiStatusMeta, getProjectAttentionSummary } from "@/lib/project-health";
 import { formatDistanceToNow } from "date-fns";
 import { GitBranch, Globe, HardDrive, Link2Off, MessageSquare, Users } from "lucide-react";
@@ -31,8 +30,8 @@ export default function ProjectRow({ project }: ProjectRowProps) {
           setLocation(projectHref);
         }
       }}
-      className="group flex items-start gap-4 py-2.5 px-4 -mx-4 border-b border-border/40 last:border-0 cursor-pointer rounded-md transition-colors hover:bg-black/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:items-center"
-        aria-label={`Open ${project.name} overview`}
+      className="flex cursor-pointer items-start gap-4 rounded-md border-b border-border/40 px-4 py-2.5 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:items-center"
+      aria-label={`Open ${project.name} overview`}
     >
         <div className={`w-1.5 h-1.5 rounded-full ${statusColors[project.status]}`} />
 
@@ -101,12 +100,6 @@ export default function ProjectRow({ project }: ProjectRowProps) {
             <span className="text-[10px]">{attentionSummary}</span>
           </div>
         </div>
-        <ProjectQuickActions
-          compact
-          projectId={project.id}
-          projectName={project.name}
-          projectPath={project.localPath}
-        />
       </div>
   );
 }

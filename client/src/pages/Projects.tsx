@@ -2,14 +2,14 @@ import { Suspense, lazy, useEffect, useMemo } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
+import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
 import { getCiStatusMeta } from "@/lib/project-health";
+import { getMarkedPullRequestIds } from "@/lib/pull-request-watchlist";
 import {
-  getPullRequestCiStatusMeta,
-  getPullRequestReviewSummary,
-  getPullRequestStatusMeta,
+  getPullRequestSignalBadges,
 } from "@/lib/pull-request-utils";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -48,7 +48,12 @@ export default function Projects() {
     null,
   );
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
+  const pullRequestWatchlist = usePullRequestWatchlist();
   const desktopApi = getDesktopApi();
+  const markedPullRequestIds = useMemo(
+    () => getMarkedPullRequestIds(pullRequestWatchlist),
+    [pullRequestWatchlist],
+  );
 
   const filteredProjects = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -322,9 +327,10 @@ export default function Projects() {
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Open Pull Requests</h3>
                   <div className="space-y-2">
                     {selectedProjectPullRequestsPagination.paginatedItems.map((pullRequest) => {
-                      const ciStatusMeta = getPullRequestCiStatusMeta(pullRequest.ciStatus);
-                      const statusMeta = getPullRequestStatusMeta(pullRequest.status);
-                      const reviewSummary = getPullRequestReviewSummary(pullRequest);
+                      const signalBadges = getPullRequestSignalBadges(
+                        pullRequest,
+                        markedPullRequestIds.has(pullRequest.id),
+                      );
 
                       return (
                         <button
@@ -336,17 +342,18 @@ export default function Projects() {
                           <p className="text-[12px] font-semibold text-foreground line-clamp-2">
                             #{pullRequest.number} {pullRequest.title}
                           </p>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusMeta.className}`}>
-                              {statusMeta.label}
-                            </span>
-                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${reviewSummary.className}`}>
-                              {reviewSummary.label}
-                            </span>
-                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${ciStatusMeta.className}`}>
-                              {ciStatusMeta.label}
-                            </span>
-                          </div>
+                          {signalBadges.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {signalBadges.map((badge) => (
+                                <span
+                                  key={badge.label}
+                                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}
+                                >
+                                  {badge.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </button>
                       );
                     })}

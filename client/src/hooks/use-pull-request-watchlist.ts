@@ -8,6 +8,6 @@ export function usePullRequestWatchlist() {
   return useSyncExternalStore(
     subscribePullRequestWatchlist,
     getPullRequestWatchlist,
-    () => ({}),
+    getPullRequestWatchlist,
   );
 }

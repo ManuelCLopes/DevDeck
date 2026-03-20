@@ -281,7 +281,7 @@ function syncTrayPresence() {
 
 function createMainWindow() {
   const nextMainWindow = new BrowserWindow({
-    backgroundColor: "#ececec",
+    backgroundColor: "#f4f4f3",
     frame: false,
     height: 920,
     minHeight: 720,

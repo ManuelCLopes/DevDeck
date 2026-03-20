@@ -12,11 +12,7 @@ import {
 } from "@/lib/pull-request-watchlist";
 import {
   filterPullRequestsByFocus,
-  getPullRequestCiStatusMeta,
-  getPullRequestFollowUpMeta,
-  getPullRequestReviewSummary,
-  getPullRequestStatusMeta,
-  getPullRequestWatchMeta,
+  getPullRequestSignalBadges,
   pullRequestNeedsAuthorFollowUp,
   pullRequestNeedsViewerReview,
   type PullRequestFocus,
@@ -290,7 +286,10 @@ export default function Reviews() {
                   {openPullRequestsPagination.paginatedItems.map((pullRequest) => (
                     (() => {
                       const markedForReview = markedPullRequestIds.has(pullRequest.id);
-                      const watchMeta = getPullRequestWatchMeta(markedForReview);
+                      const signalBadges = getPullRequestSignalBadges(
+                        pullRequest,
+                        markedForReview,
+                      );
 
                       return (
                     <div
@@ -313,35 +312,18 @@ export default function Reviews() {
                             <span className="block font-semibold text-[13px] text-foreground break-words">
                               #{pullRequest.number} {pullRequest.title}
                             </span>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span
-                                className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestStatusMeta(pullRequest.status).className}`}
-                              >
-                                {getPullRequestStatusMeta(pullRequest.status).label}
-                              </span>
-                              <span
-                                className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestReviewSummary(pullRequest).className}`}
-                              >
-                                {getPullRequestReviewSummary(pullRequest).label}
-                              </span>
-                              <span
-                                className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestFollowUpMeta(pullRequest).className}`}
-                              >
-                                {getPullRequestFollowUpMeta(pullRequest).label}
-                              </span>
-                              <span
-                                className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${getPullRequestCiStatusMeta(pullRequest.ciStatus).className}`}
-                              >
-                                {getPullRequestCiStatusMeta(pullRequest.ciStatus).label}
-                              </span>
-                              {markedForReview && (
-                                <span
-                                  className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${watchMeta.className}`}
-                                >
-                                  {watchMeta.label}
-                                </span>
-                              )}
-                            </div>
+                            {signalBadges.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-2">
+                                {signalBadges.map((badge) => (
+                                  <span
+                                    key={badge.label}
+                                    className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${badge.className}`}
+                                  >
+                                    {badge.label}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           <div className="flex flex-shrink-0 items-center gap-2 self-start sm:flex-col sm:items-end sm:gap-1">
                             <span className="text-[11px] text-muted-foreground whitespace-nowrap">

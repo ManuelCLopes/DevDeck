@@ -14,6 +14,7 @@ import {
 import { readStoredGitHubToken } from "./github-auth";
 import type {
   MonitoredProject,
+  WorkspaceCommitIntegrationStatus,
   WorkspaceCiStatus,
   WorkspaceDiscoveryResult,
   WorkspaceGitHubState,
@@ -31,6 +32,7 @@ import type {
 interface ReflogEntry {
   authorEmail: string | null;
   authorName: string | null;
+  commitSha: string | null;
   message: string;
   timestamp: string;
 }
@@ -317,7 +319,7 @@ function parseLastReflogEntry(logText: string | null) {
   }
 
   const match = lastLine.match(
-    /^[0-9a-f]{40} [0-9a-f]{40} (.+) <([^>]+)> (\d+) [+-]\d+\t(.+)$/,
+    /^([0-9a-f]{40}) ([0-9a-f]{40}) (.+) <([^>]+)> (\d+) [+-]\d+\t(.+)$/,
   );
 
   if (!match) {
@@ -325,10 +327,11 @@ function parseLastReflogEntry(logText: string | null) {
   }
 
   return {
-    authorEmail: match[2],
-    authorName: match[1],
-    message: match[4],
-    timestamp: new Date(Number.parseInt(match[3], 10) * 1000).toISOString(),
+    authorEmail: match[4],
+    authorName: match[3],
+    commitSha: match[2],
+    message: match[6],
+    timestamp: new Date(Number.parseInt(match[5], 10) * 1000).toISOString(),
   } satisfies ReflogEntry;
 }
 
@@ -343,15 +346,70 @@ function parseRecentReflogEntries(logText: string | null, limit = 5) {
     .filter(Boolean)
     .slice(-limit)
     .map((line) =>
-      line.match(/^[0-9a-f]{40} [0-9a-f]{40} (.+) <([^>]+)> (\d+) [+-]\d+\t(.+)$/),
+      line.match(
+        /^([0-9a-f]{40}) ([0-9a-f]{40}) (.+) <([^>]+)> (\d+) [+-]\d+\t(.+)$/,
+      ),
     )
     .filter((match): match is RegExpMatchArray => Boolean(match))
     .map((match) => ({
-      authorEmail: match[2],
-      authorName: match[1],
-      message: match[4],
-      timestamp: new Date(Number.parseInt(match[3], 10) * 1000).toISOString(),
+      authorEmail: match[4],
+      authorName: match[3],
+      commitSha: match[2],
+      message: match[6],
+      timestamp: new Date(Number.parseInt(match[5], 10) * 1000).toISOString(),
     }));
+}
+
+async function resolveDefaultBranchRef(
+  repositoryPath: string,
+  defaultBranch: string,
+) {
+  for (const candidate of [`origin/${defaultBranch}`, defaultBranch]) {
+    try {
+      const { stdout } = await execFileAsync(
+        "git",
+        ["rev-parse", "--verify", "--quiet", candidate],
+        { cwd: repositoryPath },
+      );
+      if (stdout.trim().length > 0) {
+        return candidate;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+async function getCommitIntegrationStatus(
+  repositoryPath: string,
+  defaultBranchRef: string | null,
+  commitSha: string | null,
+): Promise<WorkspaceCommitIntegrationStatus> {
+  if (!defaultBranchRef || !commitSha) {
+    return "unknown";
+  }
+
+  try {
+    await execFileAsync(
+      "git",
+      ["merge-base", "--is-ancestor", commitSha, defaultBranchRef],
+      { cwd: repositoryPath },
+    );
+    return "in_default_branch";
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === 1
+    ) {
+      return "not_in_default_branch";
+    }
+
+    return "unknown";
+  }
 }
 
 function countContributorsInLastWeek(logText: string | null) {
@@ -725,6 +783,17 @@ async function fetchPullRequests(
 
     return workspacePullRequests;
   } catch (error) {
+    if (
+      error instanceof GitHubApiError &&
+      (error.status === 403 || error.status === 404)
+    ) {
+      pullRequestCache.set(githubRepository.slug, {
+        expiresAt: Date.now() + PULL_REQUEST_CACHE_TTL_MS,
+        pullRequests: [],
+      });
+      return [] as WorkspacePullRequestItem[];
+    }
+
     console.error(
       `Failed to load pull requests for ${githubRepository.slug}`,
       error,
@@ -1042,28 +1111,45 @@ async function scanRepository(
       }),
     };
 
-    const activities = parseRecentReflogEntries(headLogText, 5).map((entry, index) => {
-      const type = entry.message.startsWith("checkout:")
-        ? "checkout"
-        : entry.message.startsWith("commit:")
-          ? "commit"
-          : "repo";
+    const recentReflogEntries = parseRecentReflogEntries(headLogText, 5);
+    const defaultBranchRef = await resolveDefaultBranchRef(
+      repositoryPath,
+      defaultBranch,
+    );
+    const activities = await Promise.all(
+      recentReflogEntries.map(async (entry, index) => {
+        const type = entry.message.startsWith("checkout:")
+          ? "checkout"
+          : entry.message.startsWith("commit")
+            ? "commit"
+            : "repo";
+        const commitIntegrationStatus =
+          type === "commit"
+            ? await getCommitIntegrationStatus(
+                repositoryPath,
+                defaultBranchRef,
+                entry.commitSha,
+              )
+            : null;
 
-      return {
-        author: entry.authorName,
-        description: entry.message,
-        id: `${project.id}:activity:${index}:${entry.timestamp}`,
-        repo: project.name,
-        timestamp: entry.timestamp,
-        title:
-          type === "checkout"
-            ? `Branch switched in ${project.name}`
-            : type === "commit"
-              ? `Commit recorded in ${project.name}`
-              : `Repository activity in ${project.name}`,
-        type,
-      } satisfies WorkspaceSnapshot["activities"][number];
-    });
+        return {
+          author: entry.authorName,
+          commitIntegrationStatus,
+          commitSha: type === "commit" ? entry.commitSha : null,
+          description: entry.message,
+          id: `${project.id}:activity:${index}:${entry.timestamp}`,
+          repo: project.name,
+          timestamp: entry.timestamp,
+          title:
+            type === "checkout"
+              ? `Branch switched in ${project.name}`
+              : type === "commit"
+                ? `Commit recorded in ${project.name}`
+                : `Repository activity in ${project.name}`,
+          type,
+        } satisfies WorkspaceSnapshot["activities"][number];
+      }),
+    );
 
     return {
       activities,
