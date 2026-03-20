@@ -13,7 +13,7 @@ import {
 import {
   filterPullRequestsByFocus,
   getPullRequestSignalBadges,
-  pullRequestNeedsAuthorFollowUp,
+  pullRequestNeedsFollowUp,
   pullRequestNeedsViewerReview,
   type PullRequestFocus,
 } from "@/lib/pull-request-utils";
@@ -21,7 +21,6 @@ import { REVIEW_FOCUS_STORAGE_KEY } from "@/lib/review-focus";
 import { formatDistanceToNow } from "date-fns";
 import {
   AlertCircle,
-  ArrowUpRight,
   Bookmark,
   CheckCircle2,
   Clock,
@@ -59,7 +58,7 @@ export default function Reviews() {
   const staleReviews = reviews.filter((review) => review.status === "stale");
   const draftPullRequests = pullRequests.filter((pullRequest) => pullRequest.status === "draft");
   const needsViewerReviewCount = pullRequests.filter(pullRequestNeedsViewerReview).length;
-  const needsAuthorFollowUpCount = pullRequests.filter(pullRequestNeedsAuthorFollowUp).length;
+  const needsFollowUpCount = pullRequests.filter(pullRequestNeedsFollowUp).length;
   const reviewedByViewerCount = pullRequests.filter(
     (pullRequest) => pullRequest.reviewedByViewer,
   ).length;
@@ -204,7 +203,7 @@ export default function Reviews() {
           </div>
           <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              Needs Your Review
+              Needs Review
             </h3>
             <div className="flex items-baseline gap-2 mt-auto">
               <span className="text-3xl font-bold tracking-tight text-chart-2">
@@ -218,10 +217,10 @@ export default function Reviews() {
               Needs Your Follow-Up
             </h3>
             <div className="flex items-baseline gap-2 mt-auto">
-              <span className="text-3xl font-bold tracking-tight text-chart-3">
-                {needsAuthorFollowUpCount}
+                <span className="text-3xl font-bold tracking-tight text-chart-3">
+                {needsFollowUpCount}
               </span>
-              <span className="text-xs text-muted-foreground">author action</span>
+              <span className="text-xs text-muted-foreground">updated since review</span>
             </div>
           </div>
           <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
@@ -344,8 +343,8 @@ export default function Reviews() {
                               }}
                               className="inline-flex h-8 items-center rounded-md border border-border bg-white px-2.5 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
                             >
-                              <span className="mr-1.5">Open</span>
-                              <ArrowUpRight className="w-3.5 h-3.5" />
+                              <Github className="mr-1.5 h-3.5 w-3.5" />
+                              <span>View in GitHub</span>
                             </button>
                             <button
                               type="button"

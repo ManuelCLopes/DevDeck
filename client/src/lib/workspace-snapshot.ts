@@ -68,6 +68,7 @@ interface ReflogEntry {
 
 interface RepositoryScanResult {
   activities: WorkspaceActivityItem[];
+  authoredPullRequests: WorkspaceSnapshot["authoredPullRequests"];
   branches: string[];
   project: WorkspaceProject;
   pullRequests: WorkspacePullRequestItem[];
@@ -510,6 +511,7 @@ async function scanRepository(
 
   return {
     activities,
+    authoredPullRequests: [],
     branches,
     project,
     pullRequests: [],
@@ -565,9 +567,13 @@ function buildWorkspaceSnapshot(results: RepositoryScanResult[]) {
       (left, right) =>
         new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
     );
+  const authoredPullRequests = results.flatMap(
+    (result) => result.authoredPullRequests,
+  );
 
   return {
     activities,
+    authoredPullRequests,
     generatedAt: new Date().toISOString(),
     githubStatus,
     insights: createInsights(projects),

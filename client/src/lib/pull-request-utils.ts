@@ -204,10 +204,24 @@ export function pullRequestNeedsAuthorFollowUp(
   return pullRequest.authoredByViewer && pullRequest.status === "changes_requested";
 }
 
+export function pullRequestNeedsFollowUp(
+  pullRequest: Pick<
+    WorkspacePullRequestItem,
+    "authoredByViewer" | "hasUpdatesSinceViewerReview" | "reviewedByViewer"
+  >,
+) {
+  return (
+    !pullRequest.authoredByViewer &&
+    pullRequest.reviewedByViewer &&
+    pullRequest.hasUpdatesSinceViewerReview
+  );
+}
+
 export function pullRequestWaitingOnOthers(
   pullRequest: Pick<
     WorkspacePullRequestItem,
     | "authoredByViewer"
+    | "hasUpdatesSinceViewerReview"
     | "isViewerRequestedReviewer"
     | "reviewState"
     | "reviewedByViewer"
@@ -220,7 +234,8 @@ export function pullRequestWaitingOnOthers(
 
   return (
     !pullRequestNeedsViewerReview(pullRequest) &&
-    !pullRequestNeedsAuthorFollowUp(pullRequest)
+    !pullRequestNeedsAuthorFollowUp(pullRequest) &&
+    !pullRequestNeedsFollowUp(pullRequest)
   );
 }
 
@@ -252,7 +267,7 @@ export function filterPullRequestsByFocus(
     case "needs_my_review":
       return pullRequests.filter(pullRequestNeedsViewerReview);
     case "needs_my_follow_up":
-      return pullRequests.filter(pullRequestNeedsAuthorFollowUp);
+      return pullRequests.filter(pullRequestNeedsFollowUp);
     case "authored_by_me":
       return pullRequests.filter((pullRequest) => pullRequest.authoredByViewer);
     case "changes_requested":
@@ -272,6 +287,7 @@ export function getPullRequestFollowUpMeta(
   pullRequest: Pick<
     WorkspacePullRequestItem,
     | "authoredByViewer"
+    | "hasUpdatesSinceViewerReview"
     | "isViewerRequestedReviewer"
     | "reviewState"
     | "reviewedByViewer"
@@ -282,6 +298,13 @@ export function getPullRequestFollowUpMeta(
     return {
       className: "bg-chart-3/10 text-chart-3 border-chart-3/20",
       label: "needs your update",
+    };
+  }
+
+  if (pullRequestNeedsFollowUp(pullRequest)) {
+    return {
+      className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
+      label: "needs your follow-up",
     };
   }
 

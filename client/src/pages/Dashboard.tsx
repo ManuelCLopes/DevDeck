@@ -16,7 +16,7 @@ import {
 import { getCiStatusMeta } from "@/lib/project-health";
 import {
   getPullRequestSignalBadges,
-  pullRequestNeedsAuthorFollowUp,
+  pullRequestNeedsFollowUp,
   pullRequestNeedsViewerReview,
 } from "@/lib/pull-request-utils";
 import { formatDistanceToNow } from "date-fns";
@@ -30,6 +30,7 @@ import {
   Filter,
   FolderGit2,
   GitBranch,
+  Github,
   Globe,
   HardDrive,
   LayoutGrid,
@@ -43,6 +44,41 @@ import {
 const PullRequestDetailDialog = lazy(
   () => import("@/components/pull-requests/PullRequestDetailDialog"),
 );
+
+function getAuthoredPullRequestStatusMeta(status: string) {
+  switch (status) {
+    case "draft":
+      return {
+        className:
+          "border-[#d0d7de] bg-[#f6f8fa] text-[#57606a]",
+        label: "Draft",
+      };
+    case "reviewed":
+      return {
+        className:
+          "border-[#1a7f37]/20 bg-[#dafbe1] text-[#1a7f37]",
+        label: "Reviewed",
+      };
+    case "merged":
+      return {
+        className:
+          "border-[#8250df]/20 bg-[#fbefff] text-[#8250df]",
+        label: "Merged",
+      };
+    case "closed":
+      return {
+        className:
+          "border-[#cf222e]/20 bg-[#ffebe9] text-[#cf222e]",
+        label: "Closed",
+      };
+    default:
+      return {
+        className:
+          "border-[#1a7f37]/20 bg-[#dafbe1] text-[#1a7f37]",
+        label: "Open",
+      };
+  }
+}
 
 export default function Dashboard() {
   const [viewMode, setViewMode] = usePersistentState<"grid" | "list">(
@@ -62,6 +98,7 @@ export default function Dashboard() {
 
   const projects = snapshot?.projects ?? [];
   const pullRequests = snapshot?.pullRequests ?? [];
+  const authoredPullRequests = snapshot?.authoredPullRequests ?? [];
   const focusedProject = projects.find((project) => project.id === focusedProjectId) ?? null;
   const visibleProjects = focusedProject ? [focusedProject] : projects;
   const visiblePullRequests = focusedProject
@@ -103,25 +140,16 @@ export default function Dashboard() {
   const attentionPullRequestCount = visiblePullRequests.filter(
     (pullRequest) =>
       pullRequestNeedsViewerReview(pullRequest) ||
-      pullRequestNeedsAuthorFollowUp(pullRequest),
-  ).length;
-  const unreviewedPullRequestCount = visiblePullRequests.filter(
-    (pullRequest) => (pullRequest.reviewState ?? "unreviewed") === "unreviewed",
+      pullRequestNeedsFollowUp(pullRequest),
   ).length;
   const needsViewerReviewCount = visiblePullRequests.filter(
     pullRequestNeedsViewerReview,
   ).length;
-  const needsAuthorFollowUpCount = visiblePullRequests.filter(
-    pullRequestNeedsAuthorFollowUp,
-  ).length;
-  const reviewedByViewerCount = visiblePullRequests.filter(
-    (pullRequest) => pullRequest.reviewedByViewer,
+  const needsFollowUpCount = visiblePullRequests.filter(
+    pullRequestNeedsFollowUp,
   ).length;
   const markedPullRequestCount = visiblePullRequests.filter((pullRequest) =>
     markedPullRequestIds.has(pullRequest.id),
-  ).length;
-  const reviewedByOthersCount = visiblePullRequests.filter(
-    (pullRequest) => (pullRequest.reviewedByOthersCount ?? 0) > 0,
   ).length;
   const workspaceLabel = workspaceSelection?.rootPath ?? workspaceSelection?.rootName ?? "~/Developer";
   const overviewPullRequestsPagination = usePagination(
@@ -130,6 +158,14 @@ export default function Dashboard() {
     {
       resetKey: focusedProjectId ?? "workspace",
       storageKey: `devdeck:dashboard:overview-prs:${focusedProjectId ?? "workspace"}`,
+    },
+  );
+  const authoredPullRequestsPagination = usePagination(
+    authoredPullRequests,
+    5,
+    {
+      resetKey: focusedProjectId ?? "workspace",
+      storageKey: "devdeck:dashboard:authored-prs",
     },
   );
   const activeProjectsPagination = usePagination(
@@ -332,7 +368,7 @@ export default function Dashboard() {
                       </span>
                     </div>
                     <div className="flex items-start justify-between gap-4">
-                      <span className="text-muted-foreground">Needs your review</span>
+                      <span className="text-muted-foreground">Needs review</span>
                       <span className="min-w-0 text-right font-semibold text-foreground">
                         {focusedProjectPullRequests.filter(
                           pullRequestNeedsViewerReview,
@@ -343,7 +379,7 @@ export default function Dashboard() {
                       <span className="text-muted-foreground">Needs your follow-up</span>
                       <span className="min-w-0 text-right font-semibold text-foreground">
                         {focusedProjectPullRequests.filter(
-                          pullRequestNeedsAuthorFollowUp,
+                          pullRequestNeedsFollowUp,
                         ).length}
                       </span>
                     </div>
@@ -486,13 +522,42 @@ export default function Dashboard() {
                           onClick={() => setSelectedPullRequestId(pullRequest.id)}
                         >
                         <div className="flex flex-col gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-foreground break-words">
-                              #{pullRequest.number} {pullRequest.title}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {pullRequest.headBranch} into {pullRequest.baseBranch}
-                            </p>
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-foreground break-words">
+                                #{pullRequest.number} {pullRequest.title}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {pullRequest.headBranch} into {pullRequest.baseBranch}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 self-start">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleOpenPullRequest(pullRequest.url);
+                                }}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2.5 text-[11px] font-medium transition-colors hover:bg-black/5"
+                              >
+                                <Github className="h-3.5 w-3.5" />
+                                View in GitHub
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleToggleMarkedPullRequest(pullRequest.id);
+                                }}
+                                className={`h-8 rounded-md border px-2.5 text-[11px] font-medium transition-colors ${
+                                  markedForReview
+                                    ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                    : "border-border/60 bg-white text-foreground hover:bg-black/5"
+                                }`}
+                              >
+                                {markedForReview ? "Marked" : "Mark"}
+                              </button>
+                            </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             {signalBadges.map((badge) => (
@@ -503,30 +568,6 @@ export default function Dashboard() {
                                 {badge.label}
                               </span>
                             ))}
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void handleOpenPullRequest(pullRequest.url);
-                              }}
-                              className="h-8 px-2.5 rounded-md text-[11px] font-medium bg-white border border-border/60 hover:bg-black/5 transition-colors"
-                            >
-                              Open
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleToggleMarkedPullRequest(pullRequest.id);
-                              }}
-                              className={`h-8 rounded-md border px-2.5 text-[11px] font-medium transition-colors ${
-                                markedForReview
-                                  ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-                                  : "border-border/60 bg-white text-foreground hover:bg-black/5"
-                              }`}
-                            >
-                              {markedForReview ? "Marked" : "Mark"}
-                            </button>
                           </div>
                         </div>
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted-foreground">
@@ -574,7 +615,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
                 <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Needs Your Review
+                    Needs Review
                   </h3>
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-bold tracking-tight text-chart-2">
@@ -589,9 +630,9 @@ export default function Dashboard() {
                   </h3>
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-bold tracking-tight text-chart-3">
-                      {needsAuthorFollowUpCount}
+                      {needsFollowUpCount}
                     </span>
-                    <span className="text-xs text-muted-foreground">author action</span>
+                    <span className="text-xs text-muted-foreground">updated since review</span>
                   </div>
                 </div>
                 <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
@@ -607,14 +648,14 @@ export default function Dashboard() {
                 </div>
                 <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Reviewed By You
+                    Opened By You
                   </h3>
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-bold tracking-tight">
-                      {reviewedByViewerCount}
+                      {authoredPullRequests.length}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {reviewedByOthersCount} touched by teammates
+                      {authoredPullRequests.filter((pullRequest) => pullRequest.status === "merged").length} merged
                     </span>
                   </div>
                 </div>
@@ -636,13 +677,43 @@ export default function Dashboard() {
                         onClick={() => setSelectedPullRequestId(pullRequest.id)}
                       >
                         <div className="flex flex-col gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-foreground break-words">
-                              #{pullRequest.number} {pullRequest.title}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {pullRequest.repo} · {pullRequest.headBranch} into {pullRequest.baseBranch}
-                            </p>
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-foreground break-words">
+                                #{pullRequest.number} {pullRequest.title}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {pullRequest.repo} · {pullRequest.headBranch} into {pullRequest.baseBranch}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 self-start">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleOpenPullRequest(pullRequest.url);
+                                }}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2.5 text-[11px] font-medium transition-colors hover:bg-black/5"
+                              >
+                                <Github className="h-3.5 w-3.5" />
+                                View in GitHub
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleToggleMarkedPullRequest(pullRequest.id);
+                                }}
+                                className={`inline-flex h-8 items-center rounded-md border px-2.5 text-[11px] font-medium transition-colors ${
+                                  markedForReview
+                                    ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                    : "border-border/60 bg-white text-foreground hover:bg-black/5"
+                                }`}
+                              >
+                                <Bookmark className="mr-1.5 h-3.5 w-3.5" />
+                                {markedForReview ? "Marked" : "Mark"}
+                              </button>
+                            </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             {signalBadges.map((badge) => (
@@ -653,31 +724,6 @@ export default function Dashboard() {
                                 {badge.label}
                               </span>
                             ))}
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void handleOpenPullRequest(pullRequest.url);
-                              }}
-                              className="h-8 px-2.5 rounded-md text-[11px] font-medium bg-white border border-border/60 hover:bg-black/5 transition-colors"
-                            >
-                              Open
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleToggleMarkedPullRequest(pullRequest.id);
-                              }}
-                              className={`inline-flex h-8 items-center rounded-md border px-2.5 text-[11px] font-medium transition-colors ${
-                                markedForReview
-                                  ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-                                  : "border-border/60 bg-white text-foreground hover:bg-black/5"
-                              }`}
-                            >
-                              <Bookmark className="mr-1.5 h-3.5 w-3.5" />
-                              {markedForReview ? "Marked" : "Mark"}
-                            </button>
                           </div>
                         </div>
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted-foreground">
@@ -699,6 +745,80 @@ export default function Dashboard() {
                   pageSize={overviewPullRequestsPagination.pageSize}
                   totalItems={overviewPullRequestsPagination.totalItems}
                   label="pull requests"
+                />
+              </div>
+            </section>
+
+            <section>
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-semibold tracking-tight">Opened By You</h2>
+                  <span className="rounded-full border border-border bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
+                    {authoredPullRequests.length}
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-white p-4 shadow-sm">
+                <div className="space-y-3">
+                  {authoredPullRequestsPagination.paginatedItems.map((pullRequest) => {
+                    const statusMeta = getAuthoredPullRequestStatusMeta(pullRequest.status);
+
+                    return (
+                      <div
+                        key={pullRequest.id}
+                        className="rounded-lg border border-border/60 bg-secondary/20 p-3"
+                      >
+                        <div className="flex flex-col gap-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-foreground break-words">
+                                #{pullRequest.number} {pullRequest.title}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {pullRequest.repo} · {pullRequest.headBranch} into {pullRequest.baseBranch}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 self-start">
+                              <button
+                                type="button"
+                                onClick={() => void handleOpenPullRequest(pullRequest.url)}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2.5 text-[11px] font-medium transition-colors hover:bg-black/5"
+                              >
+                                <Github className="h-3.5 w-3.5" />
+                                View in GitHub
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap ${statusMeta.className}`}
+                            >
+                              {statusMeta.label}
+                            </span>
+                            <span className="rounded-full border border-border/60 bg-white px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                              {pullRequest.reviewCount} review{pullRequest.reviewCount === 1 ? "" : "s"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center justify-end gap-3 text-[11px] text-muted-foreground">
+                          <span>{formatDistanceToNow(new Date(pullRequest.updatedAt), { addSuffix: true })}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {authoredPullRequests.length === 0 && (
+                    <div className="rounded-lg border border-dashed border-border/60 p-4 text-sm text-muted-foreground">
+                      No authored pull requests were found in the monitored repositories.
+                    </div>
+                  )}
+                </div>
+                <PaginationControls
+                  currentPage={authoredPullRequestsPagination.currentPage}
+                  onPageChange={authoredPullRequestsPagination.setCurrentPage}
+                  pageSize={authoredPullRequestsPagination.pageSize}
+                  totalItems={authoredPullRequestsPagination.totalItems}
+                  label="authored pull requests"
                 />
               </div>
             </section>

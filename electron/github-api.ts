@@ -14,14 +14,17 @@ export interface GitHubApiPullRequestReview {
 
 export interface GitHubApiPullRequest {
   base: { ref: string };
+  closed_at: string | null;
   draft: boolean;
   head: {
     ref: string;
     sha: string;
   };
   html_url: string;
+  merged_at: string | null;
   number: number;
   requested_reviewers: Array<{ login: string }>;
+  state: "open" | "closed";
   title: string;
   updated_at: string;
   user: { login: string } | null;
@@ -105,9 +108,18 @@ export function fetchGitHubViewer(token: string) {
   });
 }
 
-export function fetchGitHubPullRequests(repositorySlug: string, token: string) {
+export function fetchGitHubPullRequests(
+  repositorySlug: string,
+  token: string,
+  options?: {
+    perPage?: number;
+    state?: "all" | "closed" | "open";
+  },
+) {
+  const state = options?.state ?? "open";
+  const perPage = options?.perPage ?? 20;
   return githubApiRequest<GitHubApiPullRequest[]>(
-    `/repos/${repositorySlug}/pulls?state=open&sort=updated&direction=desc&per_page=20`,
+    `/repos/${repositorySlug}/pulls?state=${state}&sort=updated&direction=desc&per_page=${perPage}`,
     token,
     { allowPublicFallback: true },
   );

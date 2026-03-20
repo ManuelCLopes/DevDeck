@@ -16,6 +16,12 @@ export type WorkspacePullRequestReviewState =
   | "unreviewed"
   | "reviewed"
   | "reviewed_by_you";
+export type WorkspaceAuthoredPullRequestStatus =
+  | "open"
+  | "draft"
+  | "reviewed"
+  | "merged"
+  | "closed";
 export type WorkspaceGitHubState =
   | "connected"
   | "unauthenticated"
@@ -103,9 +109,11 @@ export interface WorkspacePullRequestItem {
   authoredByViewer: boolean;
   baseBranch: string;
   ciStatus: WorkspaceCiStatus;
+  hasUpdatesSinceViewerReview: boolean;
   headBranch: string;
   id: string;
   isViewerRequestedReviewer: boolean;
+  lastReviewedByViewerAt: string | null;
   number: number;
   projectId: string;
   repo: string;
@@ -118,6 +126,21 @@ export interface WorkspacePullRequestItem {
   reviewedByViewer: boolean;
   reviewerLogins: string[];
   status: WorkspacePullRequestStatus;
+  title: string;
+  updatedAt: string;
+  url: string;
+}
+
+export interface WorkspaceAuthoredPullRequestItem {
+  baseBranch: string;
+  headBranch: string;
+  id: string;
+  number: number;
+  projectId: string;
+  repo: string;
+  repositorySlug: string;
+  reviewCount: number;
+  status: WorkspaceAuthoredPullRequestStatus;
   title: string;
   updatedAt: string;
   url: string;
@@ -145,6 +168,7 @@ export interface WorkspaceInsight {
 
 export interface WorkspaceSnapshot {
   activities: WorkspaceActivityItem[];
+  authoredPullRequests: WorkspaceAuthoredPullRequestItem[];
   generatedAt: string;
   githubStatus: WorkspaceGitHubStatus;
   insights: {

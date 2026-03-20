@@ -1,7 +1,6 @@
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useState } from "react";
 import {
-  ArrowUpRight,
   Bookmark,
   CheckCheck,
   GitBranch,
@@ -488,8 +487,7 @@ export default function PullRequestDetailDialog({
                 className="gap-1.5"
               >
                 <Github className="w-3.5 h-3.5" />
-                Open on GitHub
-                <ArrowUpRight className="w-3.5 h-3.5" />
+                View in GitHub
               </Button>
             </div>
             </div>

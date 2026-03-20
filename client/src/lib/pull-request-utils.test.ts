@@ -8,6 +8,7 @@ import {
   getPullRequestSignalBadges,
   getPullRequestStatusMeta,
   pullRequestNeedsAuthorFollowUp,
+  pullRequestNeedsFollowUp,
   pullRequestNeedsViewerReview,
 } from "./pull-request-utils";
 
@@ -103,10 +104,22 @@ test("pullRequestNeedsAuthorFollowUp detects changes requested on your PR", () =
   );
 });
 
+test("pullRequestNeedsFollowUp detects updated PRs after your review", () => {
+  assert.equal(
+    pullRequestNeedsFollowUp({
+      authoredByViewer: false,
+      hasUpdatesSinceViewerReview: true,
+      reviewedByViewer: true,
+    }),
+    true,
+  );
+});
+
 test("getPullRequestFollowUpMeta exposes waiting labels", () => {
   assert.deepEqual(
     getPullRequestFollowUpMeta({
       authoredByViewer: false,
+      hasUpdatesSinceViewerReview: false,
       isViewerRequestedReviewer: false,
       reviewState: "reviewed_by_you",
       reviewedByViewer: true,
@@ -115,6 +128,23 @@ test("getPullRequestFollowUpMeta exposes waiting labels", () => {
     {
       className: "bg-chart-1/10 text-chart-1 border-chart-1/20",
       label: "you reviewed",
+    },
+  );
+});
+
+test("getPullRequestFollowUpMeta prioritizes post-review follow-up", () => {
+  assert.deepEqual(
+    getPullRequestFollowUpMeta({
+      authoredByViewer: false,
+      hasUpdatesSinceViewerReview: true,
+      isViewerRequestedReviewer: false,
+      reviewState: "reviewed_by_you",
+      reviewedByViewer: true,
+      status: "open",
+    }),
+    {
+      className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
+      label: "needs your follow-up",
     },
   );
 });

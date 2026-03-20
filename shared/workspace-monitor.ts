@@ -41,7 +41,11 @@ function pullRequestNeedsViewerReview(
 function pullRequestNeedsAuthorFollowUp(
   pullRequest: WorkspaceSnapshot["pullRequests"][number],
 ) {
-  return pullRequest.authoredByViewer && pullRequest.status === "changes_requested";
+  return (
+    !pullRequest.authoredByViewer &&
+    pullRequest.reviewedByViewer &&
+    pullRequest.hasUpdatesSinceViewerReview
+  );
 }
 
 export function getWorkspaceAttentionSummary(snapshot: WorkspaceSnapshot) {

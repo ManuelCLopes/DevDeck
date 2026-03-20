@@ -14,6 +14,7 @@ import {
 import { readStoredGitHubToken } from "./github-auth";
 import type {
   MonitoredProject,
+  WorkspaceAuthoredPullRequestItem,
   WorkspaceCommitIntegrationStatus,
   WorkspaceCiStatus,
   WorkspaceDiscoveryResult,
@@ -39,6 +40,7 @@ interface ReflogEntry {
 
 interface RepositoryScanResult {
   activities: WorkspaceSnapshot["activities"];
+  authoredPullRequests: WorkspaceSnapshot["authoredPullRequests"];
   branches: string[];
   project: WorkspaceProject;
   pullRequests: WorkspacePullRequestItem[];
@@ -54,13 +56,16 @@ interface RepositorySyncStatus {
 interface GitHubPullRequestRecord {
   author: { login: string } | null;
   baseRefName: string;
+  closedAt: string | null;
   headSha: string;
   headRefName: string;
   isDraft: boolean;
   latestReviews: GitHubPullRequestReviewRecord[];
+  mergedAt: string | null;
   number: number;
   reviewDecision: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
   reviews: GitHubPullRequestReviewRecord[];
+  state: "open" | "closed";
   title: string;
   updatedAt: string;
   url: string;
@@ -131,6 +136,10 @@ let cachedGitHubAuthStatus:
 const pullRequestCache = new Map<
   string,
   { expiresAt: number; pullRequests: WorkspacePullRequestItem[] }
+>();
+const authoredPullRequestCache = new Map<
+  string,
+  { authoredPullRequests: WorkspaceAuthoredPullRequestItem[]; expiresAt: number }
 >();
 const ciStatusCache = new Map<
   string,
@@ -546,13 +555,16 @@ function normalizePullRequestRecord(
   return {
     author: pullRequest.user ? { login: pullRequest.user.login } : null,
     baseRefName: pullRequest.base.ref,
+    closedAt: pullRequest.closed_at,
     headSha: pullRequest.head.sha,
     headRefName: pullRequest.head.ref,
     isDraft: pullRequest.draft,
     latestReviews,
+    mergedAt: pullRequest.merged_at,
     number: pullRequest.number,
     reviewDecision,
     reviews: normalizedReviews,
+    state: pullRequest.state,
     title: pullRequest.title,
     updatedAt: pullRequest.updated_at,
     url: pullRequest.html_url,
@@ -611,9 +623,58 @@ function getPullRequestReviewState(
   return "unreviewed";
 }
 
+function getLatestViewerReviewTimestamp(
+  pullRequest: Pick<GitHubPullRequestRecord, "reviews">,
+  viewerLogin: string | null,
+) {
+  if (!viewerLogin) {
+    return null;
+  }
+
+  const latestViewerReviewTimestamp = pullRequest.reviews
+    .filter((review) => review.author?.login === viewerLogin && review.submittedAt)
+    .map((review) => new Date(review.submittedAt as string).getTime())
+    .sort((left, right) => right - left)[0];
+
+  if (!latestViewerReviewTimestamp) {
+    return null;
+  }
+
+  return new Date(latestViewerReviewTimestamp).toISOString();
+}
+
+function getAuthoredPullRequestStatus(
+  pullRequest: Pick<
+    GitHubPullRequestRecord,
+    "isDraft" | "mergedAt" | "reviews" | "state"
+  >,
+  authorLogin: string | null,
+) {
+  if (pullRequest.mergedAt) {
+    return "merged" as const;
+  }
+
+  if (pullRequest.state === "closed") {
+    return "closed" as const;
+  }
+
+  if (pullRequest.isDraft) {
+    return "draft" as const;
+  }
+
+  const reviewerLogins = normalizeReviewerLogins({
+    author: authorLogin ? { login: authorLogin } : null,
+    latestReviews: pullRequest.reviews,
+    reviews: pullRequest.reviews,
+  });
+
+  return reviewerLogins.length > 0 ? ("reviewed" as const) : ("open" as const);
+}
+
 export function clearWorkspaceSnapshotCaches() {
   cachedGitHubAuthStatus = null;
   pullRequestCache.clear();
+  authoredPullRequestCache.clear();
   ciStatusCache.clear();
 }
 
@@ -734,6 +795,10 @@ async function fetchPullRequests(
       const reviewedByViewer = githubAuthStatus.viewerLogin
         ? reviewerLogins.includes(githubAuthStatus.viewerLogin)
         : false;
+      const lastReviewedByViewerAt = getLatestViewerReviewTimestamp(
+        normalizedPullRequest,
+        githubAuthStatus.viewerLogin,
+      );
       const isViewerRequestedReviewer = githubAuthStatus.viewerLogin
         ? requestedReviewerLogins.includes(githubAuthStatus.viewerLogin)
         : false;
@@ -748,9 +813,14 @@ async function fetchPullRequests(
           authorLogin === githubAuthStatus.viewerLogin,
         baseBranch: normalizedPullRequest.baseRefName,
         ciStatus,
+        hasUpdatesSinceViewerReview:
+          Boolean(lastReviewedByViewerAt) &&
+          new Date(normalizedPullRequest.updatedAt).getTime() >
+            new Date(lastReviewedByViewerAt as string).getTime(),
         headBranch: normalizedPullRequest.headRefName,
         id: `${githubRepository.slug}#${normalizedPullRequest.number}`,
         isViewerRequestedReviewer,
+        lastReviewedByViewerAt,
         number: normalizedPullRequest.number,
         projectId: project.id,
         repo: project.name,
@@ -799,6 +869,103 @@ async function fetchPullRequests(
       error,
     );
     return [] as WorkspacePullRequestItem[];
+  }
+}
+
+async function fetchAuthoredPullRequests(
+  project: Pick<WorkspaceProject, "id" | "name">,
+  remoteUrl: string | null,
+  githubAuthStatus: GitHubAuthStatus,
+) {
+  const githubRepository = parseGitHubRepository(remoteUrl);
+  if (
+    !githubRepository ||
+    !githubAuthStatus.authenticated ||
+    !githubAuthStatus.token ||
+    !githubAuthStatus.viewerLogin
+  ) {
+    return [] as WorkspaceAuthoredPullRequestItem[];
+  }
+
+  const cachedAuthoredPullRequests = authoredPullRequestCache.get(githubRepository.slug);
+  if (
+    cachedAuthoredPullRequests &&
+    cachedAuthoredPullRequests.expiresAt > Date.now()
+  ) {
+    return cachedAuthoredPullRequests.authoredPullRequests;
+  }
+
+  try {
+    const allPullRequests = await fetchGitHubPullRequests(
+      githubRepository.slug,
+      githubAuthStatus.token,
+      {
+        perPage: 50,
+        state: "all",
+      },
+    );
+    const authoredGitHubPullRequests = allPullRequests.filter(
+      (pullRequest) => pullRequest.user?.login === githubAuthStatus.viewerLogin,
+    );
+    const authoredPullRequestReviews = await Promise.all(
+      authoredGitHubPullRequests.map((pullRequest) =>
+        fetchGitHubPullRequestReviews(
+          githubRepository.slug,
+          pullRequest.number,
+          githubAuthStatus.token!,
+        ),
+      ),
+    );
+
+    const authoredPullRequests = authoredGitHubPullRequests.map(
+      (pullRequest, index) => {
+        const normalizedPullRequest = normalizePullRequestRecord(
+          pullRequest,
+          authoredPullRequestReviews[index] ?? [],
+        );
+        const authorLogin = normalizedPullRequest.author?.login ?? null;
+        const reviewerLogins = normalizeReviewerLogins(normalizedPullRequest);
+
+        return {
+          baseBranch: normalizedPullRequest.baseRefName,
+          headBranch: normalizedPullRequest.headRefName,
+          id: `${githubRepository.slug}#authored:${normalizedPullRequest.number}`,
+          number: normalizedPullRequest.number,
+          projectId: project.id,
+          repo: project.name,
+          repositorySlug: githubRepository.slug,
+          reviewCount: reviewerLogins.length,
+          status: getAuthoredPullRequestStatus(normalizedPullRequest, authorLogin),
+          title: normalizedPullRequest.title,
+          updatedAt: normalizedPullRequest.updatedAt,
+          url: normalizedPullRequest.url,
+        } satisfies WorkspaceAuthoredPullRequestItem;
+      },
+    );
+
+    authoredPullRequestCache.set(githubRepository.slug, {
+      authoredPullRequests,
+      expiresAt: Date.now() + PULL_REQUEST_CACHE_TTL_MS,
+    });
+
+    return authoredPullRequests;
+  } catch (error) {
+    if (
+      error instanceof GitHubApiError &&
+      (error.status === 403 || error.status === 404)
+    ) {
+      authoredPullRequestCache.set(githubRepository.slug, {
+        authoredPullRequests: [],
+        expiresAt: Date.now() + PULL_REQUEST_CACHE_TTL_MS,
+      });
+      return [] as WorkspaceAuthoredPullRequestItem[];
+    }
+
+    console.error(
+      `Failed to load authored pull requests for ${githubRepository.slug}`,
+      error,
+    );
+    return [] as WorkspaceAuthoredPullRequestItem[];
   }
 }
 
@@ -1088,11 +1255,18 @@ async function scanRepository(
       team: inferTeam(monitoredProject.relativePath),
       unpushedCommitCount: syncStatus.aheadBy,
     };
-    const pullRequests = await fetchPullRequests(
-      baseProject,
-      remoteUrl,
-      githubAuthStatus,
-    );
+    const [pullRequests, authoredPullRequests] = await Promise.all([
+      fetchPullRequests(
+        baseProject,
+        remoteUrl,
+        githubAuthStatus,
+      ),
+      fetchAuthoredPullRequests(
+        baseProject,
+        remoteUrl,
+        githubAuthStatus,
+      ),
+    ]);
     const project: WorkspaceProject = {
       ...baseProject,
       awaitingReviewCount: pullRequests.filter(
@@ -1153,6 +1327,7 @@ async function scanRepository(
 
     return {
       activities,
+      authoredPullRequests,
       branches,
       project,
       pullRequests,
@@ -1213,6 +1388,12 @@ function buildWorkspaceSnapshot(
   githubStatus: WorkspaceGitHubStatus,
 ) {
   const projects = results.map((result) => result.project);
+  const authoredPullRequests = results
+    .flatMap((result) => result.authoredPullRequests)
+    .sort(
+      (left, right) =>
+        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+    );
   const pullRequests = results
     .flatMap((result) => result.pullRequests)
     .sort(
@@ -1234,6 +1415,7 @@ function buildWorkspaceSnapshot(
 
   return {
     activities,
+    authoredPullRequests,
     generatedAt: new Date().toISOString(),
     githubStatus,
     insights: createInsights(projects),
