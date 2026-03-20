@@ -7,6 +7,9 @@ import type {
 export type PullRequestFocus =
   | "all"
   | "marked_for_review"
+  | "no_reviews"
+  | "checks_failing"
+  | "checks_passing"
   | "needs_my_review"
   | "needs_my_follow_up"
   | "authored_by_me"
@@ -235,6 +238,16 @@ export function filterPullRequestsByFocus(
     case "marked_for_review":
       return pullRequests.filter((pullRequest) =>
         markedPullRequestIdSet.has(pullRequest.id),
+      );
+    case "no_reviews":
+      return pullRequests.filter(pullRequestHasNoReviews);
+    case "checks_failing":
+      return pullRequests.filter(
+        (pullRequest) => pullRequest.ciStatus === "failing",
+      );
+    case "checks_passing":
+      return pullRequests.filter(
+        (pullRequest) => pullRequest.ciStatus === "passing",
       );
     case "needs_my_review":
       return pullRequests.filter(pullRequestNeedsViewerReview);

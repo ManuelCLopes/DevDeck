@@ -186,3 +186,60 @@ test("filterPullRequestsByFocus narrows marked pull requests", () => {
     1,
   );
 });
+
+test("filterPullRequestsByFocus narrows no review pull requests", () => {
+  const pullRequests = [
+    {
+      ciStatus: "failing",
+      id: "repo-one#12",
+      reviewCount: 0,
+      reviewState: "unreviewed",
+      reviewedByOthersCount: 0,
+      reviewedByViewer: false,
+    },
+    {
+      ciStatus: "passing",
+      id: "repo-two#8",
+      reviewCount: 2,
+      reviewState: "reviewed",
+      reviewedByOthersCount: 2,
+      reviewedByViewer: false,
+    },
+  ];
+
+  assert.equal(
+    filterPullRequestsByFocus(
+      pullRequests as never,
+      "no_reviews",
+    ).length,
+    1,
+  );
+});
+
+test("filterPullRequestsByFocus narrows CI status pull requests", () => {
+  const pullRequests = [
+    {
+      ciStatus: "failing",
+      id: "repo-one#12",
+    },
+    {
+      ciStatus: "passing",
+      id: "repo-two#8",
+    },
+  ];
+
+  assert.equal(
+    filterPullRequestsByFocus(
+      pullRequests as never,
+      "checks_failing",
+    ).length,
+    1,
+  );
+  assert.equal(
+    filterPullRequestsByFocus(
+      pullRequests as never,
+      "checks_passing",
+    ).length,
+    1,
+  );
+});

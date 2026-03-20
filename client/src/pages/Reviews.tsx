@@ -91,6 +91,9 @@ export default function Reviews() {
     if (
       nextFocus === "all" ||
       nextFocus === "marked_for_review" ||
+      nextFocus === "no_reviews" ||
+      nextFocus === "checks_failing" ||
+      nextFocus === "checks_passing" ||
       nextFocus === "needs_my_review" ||
       nextFocus === "needs_my_follow_up" ||
       nextFocus === "authored_by_me" ||
@@ -134,26 +137,28 @@ export default function Reviews() {
       id: "marked_for_review",
       label: "Marked For Review",
     },
-    { count: needsViewerReviewCount, id: "needs_my_review", label: "Needs My Review" },
-    { count: needsAuthorFollowUpCount, id: "needs_my_follow_up", label: "Needs My Follow-Up" },
-    { count: authoredByViewerCount, id: "authored_by_me", label: "Authored By Me" },
     {
-      count: pullRequests.filter(
-        (pullRequest) => pullRequest.status === "changes_requested",
-      ).length,
-      id: "changes_requested",
-      label: "Changes Requested",
+      count: filterPullRequestsByFocus(pullRequests, "no_reviews").length,
+      id: "no_reviews",
+      label: "No Reviews",
     },
-    { count: reviewedByViewerCount, id: "reviewed_by_me", label: "Reviewed By Me" },
     {
-      count: filterPullRequestsByFocus(pullRequests, "waiting_on_others").length,
-      id: "waiting_on_others",
-      label: "Waiting On Others",
+      count: filterPullRequestsByFocus(pullRequests, "checks_failing").length,
+      id: "checks_failing",
+      label: "Checks Failing",
+    },
+    {
+      count: filterPullRequestsByFocus(pullRequests, "checks_passing").length,
+      id: "checks_passing",
+      label: "Checks Passing",
     },
   ];
 
   const emptyPullRequestMessageByFilter: Record<PullRequestFocus, string> = {
     all: "No open pull requests were found for the connected repositories.",
+    checks_failing: "No pull requests currently have failing checks.",
+    checks_passing: "No pull requests currently have passing checks.",
+    no_reviews: "No pull requests are currently waiting on a first review.",
     authored_by_me: "You do not currently have open pull requests in this workspace.",
     changes_requested: "No pull requests are currently waiting on requested changes.",
     marked_for_review: "You have not marked any pull requests for review yet.",
