@@ -414,20 +414,22 @@ export default function Dashboard() {
                             />
                           ) : null}
                           <div className={hasBranchOnlyCommit ? "pl-1" : ""}>
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="flex flex-col gap-1">
                               <p className="min-w-0 text-sm font-medium text-foreground break-words">{activity.title}</p>
-                              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">{activity.description}</p>
+                            <div className="mt-3 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {shortCommitSha && (
+                                  <span className="inline-flex items-center rounded-full border border-border/60 bg-white px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                    {shortCommitSha}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="whitespace-nowrap text-right">
                                 {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
                               </span>
                             </div>
-                            <p className="mt-1 text-xs text-muted-foreground">{activity.description}</p>
-                            {shortCommitSha && (
-                              <div className="mt-2 flex flex-wrap items-center gap-2">
-                                <span className="inline-flex items-center rounded-full border border-border/60 bg-white px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-                                  {shortCommitSha}
-                                </span>
-                              </div>
-                            )}
                           </div>
                         </div>
                       );
@@ -516,9 +518,17 @@ export default function Dashboard() {
                             ))}
                           </div>
                         </div>
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted-foreground">
-                          <span className="min-w-0 break-words">{pullRequest.authoredByViewer ? "Opened by you" : pullRequest.author ?? "Unknown author"}</span>
-                          <span>{formatDistanceToNow(new Date(pullRequest.updatedAt), { addSuffix: true })}</span>
+                        <div className="mt-3 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
+                          <span className="min-w-0 break-words">
+                            {pullRequest.authoredByViewer
+                              ? "Opened by you"
+                              : pullRequest.author ?? "Unknown author"}
+                          </span>
+                          <span className="whitespace-nowrap text-right">
+                            {formatDistanceToNow(new Date(pullRequest.updatedAt), {
+                              addSuffix: true,
+                            })}
+                          </span>
                         </div>
                       </div>
                       );
@@ -692,9 +702,15 @@ export default function Dashboard() {
                             ))}
                           </div>
                         </div>
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[11px] text-muted-foreground">
-                          <span className="min-w-0 break-words">{pullRequest.authoredByViewer ? "Opened by you" : pullRequest.author ?? "Unknown author"}</span>
-                          <span>{formatDistanceToNow(new Date(pullRequest.updatedAt), { addSuffix: true })}</span>
+                        <div className="mt-3 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
+                          <span className="min-w-0 break-words">
+                            {pullRequest.authoredByViewer
+                              ? "Opened by you"
+                              : pullRequest.author ?? "Unknown author"}
+                          </span>
+                          <span className="whitespace-nowrap text-right">
+                            {formatDistanceToNow(new Date(pullRequest.updatedAt), { addSuffix: true })}
+                          </span>
                         </div>
                       </div>
                     );
@@ -767,8 +783,12 @@ export default function Dashboard() {
                             </span>
                           </div>
                         </div>
-                        <div className="mt-3 flex flex-wrap items-center justify-end gap-3 text-[11px] text-muted-foreground">
-                          <span>{formatDistanceToNow(new Date(pullRequest.updatedAt), { addSuffix: true })}</span>
+                        <div className="mt-3 flex justify-end text-[11px] text-muted-foreground">
+                          <span className="whitespace-nowrap text-right">
+                            {formatDistanceToNow(new Date(pullRequest.updatedAt), {
+                              addSuffix: true,
+                            })}
+                          </span>
                         </div>
                       </div>
                     );

@@ -299,82 +299,86 @@ export default function Reviews() {
                       return (
                     <div
                       key={pullRequest.id}
-                      className="group flex items-start gap-3 py-3 px-4 -mx-4 hover:bg-black/[0.03] rounded-md transition-colors border-b border-border/40 last:border-0 cursor-pointer"
+                      className="group rounded-md border-b border-border/40 px-4 py-3 -mx-4 transition-colors last:border-0 hover:bg-black/[0.03] cursor-pointer"
                       onClick={() => handleInspectPullRequest(pullRequest.id)}
                     >
-                      <div className="mt-0.5">
-                        {pullRequest.status === "approved" ? (
-                          <CheckCircle2 className="w-4 h-4 text-chart-1" />
-                        ) : pullRequest.status === "changes_requested" ? (
-                          <AlertCircle className="w-4 h-4 text-chart-3" />
-                        ) : (
-                          <Clock className="w-4 h-4 text-muted-foreground" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="mb-0.5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0 space-y-2">
-                            <span className="block break-words text-[13px] font-semibold leading-5 text-foreground">
-                              #{pullRequest.number} {pullRequest.title}
-                            </span>
-                            {signalBadges.length > 0 && (
-                              <div className="flex flex-wrap items-center gap-2">
-                                {signalBadges.map((badge) => (
-                                  <span
-                                    key={badge.label}
-                                    className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${badge.className}`}
-                                  >
-                                    {badge.label}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex flex-shrink-0 flex-wrap items-center gap-2 self-start">
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void handleOpenPullRequest(pullRequest.url);
-                              }}
-                              className="inline-flex h-8 items-center rounded-md border border-border bg-white px-2 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
-                            >
-                              <Github className="mr-1.5 h-3.5 w-3.5" />
-                              <span>View</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleToggleMarkedPullRequest(pullRequest.id);
-                              }}
-                              className={`inline-flex h-8 items-center rounded-md border px-2 text-[11px] font-medium shadow-sm transition-colors ${
-                                markedForReview
-                                  ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-                                  : "border-border bg-white text-foreground hover:bg-secondary"
-                              }`}
-                            >
-                              <Bookmark className="mr-1.5 h-3.5 w-3.5" />
-                              {markedForReview ? "Marked" : "Mark"}
-                            </button>
+                      <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-3">
+                        <div className="mt-0.5">
+                          {pullRequest.status === "approved" ? (
+                            <CheckCircle2 className="w-4 h-4 text-chart-1" />
+                          ) : pullRequest.status === "changes_requested" ? (
+                            <AlertCircle className="w-4 h-4 text-chart-3" />
+                          ) : (
+                            <Clock className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="mb-0.5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0 space-y-2">
+                              <span className="block break-words text-[13px] font-semibold leading-5 text-foreground">
+                                #{pullRequest.number} {pullRequest.title}
+                              </span>
+                              {signalBadges.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {signalBadges.map((badge) => (
+                                    <span
+                                      key={badge.label}
+                                      className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${badge.className}`}
+                                    >
+                                      {badge.label}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-shrink-0 flex-wrap items-center gap-2 self-start">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleOpenPullRequest(pullRequest.url);
+                                }}
+                                className="inline-flex h-8 items-center rounded-md border border-border bg-white px-2 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
+                              >
+                                <Github className="mr-1.5 h-3.5 w-3.5" />
+                                <span>View</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleToggleMarkedPullRequest(pullRequest.id);
+                                }}
+                                className={`inline-flex h-8 items-center rounded-md border px-2 text-[11px] font-medium shadow-sm transition-colors ${
+                                  markedForReview
+                                    ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                                    : "border-border bg-white text-foreground hover:bg-secondary"
+                                }`}
+                              >
+                                <Bookmark className="mr-1.5 h-3.5 w-3.5" />
+                                {markedForReview ? "Marked" : "Mark"}
+                              </button>
+                            </div>
                           </div>
                         </div>
 
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                          <span className="whitespace-nowrap">
+                        <div className="col-span-2 mt-1 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className={getProjectTagClassName(pullRequest.repo)}>
+                              {pullRequest.repo}
+                            </span>
+                            {pullRequest.author && <span className="break-words">{pullRequest.author}</span>}
+                            {pullRequest.isViewerRequestedReviewer && (
+                              <span className="rounded-full border border-chart-2/20 bg-chart-2/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-chart-2">
+                                requested from you
+                              </span>
+                            )}
+                          </div>
+                          <span className="whitespace-nowrap text-right">
                             {formatDistanceToNow(new Date(pullRequest.updatedAt), {
                               addSuffix: true,
                             })}
                           </span>
-                          <span className={getProjectTagClassName(pullRequest.repo)}>
-                            {pullRequest.repo}
-                          </span>
-                          {pullRequest.author && <span className="break-words">{pullRequest.author}</span>}
-                          {pullRequest.isViewerRequestedReviewer && (
-                            <span className="rounded-full border border-chart-2/20 bg-chart-2/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-chart-2">
-                              requested from you
-                            </span>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -428,7 +432,7 @@ export default function Reviews() {
                         <CheckCircle2 className="w-4 h-4 text-chart-1" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="mb-0.5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="mb-0.5 flex flex-col gap-2">
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <span className="font-semibold text-[13px] text-foreground break-words">
                               {review.branch}
@@ -437,23 +441,25 @@ export default function Reviews() {
                               active
                             </span>
                           </div>
-                          <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0">
-                            {formatDistanceToNow(new Date(review.updatedAt), {
-                              addSuffix: true,
-                            })}
-                          </span>
-                        </div>
-
-                        <div className="mt-1 flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
-                          <span className={getProjectTagClassName(review.repo)}>
-                            {review.repo}
-                          </span>
-                          {review.author && <span>{review.author}</span>}
                         </div>
 
                         <p className="text-[12px] text-muted-foreground mt-2 line-clamp-2">
                           {review.summary}
                         </p>
+
+                        <div className="mt-3 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
+                          <div className="flex min-w-0 flex-wrap items-center gap-4">
+                            <span className={getProjectTagClassName(review.repo)}>
+                              {review.repo}
+                            </span>
+                            {review.author && <span>{review.author}</span>}
+                          </div>
+                          <span className="whitespace-nowrap text-right">
+                            {formatDistanceToNow(new Date(review.updatedAt), {
+                              addSuffix: true,
+                            })}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -499,24 +505,24 @@ export default function Reviews() {
                           <p className="text-[12px] font-medium text-foreground truncate">
                             {review.branch}
                           </p>
-                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <p className="text-[11px] text-muted-foreground mt-2 line-clamp-2">
+                            {review.summary}
+                          </p>
+                          <div className="mt-3 flex flex-col gap-2 text-[10px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
                             <span
                               className={getProjectTagClassName(
                                 review.repo,
-                                "mr-2 min-w-0 max-w-full break-all text-[10px]",
+                                "min-w-0 max-w-full break-all text-[10px]",
                               )}
                             >
                               {review.repo}
                             </span>
-                            <span className="text-[10px] font-medium text-chart-3 whitespace-nowrap bg-chart-3/10 px-1 py-0.5 rounded border border-chart-3/20">
+                            <span className="whitespace-nowrap text-right font-medium text-chart-3">
                               {formatDistanceToNow(new Date(review.updatedAt), {
                                 addSuffix: true,
                               })}
                             </span>
                           </div>
-                          <p className="text-[11px] text-muted-foreground mt-2 line-clamp-2">
-                            {review.summary}
-                          </p>
                         </div>
                       </div>
                     </div>

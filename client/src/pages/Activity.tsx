@@ -44,6 +44,34 @@ export default function Activity() {
     storageKey: "devdeck:activity:pagination",
   });
 
+  const getActivityTypeLabel = (type: string) => {
+    switch (type) {
+      case "commit":
+        return "Commit";
+      case "checkout":
+        return "Checkout";
+      case "repo":
+        return "Repository";
+      default:
+        return "Activity";
+    }
+  };
+
+  const getActivityHeadline = (activity: {
+    description: string;
+    title: string;
+    type: string;
+  }) => {
+    const cleanedDescription = activity.description
+      .replace(/^(commit|checkout|repo)\s*:\s*/i, "")
+      .trim();
+    const cleanedTitle = activity.title
+      .replace(/^(commit recorded in|repository activity in)\s+/i, "")
+      .trim();
+
+    return cleanedDescription || cleanedTitle;
+  };
+
   const ActivityIcon = ({ type }: { type: string }) => {
     switch (type) {
       case "commit":
@@ -196,24 +224,25 @@ export default function Activity() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="mb-1 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                      <p className="min-w-0 text-[13px] font-semibold text-foreground break-words">
-                        {activity.title}
+                    <div className="mb-1 flex flex-col gap-1">
+                      <p className="min-w-0 text-[13px] text-foreground break-words">
+                        <span className="font-semibold">
+                          {getActivityTypeLabel(activity.type)}
+                        </span>{" "}
+                        <span>{getActivityHeadline(activity)}</span>
                       </p>
-                      <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                        {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
-                      </span>
                     </div>
 
-                    <p className="text-[13px] text-muted-foreground line-clamp-2 mb-2">
-                      {activity.description}
-                    </p>
-
-                    <div className="flex flex-wrap items-center gap-3 text-[11px] font-medium text-muted-foreground">
-                      <span className={getProjectTagClassName(activity.repo)}>
-                        {activity.repo}
+                    <div className="flex flex-col gap-2 text-[11px] font-medium text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className={getProjectTagClassName(activity.repo)}>
+                          {activity.repo}
+                        </span>
+                        {activity.author && <span>by {activity.author}</span>}
+                      </div>
+                      <span className="whitespace-nowrap text-right font-normal">
+                        {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
                       </span>
-                      {activity.author && <span>by {activity.author}</span>}
                     </div>
                   </div>
                 </div>
