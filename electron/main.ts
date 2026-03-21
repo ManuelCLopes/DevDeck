@@ -110,7 +110,7 @@ function getTrayIconPath() {
   return path.resolve(__dirname, "..", "build", "icon.png");
 }
 
-function createTrayImage() {
+function createAppIconImage() {
   const iconPath = getTrayIconPath();
   if (!existsSync(iconPath)) {
     return nativeImage.createEmpty();
@@ -121,9 +121,31 @@ function createTrayImage() {
     return nativeImage.createEmpty();
   }
 
+  return icon;
+}
+
+function createTrayImage() {
+  const icon = createAppIconImage();
+  if (icon.isEmpty()) {
+    return nativeImage.createEmpty();
+  }
+
   return process.platform === "darwin"
     ? icon.resize({ height: 18, width: 18 })
     : icon;
+}
+
+function syncMacAppIdentity() {
+  app.setName("DevDeck");
+
+  if (process.platform !== "darwin" || !app.dock) {
+    return;
+  }
+
+  const icon = createAppIconImage();
+  if (!icon.isEmpty()) {
+    app.dock.setIcon(icon);
+  }
 }
 
 function updateDockBadge(snapshot: WorkspaceSnapshot | null) {
@@ -647,6 +669,7 @@ ipcMain.handle(
 );
 
 app.whenReady().then(() => {
+  syncMacAppIdentity();
   createMainWindow();
   syncTrayPresence();
 
