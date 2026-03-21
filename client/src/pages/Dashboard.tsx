@@ -16,6 +16,7 @@ import {
 import { getCiStatusMeta } from "@/lib/project-health";
 import {
   getPullRequestSignalBadges,
+  pullRequestHasNoReviews,
   pullRequestNeedsFollowUp,
   pullRequestNeedsViewerReview,
 } from "@/lib/pull-request-utils";
@@ -25,6 +26,7 @@ import {
   Activity,
   ArrowUpRight,
   Bookmark,
+  Check,
   ChevronLeft,
   Clock3,
   Filter,
@@ -39,6 +41,7 @@ import {
   MessageSquare,
   RefreshCw,
   Users,
+  X,
 } from "lucide-react";
 
 const PullRequestDetailDialog = lazy(
@@ -462,19 +465,38 @@ export default function Dashboard() {
                         pullRequest,
                         markedForReview,
                       );
+                      const visibleBadges = signalBadges.filter(
+                        (badge) => badge.label === "marked for review",
+                      );
+                      const hasNoReviews = pullRequestHasNoReviews(pullRequest);
+                      const ciStatusIcon =
+                        pullRequest.ciStatus === "passing" ? (
+                          <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
+                        ) : pullRequest.ciStatus === "failing" ? (
+                          <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                        ) : null;
 
                       return (
                         <div
                           key={pullRequest.id}
-                          className="rounded-lg border border-border/60 p-3 bg-secondary/20 cursor-pointer hover:border-black/15 transition-colors"
+                          className="relative overflow-hidden rounded-lg border border-border/60 p-3 bg-secondary/20 cursor-pointer hover:border-black/15 transition-colors"
                           onClick={() => setSelectedPullRequestId(pullRequest.id)}
                         >
+                        {hasNoReviews ? (
+                          <div
+                            aria-hidden="true"
+                            className="absolute inset-y-0 left-0 w-1.5 bg-muted-foreground/30"
+                          />
+                        ) : null}
                         <div className="flex flex-col gap-3">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
-                              <p className="text-sm font-medium text-foreground break-words">
-                                #{pullRequest.number} {pullRequest.title}
-                              </p>
+                              <div className="flex min-w-0 items-start gap-2">
+                                <p className="text-sm font-medium text-foreground break-words">
+                                  #{pullRequest.number} {pullRequest.title}
+                                </p>
+                                {ciStatusIcon}
+                              </div>
                               <p className="text-xs text-muted-foreground mt-1">
                                 {pullRequest.headBranch} into {pullRequest.baseBranch}
                               </p>
@@ -507,16 +529,18 @@ export default function Dashboard() {
                               </button>
                             </div>
                           </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {signalBadges.map((badge) => (
-                              <span
-                                key={badge.label}
-                                className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${badge.className}`}
-                              >
-                                {badge.label}
-                              </span>
-                            ))}
-                          </div>
+                          {visibleBadges.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              {visibleBadges.map((badge) => (
+                                <span
+                                  key={badge.label}
+                                  className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${badge.className}`}
+                                >
+                                  {badge.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div className="mt-3 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
                           <span className="min-w-0 break-words">
@@ -645,19 +669,38 @@ export default function Dashboard() {
                         pullRequest,
                         markedForReview,
                       );
+                      const visibleBadges = signalBadges.filter(
+                        (badge) => badge.label === "marked for review",
+                      );
+                      const hasNoReviews = pullRequestHasNoReviews(pullRequest);
+                      const ciStatusIcon =
+                        pullRequest.ciStatus === "passing" ? (
+                          <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
+                        ) : pullRequest.ciStatus === "failing" ? (
+                          <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                        ) : null;
 
                       return (
                       <div
                         key={pullRequest.id}
-                        className="rounded-lg border border-border/60 p-3 bg-secondary/20 cursor-pointer hover:border-black/15 transition-colors"
+                        className="relative overflow-hidden rounded-lg border border-border/60 p-3 bg-secondary/20 cursor-pointer hover:border-black/15 transition-colors"
                         onClick={() => setSelectedPullRequestId(pullRequest.id)}
                       >
+                        {hasNoReviews ? (
+                          <div
+                            aria-hidden="true"
+                            className="absolute inset-y-0 left-0 w-1.5 bg-muted-foreground/30"
+                          />
+                        ) : null}
                         <div className="flex flex-col gap-3">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
-                              <p className="text-sm font-medium text-foreground break-words">
-                                #{pullRequest.number} {pullRequest.title}
-                              </p>
+                              <div className="flex min-w-0 items-start gap-2">
+                                <p className="text-sm font-medium text-foreground break-words">
+                                  #{pullRequest.number} {pullRequest.title}
+                                </p>
+                                {ciStatusIcon}
+                              </div>
                               <p className="text-xs text-muted-foreground mt-1">
                                 {pullRequest.repo} · {pullRequest.headBranch} into {pullRequest.baseBranch}
                               </p>
@@ -691,16 +734,18 @@ export default function Dashboard() {
                               </button>
                             </div>
                           </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {signalBadges.map((badge) => (
-                              <span
-                                key={badge.label}
-                                className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${badge.className}`}
-                              >
-                                {badge.label}
-                              </span>
-                            ))}
-                          </div>
+                          {visibleBadges.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              {visibleBadges.map((badge) => (
+                                <span
+                                  key={badge.label}
+                                  className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${badge.className}`}
+                                >
+                                  {badge.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div className="mt-3 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
                           <span className="min-w-0 break-words">

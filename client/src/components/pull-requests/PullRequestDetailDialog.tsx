@@ -208,19 +208,30 @@ export default function PullRequestDetailDialog({
                     </span>
                   ))}
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleToggleMarkedForReview}
-                  className={`h-9 shrink-0 gap-1.5 ${
-                    markedForReview
-                      ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-                      : ""
-                  }`}
-                >
-                  <Bookmark className="w-3.5 h-3.5" />
-                  {markedForReview ? "Marked for Review" : "Mark for Review"}
-                </Button>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleOpenPullRequest()}
+                    className="h-9 gap-1.5"
+                  >
+                    <Github className="w-3.5 h-3.5" />
+                    View
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleToggleMarkedForReview}
+                    className={`h-9 gap-1.5 ${
+                      markedForReview
+                        ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                        : ""
+                    }`}
+                  >
+                    <Bookmark className="w-3.5 h-3.5" />
+                    {markedForReview ? "Marked for Review" : "Mark for Review"}
+                  </Button>
+                </div>
               </div>
               <div className="space-y-2">
                 <DialogTitle className="text-xl leading-snug break-words">
@@ -478,18 +489,6 @@ export default function PullRequestDetailDialog({
                 {actionError}
               </div>
             )}
-
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void handleOpenPullRequest()}
-                className="gap-1.5"
-              >
-                <Github className="w-3.5 h-3.5" />
-                View in GitHub
-              </Button>
-            </div>
             </div>
           </div>
         )}

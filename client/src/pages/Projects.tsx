@@ -10,9 +10,11 @@ import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
 import { getMarkedPullRequestIds } from "@/lib/pull-request-watchlist";
 import {
   getPullRequestSignalBadges,
+  pullRequestHasNoReviews,
 } from "@/lib/pull-request-utils";
 import { formatDistanceToNow } from "date-fns";
 import {
+  Check,
   Copy,
   FolderGit2,
   TerminalSquare,
@@ -26,6 +28,7 @@ import {
   Link2Off,
   MessageSquare,
   RefreshCw,
+  X,
 } from "lucide-react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { WorkspaceProject } from "@shared/workspace";
@@ -336,20 +339,39 @@ export default function Projects() {
                         pullRequest,
                         markedPullRequestIds.has(pullRequest.id),
                       );
+                      const visibleBadges = signalBadges.filter(
+                        (badge) => badge.label === "marked for review",
+                      );
+                      const hasNoReviews = pullRequestHasNoReviews(pullRequest);
+                      const ciStatusIcon =
+                        pullRequest.ciStatus === "passing" ? (
+                          <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
+                        ) : pullRequest.ciStatus === "failing" ? (
+                          <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                        ) : null;
 
                       return (
                         <button
                           key={pullRequest.id}
                           type="button"
                           onClick={() => setSelectedPullRequestId(pullRequest.id)}
-                          className="w-full rounded-lg border border-border/60 bg-secondary/20 p-3 text-left hover:border-black/15 transition-colors"
+                          className="relative w-full overflow-hidden rounded-lg border border-border/60 bg-secondary/20 p-3 text-left hover:border-black/15 transition-colors"
                         >
-                          <p className="text-[12px] font-semibold text-foreground line-clamp-2">
-                            #{pullRequest.number} {pullRequest.title}
-                          </p>
-                          {signalBadges.length > 0 && (
+                          {hasNoReviews ? (
+                            <div
+                              aria-hidden="true"
+                              className="absolute inset-y-0 left-0 w-1.5 bg-muted-foreground/30"
+                            />
+                          ) : null}
+                          <div className="flex min-w-0 items-start gap-2">
+                            <p className="text-[12px] font-semibold text-foreground line-clamp-2">
+                              #{pullRequest.number} {pullRequest.title}
+                            </p>
+                            {ciStatusIcon}
+                          </div>
+                          {visibleBadges.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-2">
-                              {signalBadges.map((badge) => (
+                              {visibleBadges.map((badge) => (
                                 <span
                                   key={badge.label}
                                   className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}

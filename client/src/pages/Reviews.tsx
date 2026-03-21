@@ -14,6 +14,7 @@ import {
 import {
   filterPullRequestsByFocus,
   getPullRequestSignalBadges,
+  pullRequestHasNoReviews,
   pullRequestNeedsFollowUp,
   pullRequestNeedsViewerReview,
   type PullRequestFocus,
@@ -23,11 +24,13 @@ import { formatDistanceToNow } from "date-fns";
 import {
   AlertCircle,
   Bookmark,
+  Check,
   CheckCircle2,
   Clock,
   Github,
   MessageSquare,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -295,13 +298,29 @@ export default function Reviews() {
                         pullRequest,
                         markedForReview,
                       );
+                      const visibleBadges = signalBadges.filter(
+                        (badge) => badge.label === "marked for review",
+                      );
+                      const hasNoReviews = pullRequestHasNoReviews(pullRequest);
+                      const ciStatusIcon =
+                        pullRequest.ciStatus === "passing" ? (
+                          <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
+                        ) : pullRequest.ciStatus === "failing" ? (
+                          <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                        ) : null;
 
                       return (
                     <div
                       key={pullRequest.id}
-                      className="group rounded-md border-b border-border/40 px-4 py-3 -mx-4 transition-colors last:border-0 hover:bg-black/[0.03] cursor-pointer"
+                      className="group relative overflow-hidden rounded-md border-b border-border/40 px-4 py-3 -mx-4 transition-colors last:border-0 hover:bg-black/[0.03] cursor-pointer"
                       onClick={() => handleInspectPullRequest(pullRequest.id)}
                     >
+                      {hasNoReviews ? (
+                        <div
+                          aria-hidden="true"
+                          className="absolute inset-y-0 left-0 w-1.5 bg-muted-foreground/30"
+                        />
+                      ) : null}
                       <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-3">
                         <div className="mt-0.5">
                           {pullRequest.status === "approved" ? (
@@ -315,12 +334,15 @@ export default function Reviews() {
                         <div className="flex-1 min-w-0">
                           <div className="mb-0.5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0 space-y-2">
-                              <span className="block break-words text-[13px] font-semibold leading-5 text-foreground">
-                                #{pullRequest.number} {pullRequest.title}
-                              </span>
-                              {signalBadges.length > 0 && (
+                              <div className="flex min-w-0 items-start gap-2">
+                                <span className="block break-words text-[13px] font-semibold leading-5 text-foreground">
+                                  #{pullRequest.number} {pullRequest.title}
+                                </span>
+                                {ciStatusIcon}
+                              </div>
+                              {visibleBadges.length > 0 && (
                                 <div className="flex flex-wrap items-center gap-2">
-                                  {signalBadges.map((badge) => (
+                                  {visibleBadges.map((badge) => (
                                     <span
                                       key={badge.label}
                                       className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${badge.className}`}
