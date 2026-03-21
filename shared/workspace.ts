@@ -174,10 +174,18 @@ export interface WorkspaceUserActivityStats {
   pullRequestsReviewed: number;
 }
 
+export interface WorkspaceUserActivityPoint extends WorkspaceUserActivityStats {
+  date: string;
+}
+
+export interface WorkspaceUserActivityPeriod extends WorkspaceUserActivityStats {
+  points: WorkspaceUserActivityPoint[];
+}
+
 export interface WorkspaceUserActivitySummary {
-  last7Days: WorkspaceUserActivityStats;
-  last30Days: WorkspaceUserActivityStats;
-  last90Days: WorkspaceUserActivityStats;
+  last7Days: WorkspaceUserActivityPeriod;
+  last30Days: WorkspaceUserActivityPeriod;
+  last90Days: WorkspaceUserActivityPeriod;
 }
 
 export interface WorkspaceSnapshot {

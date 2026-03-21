@@ -309,6 +309,30 @@ test("loadWorkspaceSnapshot aggregates user activity insights from local git his
   assert.equal(snapshot.userActivity.last7Days.linesDeleted, 1);
   assert.equal(snapshot.userActivity.last7Days.pullRequestsMerged, 0);
   assert.equal(snapshot.userActivity.last7Days.pullRequestsReviewed, 0);
+  assert.equal(snapshot.userActivity.last7Days.points.length, 7);
+  assert.equal(snapshot.userActivity.last30Days.points.length, 30);
+  assert.equal(snapshot.userActivity.last90Days.points.length, 90);
+  assert.equal(
+    snapshot.userActivity.last7Days.points.reduce(
+      (total, point) => total + point.commits,
+      0,
+    ),
+    snapshot.userActivity.last7Days.commits,
+  );
+  assert.equal(
+    snapshot.userActivity.last7Days.points.reduce(
+      (total, point) => total + point.linesAdded,
+      0,
+    ),
+    snapshot.userActivity.last7Days.linesAdded,
+  );
+  assert.equal(
+    snapshot.userActivity.last7Days.points.reduce(
+      (total, point) => total + point.linesDeleted,
+      0,
+    ),
+    snapshot.userActivity.last7Days.linesDeleted,
+  );
 
   delete process.env.DEVDECK_GITHUB_STORAGE;
   delete process.env.DEVDECK_GITHUB_TOKEN_PATH;

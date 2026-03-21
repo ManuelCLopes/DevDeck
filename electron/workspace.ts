@@ -163,12 +163,39 @@ const userActivityCache = new Map<
   { expiresAt: number; summary: WorkspaceUserActivitySummary }
 >();
 
+function toLocalUserActivityDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function createUserActivityPoints(days: number) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return Array.from({ length: days }, (_, index) => {
+    const pointDate = new Date(today);
+    pointDate.setDate(today.getDate() - (days - index - 1));
+
+    return {
+      commits: 0,
+      date: toLocalUserActivityDateKey(pointDate),
+      linesAdded: 0,
+      linesDeleted: 0,
+      pullRequestsMerged: 0,
+      pullRequestsReviewed: 0,
+    };
+  });
+}
+
 function createEmptyUserActivitySummary(): WorkspaceUserActivitySummary {
   return {
     last7Days: {
       commits: 0,
       linesAdded: 0,
       linesDeleted: 0,
+      points: createUserActivityPoints(7),
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
     },
@@ -176,6 +203,7 @@ function createEmptyUserActivitySummary(): WorkspaceUserActivitySummary {
       commits: 0,
       linesAdded: 0,
       linesDeleted: 0,
+      points: createUserActivityPoints(30),
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
     },
@@ -183,6 +211,7 @@ function createEmptyUserActivitySummary(): WorkspaceUserActivitySummary {
       commits: 0,
       linesAdded: 0,
       linesDeleted: 0,
+      points: createUserActivityPoints(90),
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
     },
@@ -218,6 +247,21 @@ function mergeUserActivitySummaries(
       accumulator[window.key].commits += summary[window.key].commits;
       accumulator[window.key].linesAdded += summary[window.key].linesAdded;
       accumulator[window.key].linesDeleted += summary[window.key].linesDeleted;
+      const pointsByDate = new Map(
+        accumulator[window.key].points.map((point) => [point.date, point]),
+      );
+      for (const point of summary[window.key].points) {
+        const accumulatorPoint = pointsByDate.get(point.date);
+        if (!accumulatorPoint) {
+          continue;
+        }
+
+        accumulatorPoint.commits += point.commits;
+        accumulatorPoint.linesAdded += point.linesAdded;
+        accumulatorPoint.linesDeleted += point.linesDeleted;
+        accumulatorPoint.pullRequestsMerged += point.pullRequestsMerged;
+        accumulatorPoint.pullRequestsReviewed += point.pullRequestsReviewed;
+      }
       accumulator[window.key].pullRequestsMerged +=
         summary[window.key].pullRequestsMerged;
       accumulator[window.key].pullRequestsReviewed +=
@@ -226,6 +270,28 @@ function mergeUserActivitySummaries(
 
     return accumulator;
   }, createEmptyUserActivitySummary());
+}
+
+function updateUserActivityPoint(
+  summary: WorkspaceUserActivitySummary,
+  key: (typeof USER_ACTIVITY_WINDOWS)[number]["key"],
+  timestamp: string,
+  updater: (
+    point: WorkspaceUserActivitySummary[typeof key]["points"][number],
+  ) => void,
+) {
+  const eventDate = new Date(timestamp);
+  if (!Number.isFinite(eventDate.getTime())) {
+    return;
+  }
+
+  const dateKey = toLocalUserActivityDateKey(eventDate);
+  const point = summary[key].points.find((candidate) => candidate.date === dateKey);
+  if (!point) {
+    return;
+  }
+
+  updater(point);
 }
 
 function forEachMatchingUserActivityWindow(
@@ -878,6 +944,11 @@ async function getLocalUserActivitySummary(
       summary[key].commits += 1;
       summary[key].linesAdded += diffStats?.linesAdded ?? 0;
       summary[key].linesDeleted += diffStats?.linesDeleted ?? 0;
+      updateUserActivityPoint(summary, key, timestamp, (point) => {
+        point.commits += 1;
+        point.linesAdded += diffStats?.linesAdded ?? 0;
+        point.linesDeleted += diffStats?.linesDeleted ?? 0;
+      });
     });
   }
 
@@ -923,6 +994,9 @@ async function getGitHubUserActivitySummary(
       ) {
         forEachMatchingUserActivityWindow(pullRequest.merged_at, (key) => {
           summary[key].pullRequestsMerged += 1;
+          updateUserActivityPoint(summary, key, pullRequest.merged_at!, (point) => {
+            point.pullRequestsMerged += 1;
+          });
         });
       }
     }
@@ -948,26 +1022,25 @@ async function getGitHubUserActivitySummary(
     );
 
     for (const pullRequestReview of pullRequestReviews) {
-      const reviewedWindows = new Set<
-        (typeof USER_ACTIVITY_WINDOWS)[number]["key"]
-      >();
+      const latestViewerReviewTimestamp = pullRequestReview.reviews
+        .filter(
+          (review) =>
+            review.user?.login === githubAuthStatus.viewerLogin &&
+            Boolean(review.submitted_at),
+        )
+        .map((review) => review.submitted_at as string)
+        .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0];
 
-      for (const review of pullRequestReview.reviews) {
-        if (
-          review.user?.login !== githubAuthStatus.viewerLogin ||
-          !review.submitted_at
-        ) {
-          continue;
-        }
-
-        forEachMatchingUserActivityWindow(review.submitted_at, (key) => {
-          reviewedWindows.add(key);
-        });
+      if (!latestViewerReviewTimestamp) {
+        continue;
       }
 
-      for (const key of Array.from(reviewedWindows)) {
+      forEachMatchingUserActivityWindow(latestViewerReviewTimestamp, (key) => {
         summary[key].pullRequestsReviewed += 1;
-      }
+        updateUserActivityPoint(summary, key, latestViewerReviewTimestamp, (point) => {
+          point.pullRequestsReviewed += 1;
+        });
+      });
     }
 
     userActivityCache.set(cacheKey, {

@@ -76,12 +76,45 @@ interface RepositoryScanResult {
   userActivity: WorkspaceSnapshot["userActivity"];
 }
 
+const USER_ACTIVITY_WINDOWS = [
+  { days: 7, key: "last7Days" },
+  { days: 30, key: "last30Days" },
+  { days: 90, key: "last90Days" },
+] as const;
+
+function toLocalUserActivityDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function createUserActivityPoints(days: number) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return Array.from({ length: days }, (_, index) => {
+    const pointDate = new Date(today);
+    pointDate.setDate(today.getDate() - (days - index - 1));
+
+    return {
+      commits: 0,
+      date: toLocalUserActivityDateKey(pointDate),
+      linesAdded: 0,
+      linesDeleted: 0,
+      pullRequestsMerged: 0,
+      pullRequestsReviewed: 0,
+    };
+  });
+}
+
 function createEmptyUserActivitySummary(): WorkspaceSnapshot["userActivity"] {
   return {
     last7Days: {
       commits: 0,
       linesAdded: 0,
       linesDeleted: 0,
+      points: createUserActivityPoints(7),
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
     },
@@ -89,6 +122,7 @@ function createEmptyUserActivitySummary(): WorkspaceSnapshot["userActivity"] {
       commits: 0,
       linesAdded: 0,
       linesDeleted: 0,
+      points: createUserActivityPoints(30),
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
     },
@@ -96,54 +130,99 @@ function createEmptyUserActivitySummary(): WorkspaceSnapshot["userActivity"] {
       commits: 0,
       linesAdded: 0,
       linesDeleted: 0,
+      points: createUserActivityPoints(90),
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
     },
   };
 }
 
-function addUserActivityCommit(
+function updateUserActivityPoint(
   summary: WorkspaceSnapshot["userActivity"],
+  key: (typeof USER_ACTIVITY_WINDOWS)[number]["key"],
   timestamp: string,
+  updater: (
+    point: WorkspaceSnapshot["userActivity"][typeof key]["points"][number],
+  ) => void,
 ) {
+  const eventDate = new Date(timestamp);
+  if (!Number.isFinite(eventDate.getTime())) {
+    return;
+  }
+
+  const dateKey = toLocalUserActivityDateKey(eventDate);
+  const point = summary[key].points.find((candidate) => candidate.date === dateKey);
+  if (!point) {
+    return;
+  }
+
+  updater(point);
+}
+
+function forEachMatchingUserActivityWindow(
+  timestamp: string | null | undefined,
+  callback: (
+    key: (typeof USER_ACTIVITY_WINDOWS)[number]["key"],
+  ) => void,
+) {
+  if (!timestamp) {
+    return;
+  }
+
   const eventTime = new Date(timestamp).getTime();
   if (!Number.isFinite(eventTime)) {
     return;
   }
 
   const now = Date.now();
-  if (eventTime >= now - 7 * 24 * 60 * 60 * 1000) {
-    summary.last7Days.commits += 1;
+  for (const window of USER_ACTIVITY_WINDOWS) {
+    if (eventTime >= now - window.days * 24 * 60 * 60 * 1000) {
+      callback(window.key);
+    }
   }
-  if (eventTime >= now - 30 * 24 * 60 * 60 * 1000) {
-    summary.last30Days.commits += 1;
-  }
-  if (eventTime >= now - 90 * 24 * 60 * 60 * 1000) {
-    summary.last90Days.commits += 1;
-  }
+}
+
+function addUserActivityCommit(
+  summary: WorkspaceSnapshot["userActivity"],
+  timestamp: string,
+) {
+  forEachMatchingUserActivityWindow(timestamp, (key) => {
+    summary[key].commits += 1;
+    updateUserActivityPoint(summary, key, timestamp, (point) => {
+      point.commits += 1;
+    });
+  });
 }
 
 function mergeUserActivitySummaries(
   summaries: WorkspaceSnapshot["userActivity"][],
 ) {
   return summaries.reduce<WorkspaceSnapshot["userActivity"]>((accumulator, summary) => {
-    accumulator.last7Days.commits += summary.last7Days.commits;
-    accumulator.last7Days.linesAdded += summary.last7Days.linesAdded;
-    accumulator.last7Days.linesDeleted += summary.last7Days.linesDeleted;
-    accumulator.last7Days.pullRequestsMerged += summary.last7Days.pullRequestsMerged;
-    accumulator.last7Days.pullRequestsReviewed += summary.last7Days.pullRequestsReviewed;
+    for (const window of USER_ACTIVITY_WINDOWS) {
+      accumulator[window.key].commits += summary[window.key].commits;
+      accumulator[window.key].linesAdded += summary[window.key].linesAdded;
+      accumulator[window.key].linesDeleted += summary[window.key].linesDeleted;
+      accumulator[window.key].pullRequestsMerged +=
+        summary[window.key].pullRequestsMerged;
+      accumulator[window.key].pullRequestsReviewed +=
+        summary[window.key].pullRequestsReviewed;
 
-    accumulator.last30Days.commits += summary.last30Days.commits;
-    accumulator.last30Days.linesAdded += summary.last30Days.linesAdded;
-    accumulator.last30Days.linesDeleted += summary.last30Days.linesDeleted;
-    accumulator.last30Days.pullRequestsMerged += summary.last30Days.pullRequestsMerged;
-    accumulator.last30Days.pullRequestsReviewed += summary.last30Days.pullRequestsReviewed;
+      const pointsByDate = new Map(
+        accumulator[window.key].points.map((point) => [point.date, point]),
+      );
+      for (const point of summary[window.key].points) {
+        const accumulatorPoint = pointsByDate.get(point.date);
+        if (!accumulatorPoint) {
+          continue;
+        }
 
-    accumulator.last90Days.commits += summary.last90Days.commits;
-    accumulator.last90Days.linesAdded += summary.last90Days.linesAdded;
-    accumulator.last90Days.linesDeleted += summary.last90Days.linesDeleted;
-    accumulator.last90Days.pullRequestsMerged += summary.last90Days.pullRequestsMerged;
-    accumulator.last90Days.pullRequestsReviewed += summary.last90Days.pullRequestsReviewed;
+        accumulatorPoint.commits += point.commits;
+        accumulatorPoint.linesAdded += point.linesAdded;
+        accumulatorPoint.linesDeleted += point.linesDeleted;
+        accumulatorPoint.pullRequestsMerged += point.pullRequestsMerged;
+        accumulatorPoint.pullRequestsReviewed += point.pullRequestsReviewed;
+      }
+    }
 
     return accumulator;
   }, createEmptyUserActivitySummary());

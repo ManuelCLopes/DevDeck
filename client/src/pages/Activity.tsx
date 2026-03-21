@@ -1,11 +1,19 @@
 import { useMemo } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
-import { formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, parseISO } from "date-fns";
 import {
   Bell,
   CheckCircle2,
@@ -13,6 +21,33 @@ import {
   GitBranch,
   RefreshCw,
 } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis } from "recharts";
+
+const contributionChartConfig = {
+  commits: {
+    color: "hsl(var(--chart-4))",
+    label: "Commits",
+  },
+  pullRequestsMerged: {
+    color: "hsl(var(--chart-5))",
+    label: "PRs Merged",
+  },
+  pullRequestsReviewed: {
+    color: "hsl(var(--chart-2))",
+    label: "PRs Reviewed",
+  },
+} satisfies ChartConfig;
+
+const churnChartConfig = {
+  linesAdded: {
+    color: "hsl(var(--chart-1))",
+    label: "Lines Added",
+  },
+  linesDeleted: {
+    color: "hsl(var(--chart-3))",
+    label: "Lines Deleted",
+  },
+} satisfies ChartConfig;
 
 export default function Activity() {
   const formatCount = (value: number) => new Intl.NumberFormat().format(value);
@@ -31,6 +66,10 @@ export default function Activity() {
       : period === "90d"
         ? snapshot?.userActivity.last90Days
         : snapshot?.userActivity.last7Days;
+  const activityChartData = useMemo(
+    () => (selectedUserActivity?.points ?? []).map((point) => ({ ...point })),
+    [selectedUserActivity?.points],
+  );
 
   const filteredActivities = useMemo(
     () =>
@@ -84,6 +123,12 @@ export default function Activity() {
         return <Bell className="w-4 h-4 text-muted-foreground" />;
     }
   };
+
+  const formatChartTick = (dateKey: string) =>
+    format(parseISO(dateKey), period === "7d" ? "EEE" : "MMM d");
+
+  const formatChartTooltipLabel = (dateKey: string) =>
+    format(parseISO(dateKey), period === "7d" ? "EEE, MMM d" : "MMM d, yyyy");
 
   return (
     <AppLayout>
@@ -184,6 +229,131 @@ export default function Activity() {
               GitHub must be connected in Preferences for PR merged/reviewed totals.
             </p>
           ) : null}
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <section className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-foreground">Contribution Trend</h3>
+                <p className="text-xs text-muted-foreground">
+                  Daily commits, PR reviews, and merges for the selected period.
+                </p>
+              </div>
+              <ChartContainer
+                config={contributionChartConfig}
+                className="mt-4 h-[260px] w-full aspect-auto"
+              >
+                <LineChart
+                  accessibilityLayer
+                  data={activityChartData}
+                  margin={{ bottom: 0, left: 4, right: 4, top: 8 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    axisLine={false}
+                    dataKey="date"
+                    minTickGap={24}
+                    tickFormatter={formatChartTick}
+                    tickLine={false}
+                    tickMargin={10}
+                  />
+                  <ChartTooltip
+                    cursor={false}
+                    content={
+                      <ChartTooltipContent
+                        indicator="line"
+                        labelFormatter={(value) =>
+                          typeof value === "string"
+                            ? formatChartTooltipLabel(value)
+                            : value
+                        }
+                      />
+                    }
+                  />
+                  <ChartLegend
+                    verticalAlign="top"
+                    content={<ChartLegendContent className="justify-start" />}
+                  />
+                  <Line
+                    dataKey="commits"
+                    dot={false}
+                    stroke="var(--color-commits)"
+                    strokeWidth={2.25}
+                    type="monotone"
+                  />
+                  <Line
+                    dataKey="pullRequestsReviewed"
+                    dot={false}
+                    stroke="var(--color-pullRequestsReviewed)"
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+                  <Line
+                    dataKey="pullRequestsMerged"
+                    dot={false}
+                    stroke="var(--color-pullRequestsMerged)"
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+                </LineChart>
+              </ChartContainer>
+            </section>
+
+            <section className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-foreground">Code Churn</h3>
+                <p className="text-xs text-muted-foreground">
+                  Lines added and deleted per day across the monitored repos.
+                </p>
+              </div>
+              <ChartContainer
+                config={churnChartConfig}
+                className="mt-4 h-[260px] w-full aspect-auto"
+              >
+                <BarChart
+                  accessibilityLayer
+                  data={activityChartData}
+                  margin={{ bottom: 0, left: 4, right: 4, top: 8 }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    axisLine={false}
+                    dataKey="date"
+                    minTickGap={24}
+                    tickFormatter={formatChartTick}
+                    tickLine={false}
+                    tickMargin={10}
+                  />
+                  <ChartTooltip
+                    cursor={false}
+                    content={
+                      <ChartTooltipContent
+                        indicator="line"
+                        labelFormatter={(value) =>
+                          typeof value === "string"
+                            ? formatChartTooltipLabel(value)
+                            : value
+                        }
+                      />
+                    }
+                  />
+                  <ChartLegend
+                    verticalAlign="top"
+                    content={<ChartLegendContent className="justify-start" />}
+                  />
+                  <Bar
+                    dataKey="linesAdded"
+                    fill="var(--color-linesAdded)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="linesDeleted"
+                    fill="var(--color-linesDeleted)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ChartContainer>
+            </section>
+          </div>
         </section>
 
         <div className="flex gap-2 border-b border-border/40 pb-4 flex-wrap">
