@@ -39,6 +39,8 @@ const PullRequestDetailDialog = lazy(
   () => import("@/components/pull-requests/PullRequestDetailDialog"),
 );
 
+const STALE_PULL_REQUEST_DAYS = 5;
+
 export default function Reviews() {
   const [location, setLocation] = useLocation();
   const search = useSearch();
@@ -60,19 +62,43 @@ export default function Reviews() {
   );
   const activeReviews = reviews.filter((review) => review.status === "active");
   const staleReviews = reviews.filter((review) => review.status === "stale");
-  const draftPullRequests = pullRequests.filter((pullRequest) => pullRequest.status === "draft");
-  const needsViewerReviewCount = pullRequests.filter(pullRequestNeedsViewerReview).length;
-  const needsFollowUpCount = pullRequests.filter(pullRequestNeedsFollowUp).length;
-  const reviewedByViewerCount = pullRequests.filter(
-    (pullRequest) => pullRequest.reviewedByViewer,
+  const draftPullRequestCount = pullRequests.filter(
+    (pullRequest) => pullRequest.status === "draft",
   ).length;
+  const requestedFromYouCount = pullRequests.filter(
+    (pullRequest) =>
+      pullRequest.isViewerRequestedReviewer &&
+      !pullRequest.reviewedByViewer &&
+      !pullRequest.authoredByViewer,
+  ).length;
+  const needsFollowUpCount = pullRequests.filter(pullRequestNeedsFollowUp).length;
   const markedPullRequestCount = pullRequests.filter((pullRequest) =>
     markedPullRequestIds.has(pullRequest.id),
   ).length;
-  const authoredByViewerCount = pullRequests.filter(
-    (pullRequest) => pullRequest.authoredByViewer,
+  const activeAuthoredPullRequestCount = (snapshot?.authoredPullRequests ?? []).filter(
+    (pullRequest) =>
+      pullRequest.status !== "closed" && pullRequest.status !== "merged",
   ).length;
-  const latestPullRequest = pullRequests[0] ?? null;
+  const stalePullRequestCount = pullRequests.filter((pullRequest) => {
+    const updatedAt = new Date(pullRequest.updatedAt).getTime();
+    if (!Number.isFinite(updatedAt)) {
+      return false;
+    }
+
+    return (
+      Date.now() - updatedAt >=
+      STALE_PULL_REQUEST_DAYS * 24 * 60 * 60 * 1000
+    );
+  }).length;
+  const needsReviewCount = pullRequests.filter(pullRequestNeedsViewerReview).length;
+  const formatCount = (value: number) => new Intl.NumberFormat().format(value);
+  const emptyAuthoredPullRequestMessage = useMemo(
+    () =>
+      activeAuthoredPullRequestCount > 0
+        ? `${formatCount(activeAuthoredPullRequestCount)} active`
+        : "nothing active",
+    [activeAuthoredPullRequestCount],
+  );
   const selectedPullRequestId = new URLSearchParams(search).get("pr");
   const githubStatus = snapshot?.githubStatus;
   const githubStatusMeta = getGitHubStatusMeta(githubStatus);
@@ -198,60 +224,62 @@ export default function Reviews() {
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
           <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              Open Pull Requests
+              Open PRs
             </h3>
             <div className="flex items-baseline gap-2 mt-auto">
-              <span className="text-3xl font-bold tracking-tight">{pullRequests.length}</span>
+              <span className="text-3xl font-bold tracking-tight">
+                {formatCount(pullRequests.length)}
+              </span>
               <span className="text-xs text-muted-foreground">live on GitHub</span>
             </div>
           </div>
           <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              Needs Review
+              Requested From You
             </h3>
             <div className="flex items-baseline gap-2 mt-auto">
               <span className="text-3xl font-bold tracking-tight text-chart-2">
-                {needsViewerReviewCount}
+                {formatCount(requestedFromYouCount)}
               </span>
-              <span className="text-xs text-muted-foreground">review queue</span>
+              <span className="text-xs text-muted-foreground">
+                {needsReviewCount > 0 ? "explicit review requests" : "nothing pending"}
+              </span>
             </div>
           </div>
           <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              Needs Your Follow-Up
+              Awaiting Your Follow-Up
             </h3>
             <div className="flex items-baseline gap-2 mt-auto">
-                <span className="text-3xl font-bold tracking-tight text-chart-3">
-                {needsFollowUpCount}
+              <span className="text-3xl font-bold tracking-tight text-chart-3">
+                {formatCount(needsFollowUpCount)}
               </span>
               <span className="text-xs text-muted-foreground">updated since review</span>
             </div>
           </div>
           <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              Marked For Review
+              Authored By You
             </h3>
             <div className="flex items-baseline gap-2 mt-auto">
               <span className="text-3xl font-bold tracking-tight text-primary">
-                {markedPullRequestCount}
+                {formatCount(activeAuthoredPullRequestCount)}
               </span>
-              <span className="text-xs text-muted-foreground">your shortlist</span>
+              <span className="text-xs text-muted-foreground">
+                {emptyAuthoredPullRequestMessage}
+              </span>
             </div>
           </div>
           <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm flex flex-col">
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              Reviewed By You
+              Stale PRs
             </h3>
             <div className="flex items-baseline gap-2 mt-auto">
               <span className="text-3xl font-bold tracking-tight text-chart-1">
-                {reviewedByViewerCount}
+                {formatCount(stalePullRequestCount)}
               </span>
               <span className="text-xs text-muted-foreground">
-                {latestPullRequest
-                  ? `latest ${formatDistanceToNow(new Date(latestPullRequest.updatedAt), {
-                      addSuffix: true,
-                    })}`
-                  : "no PR activity"}
+                quiet {STALE_PULL_REQUEST_DAYS}+ days
               </span>
             </div>
           </div>
@@ -591,7 +619,7 @@ export default function Reviews() {
                       {githubStatus?.connectedRepositoryCount ?? 0}
                     </p>
                     <p>
-                      Draft pull requests: {draftPullRequests.length}
+                      Draft pull requests: {draftPullRequestCount}
                     </p>
                   </div>
                 </div>
