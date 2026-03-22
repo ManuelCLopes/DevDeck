@@ -7,6 +7,8 @@ import {
   mergeWorkspaceSelection,
   moveManagedProject,
   moveManagedProjectCollection,
+  reorderManagedProjectCollections,
+  reorderManagedProjects,
   removeManagedProjectCollection,
   removeManagedProjects,
   removeManagedProject,
@@ -202,6 +204,92 @@ test("moveManagedProject reorders projects inside the same collection", () => {
   const movedSelection = moveManagedProject(selection, "Desktop/web", "up");
 
   assert.equal(getManagedProjectCollections(movedSelection)[0]?.projects[0]?.name, "web");
+});
+
+test("reorderManagedProjectCollections reorders by dragged collection ids", () => {
+  const frontendSelection = buildWorkspaceSelectionFromImport({
+    candidates: [
+      {
+        id: "Desktop/client",
+        localPath: "/Users/manuellopes/Desktop/client",
+        name: "client",
+        relativePath: "client",
+        repositoryCount: 1,
+      },
+    ],
+    collectionName: "Frontend",
+    rootName: "Desktop",
+    rootPath: "/Users/manuellopes/Desktop",
+    selectedProjectIds: ["Desktop/client"],
+  });
+  const backendSelection = buildWorkspaceSelectionFromImport({
+    candidates: [
+      {
+        id: "Services/api",
+        localPath: "/Users/manuellopes/Services/api",
+        name: "api",
+        relativePath: "api",
+        repositoryCount: 1,
+      },
+    ],
+    collectionName: "Backend",
+    rootName: "Services",
+    rootPath: "/Users/manuellopes/Services",
+    selectedProjectIds: ["Services/api"],
+  });
+
+  const mergedSelection = mergeWorkspaceSelection(frontendSelection, backendSelection);
+  const collections = getManagedProjectCollections(mergedSelection);
+  const reorderedSelection = reorderManagedProjectCollections(
+    mergedSelection,
+    collections[1]!.id,
+    collections[0]!.id,
+  );
+
+  assert.equal(getManagedProjectCollections(reorderedSelection)[0]?.name, "Backend");
+});
+
+test("reorderManagedProjects reorders within the dragged collection", () => {
+  const selection = buildWorkspaceSelectionFromImport({
+    candidates: [
+      {
+        id: "Desktop/client",
+        localPath: "/Users/manuellopes/Desktop/client",
+        name: "client",
+        relativePath: "client",
+        repositoryCount: 1,
+      },
+      {
+        id: "Desktop/web",
+        localPath: "/Users/manuellopes/Desktop/web",
+        name: "web",
+        relativePath: "web",
+        repositoryCount: 1,
+      },
+      {
+        id: "Desktop/docs",
+        localPath: "/Users/manuellopes/Desktop/docs",
+        name: "docs",
+        relativePath: "docs",
+        repositoryCount: 1,
+      },
+    ],
+    collectionName: "Frontend",
+    rootName: "Desktop",
+    rootPath: "/Users/manuellopes/Desktop",
+    selectedProjectIds: ["Desktop/client", "Desktop/web", "Desktop/docs"],
+  });
+
+  const reorderedSelection = reorderManagedProjects(
+    selection,
+    "Desktop/docs",
+    "Desktop/client",
+  );
+
+  assert.equal(
+    getManagedProjectCollections(reorderedSelection)[0]?.projects[0]?.name,
+    "docs",
+  );
 });
 
 test("removeManagedProject returns null when the last project is removed", () => {

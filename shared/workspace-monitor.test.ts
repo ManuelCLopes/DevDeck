@@ -25,6 +25,12 @@ function createSnapshot(overrides?: Partial<WorkspaceSnapshot>): WorkspaceSnapsh
     pullRequests: [],
     projects: [],
     reviews: [],
+    sync: {
+      lastAttemptedAt: "2026-03-18T19:00:00.000Z",
+      lastSuccessfulSyncAt: "2026-03-18T19:00:00.000Z",
+      message: null,
+      state: "fresh",
+    },
     summary: {
       healthyRepositories: 0,
       localBranches: 0,

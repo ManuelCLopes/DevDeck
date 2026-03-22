@@ -74,6 +74,41 @@ interface WorkspaceMonitorState {
   selectionKey: string | null;
 }
 
+function isConnectivityLikeError(error: unknown) {
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+  return (
+    message.includes("enotfound") ||
+    message.includes("network") ||
+    message.includes("timed out") ||
+    message.includes("github") ||
+    message.includes("offline")
+  );
+}
+
+function buildFailedWorkspaceSnapshot(
+  previousSnapshot: WorkspaceSnapshot,
+  error: unknown,
+) {
+  const attemptedAt = new Date().toISOString();
+  const message =
+    error instanceof Error
+      ? error.message
+      : "DevDeck could not refresh the workspace and is using cached data.";
+
+  return {
+    ...previousSnapshot,
+    sync: {
+      lastAttemptedAt: attemptedAt,
+      lastSuccessfulSyncAt:
+        previousSnapshot.sync?.lastSuccessfulSyncAt ?? previousSnapshot.generatedAt,
+      message,
+      state: isConnectivityLikeError(error) ? "offline" : "error",
+    },
+  } satisfies WorkspaceSnapshot;
+}
+
 let mainWindow: BrowserWindow | null = null;
 let appTray: Tray | null = null;
 let isQuitting = false;
@@ -430,6 +465,20 @@ async function refreshWorkspaceSnapshot(
     updateDockBadge(nextSnapshot);
     updateTrayMenu();
     return nextSnapshot;
+  } catch (error) {
+    if (workspaceMonitorState.latestSnapshot) {
+      const fallbackSnapshot = buildFailedWorkspaceSnapshot(
+        workspaceMonitorState.latestSnapshot,
+        error,
+      );
+      workspaceMonitorState.latestSnapshot = fallbackSnapshot;
+      broadcastWorkspaceSnapshot(fallbackSnapshot);
+      updateDockBadge(fallbackSnapshot);
+      updateTrayMenu();
+      return fallbackSnapshot;
+    }
+
+    throw error;
   } finally {
     workspaceMonitorState.isRefreshing = false;
   }
@@ -498,11 +547,24 @@ ipcMain.handle("devdeck:pick-workspace", async () => {
 ipcMain.handle(
   "devdeck:load-workspace-snapshot",
   async (_event, selection: WorkspaceSelection) => {
-    const snapshot = await loadWorkspaceSnapshot(selection);
-    if (workspaceMonitorState.selectionKey === JSON.stringify(selection)) {
-      workspaceMonitorState.latestSnapshot = snapshot;
+    try {
+      const snapshot = await loadWorkspaceSnapshot(selection);
+      if (workspaceMonitorState.selectionKey === JSON.stringify(selection)) {
+        workspaceMonitorState.latestSnapshot = snapshot;
+      }
+      return snapshot;
+    } catch (error) {
+      if (workspaceMonitorState.latestSnapshot) {
+        const fallbackSnapshot = buildFailedWorkspaceSnapshot(
+          workspaceMonitorState.latestSnapshot,
+          error,
+        );
+        workspaceMonitorState.latestSnapshot = fallbackSnapshot;
+        return fallbackSnapshot;
+      }
+
+      throw error;
     }
-    return snapshot;
   },
 );
 

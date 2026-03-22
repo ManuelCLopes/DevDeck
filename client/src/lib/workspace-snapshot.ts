@@ -743,6 +743,12 @@ function buildWorkspaceSnapshot(results: RepositoryScanResult[]) {
     pullRequests: [],
     projects,
     reviews,
+    sync: {
+      lastAttemptedAt: new Date().toISOString(),
+      lastSuccessfulSyncAt: new Date().toISOString(),
+      message: null,
+      state: "fresh",
+    },
     summary: {
       healthyRepositories: projects.filter((project) => project.status === "healthy")
         .length,
@@ -774,7 +780,21 @@ export async function loadWorkspaceSnapshot() {
 
   const workspaceHandle = await getWorkspaceHandle();
   if (!workspaceHandle || !(await ensureWorkspaceHandlePermission(workspaceHandle))) {
-    return getCachedWorkspaceSnapshot();
+    const cachedSnapshot = getCachedWorkspaceSnapshot();
+    if (!cachedSnapshot) {
+      return null;
+    }
+
+    return {
+      ...cachedSnapshot,
+      sync: {
+        lastAttemptedAt: new Date().toISOString(),
+        lastSuccessfulSyncAt:
+          cachedSnapshot.sync?.lastSuccessfulSyncAt ?? cachedSnapshot.generatedAt,
+        message: "Using cached workspace data until local folder access is restored.",
+        state: "stale",
+      },
+    } satisfies WorkspaceSnapshot;
   }
 
   const repositoryResults: Array<RepositoryScanResult | null> = await Promise.all(

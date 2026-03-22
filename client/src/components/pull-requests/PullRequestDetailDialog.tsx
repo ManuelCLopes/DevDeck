@@ -1,7 +1,6 @@
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useState } from "react";
 import {
-  Bookmark,
   CheckCheck,
   GitBranch,
   Github,
@@ -11,6 +10,7 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import PullRequestQueueControl from "@/components/pull-requests/PullRequestQueueControl";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -23,8 +23,8 @@ import {
 import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
 import { getDesktopApi } from "@/lib/desktop";
 import {
-  isPullRequestMarkedForReview,
-  setPullRequestMarkedForReview,
+  getPullRequestWatchStatus,
+  setPullRequestWatchStatus,
 } from "@/lib/pull-request-watchlist";
 import {
   getPullRequestCiStatusMeta,
@@ -58,11 +58,11 @@ export default function PullRequestDetailDialog({
   const desktopApi = getDesktopApi();
   const reviewerLogins = parseReviewerLogins(reviewerInput);
   const canRunGitHubActions = Boolean(desktopApi && pullRequest?.repositorySlug);
-  const markedForReview = pullRequest
-    ? isPullRequestMarkedForReview(pullRequest.id, pullRequestWatchlist)
-    : false;
+  const watchStatus = pullRequest
+    ? getPullRequestWatchStatus(pullRequest.id, pullRequestWatchlist)
+    : null;
   const signalBadges = pullRequest
-    ? getPullRequestSignalBadges(pullRequest, markedForReview)
+    ? getPullRequestSignalBadges(pullRequest, watchStatus)
     : [];
 
   useEffect(() => {
@@ -102,21 +102,6 @@ export default function PullRequestDetailDialog({
     toast({
       title: "Branch copied",
       description: `${branchName} copied to your clipboard.`,
-    });
-  };
-
-  const handleToggleMarkedForReview = () => {
-    if (!pullRequest) {
-      return;
-    }
-
-    const nextMarkedState = !markedForReview;
-    setPullRequestMarkedForReview(pullRequest.id, nextMarkedState);
-    toast({
-      title: nextMarkedState ? "Marked for review" : "Removed from review list",
-      description: `${pullRequest.repo} #${pullRequest.number} ${
-        nextMarkedState ? "is now on" : "was removed from"
-      } your review shortlist.`,
     });
   };
 
@@ -218,19 +203,27 @@ export default function PullRequestDetailDialog({
                     <Github className="w-3.5 h-3.5" />
                     View
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleToggleMarkedForReview}
-                    className={`h-9 gap-1.5 ${
-                      markedForReview
-                        ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-                        : ""
-                    }`}
-                  >
-                    <Bookmark className="w-3.5 h-3.5" />
-                    {markedForReview ? "Marked for Review" : "Mark for Review"}
-                  </Button>
+                  <PullRequestQueueControl
+                    className="h-9"
+                    onStatusChange={(status) => {
+                      if (!pullRequest) {
+                        return;
+                      }
+
+                      setPullRequestWatchStatus(pullRequest.id, status);
+                      toast({
+                        title: status
+                          ? `PR ${status.replaceAll("_", " ")}`
+                          : "Removed from queue",
+                        description: `${pullRequest.repo} #${pullRequest.number} ${
+                          status
+                            ? `is now ${status.replaceAll("_", " ")} in your queue.`
+                            : "was removed from your local queue."
+                        }`,
+                      });
+                    }}
+                    status={watchStatus || null}
+                  />
                 </div>
               </div>
               <div className="space-y-2">

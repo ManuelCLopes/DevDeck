@@ -1,5 +1,9 @@
+export type PullRequestWatchStatus = "marked" | "in_review" | "done";
+
 export interface PullRequestWatchlistEntry {
   markedAt: string;
+  status: PullRequestWatchStatus;
+  updatedAt: string;
 }
 
 export type PullRequestWatchlist = Record<string, PullRequestWatchlistEntry>;
@@ -10,6 +14,10 @@ const EMPTY_PULL_REQUEST_WATCHLIST = Object.freeze({}) as PullRequestWatchlist;
 
 let cachedWatchlistRaw: string | null = null;
 let cachedWatchlist: PullRequestWatchlist = EMPTY_PULL_REQUEST_WATCHLIST;
+
+function isPullRequestWatchStatus(value: string): value is PullRequestWatchStatus {
+  return value === "marked" || value === "in_review" || value === "done";
+}
 
 function normalizePullRequestWatchlist(
   value: PullRequestWatchlist | string[] | null | undefined,
@@ -24,8 +32,11 @@ function normalizePullRequestWatchlist(
         return watchlist;
       }
 
+      const timestamp = new Date().toISOString();
       watchlist[pullRequestId] = {
-        markedAt: new Date().toISOString(),
+        markedAt: timestamp,
+        status: "marked",
+        updatedAt: timestamp,
       };
       return watchlist;
     }, {});
@@ -37,11 +48,20 @@ function normalizePullRequestWatchlist(
         return watchlist;
       }
 
+      const markedAt =
+        typeof entry?.markedAt === "string" && entry.markedAt.length > 0
+          ? entry.markedAt
+          : new Date().toISOString();
       watchlist[pullRequestId] = {
-        markedAt:
-          typeof entry?.markedAt === "string" && entry.markedAt.length > 0
-            ? entry.markedAt
-            : new Date().toISOString(),
+        markedAt,
+        status:
+          typeof entry?.status === "string" && isPullRequestWatchStatus(entry.status)
+            ? entry.status
+            : "marked",
+        updatedAt:
+          typeof entry?.updatedAt === "string" && entry.updatedAt.length > 0
+            ? entry.updatedAt
+            : markedAt,
       };
       return watchlist;
     },
@@ -117,35 +137,67 @@ export function getPullRequestWatchlist() {
 export function getMarkedPullRequestIds(
   watchlist: PullRequestWatchlist = getPullRequestWatchlist(),
 ) {
-  return new Set(Object.keys(watchlist));
+  return new Set(
+    Object.entries(watchlist)
+      .filter(([, entry]) => entry.status === "marked")
+      .map(([pullRequestId]) => pullRequestId),
+  );
+}
+
+export function getPullRequestQueueIds(
+  watchlist: PullRequestWatchlist = getPullRequestWatchlist(),
+  status?: PullRequestWatchStatus,
+) {
+  return new Set(
+    Object.entries(watchlist)
+      .filter(([, entry]) => (status ? entry.status === status : true))
+      .map(([pullRequestId]) => pullRequestId),
+  );
+}
+
+export function getPullRequestWatchStatus(
+  pullRequestId: string,
+  watchlist: PullRequestWatchlist = getPullRequestWatchlist(),
+) {
+  return watchlist[pullRequestId]?.status ?? null;
 }
 
 export function isPullRequestMarkedForReview(
   pullRequestId: string,
   watchlist: PullRequestWatchlist = getPullRequestWatchlist(),
 ) {
-  return Object.prototype.hasOwnProperty.call(watchlist, pullRequestId);
+  return watchlist[pullRequestId]?.status === "marked";
 }
 
-export function setPullRequestMarkedForReview(
+export function setPullRequestWatchStatus(
   pullRequestId: string,
-  marked: boolean,
+  status: PullRequestWatchStatus | null,
 ) {
   if (typeof window === "undefined" || pullRequestId.length === 0) {
     return;
   }
 
   const currentWatchlist = getPullRequestWatchlist();
-  if (marked) {
-    persistPullRequestWatchlist({
-      ...currentWatchlist,
-      [pullRequestId]: currentWatchlist[pullRequestId] ?? {
-        markedAt: new Date().toISOString(),
-      },
-    });
+  if (!status) {
+    const { [pullRequestId]: _removedEntry, ...nextWatchlist } = currentWatchlist;
+    persistPullRequestWatchlist(nextWatchlist);
     return;
   }
 
-  const { [pullRequestId]: _removedEntry, ...nextWatchlist } = currentWatchlist;
-  persistPullRequestWatchlist(nextWatchlist);
+  const timestamp = new Date().toISOString();
+  persistPullRequestWatchlist({
+    ...currentWatchlist,
+    [pullRequestId]: {
+      markedAt: currentWatchlist[pullRequestId]?.markedAt ?? timestamp,
+      status,
+      updatedAt: timestamp,
+    },
+  });
+}
+
+export function setPullRequestMarkedForReview(
+  pullRequestId: string,
+  marked: boolean,
+) {
+  setPullRequestWatchStatus(pullRequestId, marked ? "marked" : null);
 }

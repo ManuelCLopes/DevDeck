@@ -17,9 +17,11 @@ export type WorkspacePullRequestReviewState =
   | "reviewed"
   | "reviewed_by_you";
 export type WorkspaceAuthoredPullRequestStatus =
-  | "open"
   | "draft"
+  | "waiting_for_review"
   | "reviewed"
+  | "changes_requested"
+  | "approved"
   | "merged"
   | "closed";
 export type WorkspaceGitHubState =
@@ -27,6 +29,7 @@ export type WorkspaceGitHubState =
   | "unauthenticated"
   | "error"
   | "unsupported";
+export type WorkspaceSyncState = "fresh" | "stale" | "offline" | "error";
 
 export interface MonitoredProject {
   collectionId?: string;
@@ -147,6 +150,13 @@ export interface WorkspaceAuthoredPullRequestItem {
   url: string;
 }
 
+export interface WorkspaceSyncStatus {
+  lastAttemptedAt: string | null;
+  lastSuccessfulSyncAt: string | null;
+  message: string | null;
+  state: WorkspaceSyncState;
+}
+
 export interface WorkspacePullRequestReviewEvent {
   id: string;
   reviewerLogin: string | null;
@@ -201,6 +211,7 @@ export interface WorkspaceSnapshot {
   pullRequests: WorkspacePullRequestItem[];
   projects: WorkspaceProject[];
   reviews: WorkspaceReviewItem[];
+  sync: WorkspaceSyncStatus;
   summary: {
     healthyRepositories: number;
     localBranches: number;

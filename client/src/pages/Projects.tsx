@@ -7,7 +7,7 @@ import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
 import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
-import { getMarkedPullRequestIds } from "@/lib/pull-request-watchlist";
+import { getPullRequestWatchStatus } from "@/lib/pull-request-watchlist";
 import {
   getPullRequestSignalBadges,
   pullRequestHasNoReviews,
@@ -53,10 +53,6 @@ export default function Projects() {
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
   const pullRequestWatchlist = usePullRequestWatchlist();
   const desktopApi = getDesktopApi();
-  const markedPullRequestIds = useMemo(
-    () => getMarkedPullRequestIds(pullRequestWatchlist),
-    [pullRequestWatchlist],
-  );
 
   const filteredProjects = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -335,12 +331,19 @@ export default function Projects() {
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Open Pull Requests</h3>
                   <div className="space-y-2">
                     {selectedProjectPullRequestsPagination.paginatedItems.map((pullRequest) => {
+                      const watchStatus = getPullRequestWatchStatus(
+                        pullRequest.id,
+                        pullRequestWatchlist,
+                      );
                       const signalBadges = getPullRequestSignalBadges(
                         pullRequest,
-                        markedPullRequestIds.has(pullRequest.id),
+                        watchStatus,
                       );
                       const visibleBadges = signalBadges.filter(
-                        (badge) => badge.label === "marked for review",
+                        (badge) =>
+                          badge.label === "marked" ||
+                          badge.label === "in review" ||
+                          badge.label === "done",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =

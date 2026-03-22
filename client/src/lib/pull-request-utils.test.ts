@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   filterPullRequestsByFocus,
+  getAuthoredPullRequestStatusMeta,
   getPullRequestCiStatusMeta,
   getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
@@ -75,9 +76,20 @@ test("getPullRequestSignalBadges keeps only key PR signals", () => {
       },
       {
         className: "bg-primary/10 text-primary border-primary/20",
-        label: "marked for review",
+        label: "marked",
       },
     ],
+  );
+});
+
+test("getAuthoredPullRequestStatusMeta exposes follow-up specific authored labels", () => {
+  assert.equal(
+    getAuthoredPullRequestStatusMeta("waiting_for_review").label,
+    "Waiting for review",
+  );
+  assert.equal(
+    getAuthoredPullRequestStatusMeta("changes_requested").label,
+    "Changes requested",
   );
 });
 
@@ -211,8 +223,62 @@ test("filterPullRequestsByFocus narrows marked pull requests", () => {
     filterPullRequestsByFocus(
       pullRequests as never,
       "marked_for_review",
-      new Set(["repo-two#8"]),
+      {
+        "repo-two#8": {
+          markedAt: "2026-03-18T20:00:00.000Z",
+          status: "marked",
+          updatedAt: "2026-03-18T20:00:00.000Z",
+        },
+      },
     ).length,
+    1,
+  );
+});
+
+test("filterPullRequestsByFocus narrows queue state filters", () => {
+  const pullRequests = [
+    {
+      id: "repo-one#12",
+      status: "open",
+    },
+    {
+      id: "repo-two#8",
+      status: "review_required",
+    },
+    {
+      id: "repo-three#3",
+      status: "approved",
+    },
+  ];
+
+  const watchlist = {
+    "repo-one#12": {
+      markedAt: "2026-03-18T20:00:00.000Z",
+      status: "marked" as const,
+      updatedAt: "2026-03-18T20:00:00.000Z",
+    },
+    "repo-two#8": {
+      markedAt: "2026-03-18T20:00:00.000Z",
+      status: "in_review" as const,
+      updatedAt: "2026-03-18T20:00:00.000Z",
+    },
+    "repo-three#3": {
+      markedAt: "2026-03-18T20:00:00.000Z",
+      status: "done" as const,
+      updatedAt: "2026-03-18T20:00:00.000Z",
+    },
+  };
+
+  assert.equal(
+    filterPullRequestsByFocus(pullRequests as never, "my_queue", watchlist).length,
+    3,
+  );
+  assert.equal(
+    filterPullRequestsByFocus(pullRequests as never, "in_review", watchlist).length,
+    1,
+  );
+  assert.equal(
+    filterPullRequestsByFocus(pullRequests as never, "done", watchlist).length,
     1,
   );
 });

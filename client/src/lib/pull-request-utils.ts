@@ -1,12 +1,20 @@
 import type {
+  WorkspaceAuthoredPullRequestStatus,
   WorkspaceCiStatus,
   WorkspacePullRequestItem,
   WorkspacePullRequestStatus,
 } from "@shared/workspace";
+import type {
+  PullRequestWatchStatus,
+  PullRequestWatchlist,
+} from "@/lib/pull-request-watchlist";
 
 export type PullRequestFocus =
   | "all"
+  | "my_queue"
   | "marked_for_review"
+  | "in_review"
+  | "done"
   | "no_reviews"
   | "checks_failing"
   | "checks_passing"
@@ -20,6 +28,10 @@ export type PullRequestFocus =
 interface PullRequestBadgeMeta {
   className: string;
   label: string;
+}
+
+function normalizePullRequestWatchlist(value?: PullRequestWatchlist | null) {
+  return value ?? {};
 }
 
 export function getPullRequestStatusMeta(status: WorkspacePullRequestStatus) {
@@ -177,6 +189,73 @@ export function getPullRequestReviewEventMeta(state: string) {
   }
 }
 
+export function getPullRequestWatchStatusMeta(status: PullRequestWatchStatus) {
+  switch (status) {
+    case "in_review":
+      return {
+        className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
+        label: "in review",
+      };
+    case "done":
+      return {
+        className: "bg-chart-1/10 text-chart-1 border-chart-1/20",
+        label: "done",
+      };
+    default:
+      return {
+        className: "bg-primary/10 text-primary border-primary/20",
+        label: "marked",
+      };
+  }
+}
+
+export function getAuthoredPullRequestStatusMeta(
+  status: WorkspaceAuthoredPullRequestStatus,
+) {
+  switch (status) {
+    case "draft":
+      return {
+        className: "border-[#d0d7de] bg-[#f6f8fa] text-[#57606a]",
+        label: "Draft",
+      };
+    case "waiting_for_review":
+      return {
+        className: "border-[#1a7f37]/20 bg-[#dafbe1] text-[#1a7f37]",
+        label: "Waiting for review",
+      };
+    case "reviewed":
+      return {
+        className: "border-[#0969da]/20 bg-[#ddf4ff] text-[#0969da]",
+        label: "Reviewed",
+      };
+    case "changes_requested":
+      return {
+        className: "border-[#cf222e]/20 bg-[#ffebe9] text-[#cf222e]",
+        label: "Changes requested",
+      };
+    case "approved":
+      return {
+        className: "border-[#1a7f37]/20 bg-[#dafbe1] text-[#1a7f37]",
+        label: "Approved",
+      };
+    case "merged":
+      return {
+        className: "border-[#8250df]/20 bg-[#fbefff] text-[#8250df]",
+        label: "Merged",
+      };
+    case "closed":
+      return {
+        className: "border-[#cf222e]/20 bg-[#ffebe9] text-[#cf222e]",
+        label: "Closed",
+      };
+    default:
+      return {
+        className: "border-[#d0d7de] bg-[#f6f8fa] text-[#57606a]",
+        label: "Open",
+      };
+  }
+}
+
 export function pullRequestNeedsViewerReview(
   pullRequest: Pick<
     WorkspacePullRequestItem,
@@ -242,17 +321,24 @@ export function pullRequestWaitingOnOthers(
 export function filterPullRequestsByFocus(
   pullRequests: WorkspacePullRequestItem[],
   focus: PullRequestFocus,
-  markedPullRequestIds: Iterable<string> = [],
+  watchlist: PullRequestWatchlist = {},
 ) {
-  const markedPullRequestIdSet =
-    markedPullRequestIds instanceof Set
-      ? markedPullRequestIds
-      : new Set(markedPullRequestIds);
+  const normalizedWatchlist = normalizePullRequestWatchlist(watchlist);
 
   switch (focus) {
+    case "my_queue":
+      return pullRequests.filter((pullRequest) => Boolean(normalizedWatchlist[pullRequest.id]));
     case "marked_for_review":
       return pullRequests.filter((pullRequest) =>
-        markedPullRequestIdSet.has(pullRequest.id),
+        normalizedWatchlist[pullRequest.id]?.status === "marked",
+      );
+    case "in_review":
+      return pullRequests.filter((pullRequest) =>
+        normalizedWatchlist[pullRequest.id]?.status === "in_review",
+      );
+    case "done":
+      return pullRequests.filter((pullRequest) =>
+        normalizedWatchlist[pullRequest.id]?.status === "done",
       );
     case "no_reviews":
       return pullRequests.filter(pullRequestHasNoReviews);
@@ -331,17 +417,12 @@ export function getPullRequestFollowUpMeta(
 }
 
 export function getPullRequestWatchMeta(markedForReview: boolean) {
-  if (markedForReview) {
-    return {
-      className: "bg-primary/10 text-primary border-primary/20",
-      label: "marked for review",
-    };
-  }
-
-  return {
-    className: "bg-secondary text-muted-foreground border-border/60",
-    label: "not marked",
-  };
+  return markedForReview
+    ? getPullRequestWatchStatusMeta("marked")
+    : {
+        className: "bg-secondary text-muted-foreground border-border/60",
+        label: "not marked",
+      };
 }
 
 export function getPullRequestSignalBadges(
@@ -353,7 +434,7 @@ export function getPullRequestSignalBadges(
     | "reviewedByOthersCount"
     | "reviewedByViewer"
   >,
-  markedForReview: boolean,
+  watchStatus: PullRequestWatchStatus | null,
 ): PullRequestBadgeMeta[] {
   const badges: PullRequestBadgeMeta[] = [];
 
@@ -368,8 +449,8 @@ export function getPullRequestSignalBadges(
     badges.push(getPullRequestCiStatusMeta(pullRequest.ciStatus));
   }
 
-  if (markedForReview) {
-    badges.push(getPullRequestWatchMeta(true));
+  if (watchStatus) {
+    badges.push(getPullRequestWatchStatusMeta(watchStatus));
   }
 
   return badges;

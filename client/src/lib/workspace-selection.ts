@@ -219,6 +219,28 @@ function mergeVisibleAndHiddenProjects(
   ]);
 }
 
+function reorderListByIds<T extends { id: string }>(
+  items: T[],
+  sourceId: string,
+  targetId: string,
+) {
+  const sourceIndex = items.findIndex((item) => item.id === sourceId);
+  const targetIndex = items.findIndex((item) => item.id === targetId);
+
+  if (
+    sourceIndex === -1 ||
+    targetIndex === -1 ||
+    sourceIndex === targetIndex
+  ) {
+    return items;
+  }
+
+  const nextItems = items.slice();
+  const [sourceItem] = nextItems.splice(sourceIndex, 1);
+  nextItems.splice(targetIndex, 0, sourceItem);
+  return nextItems;
+}
+
 export function subscribeWorkspaceSelection(listener: () => void) {
   if (typeof window === "undefined") {
     return () => {};
@@ -561,6 +583,29 @@ export function moveManagedProjectCollection(
   );
 }
 
+export function reorderManagedProjectCollections(
+  selection: WorkspaceSelection | null,
+  sourceCollectionId: string,
+  targetCollectionId: string,
+) {
+  const normalizedSelection = normalizeWorkspaceSelection(selection);
+  if (!normalizedSelection || sourceCollectionId === targetCollectionId) {
+    return normalizedSelection;
+  }
+
+  const collections = getManagedProjectCollections(normalizedSelection);
+  const reorderedCollections = reorderListByIds(
+    collections,
+    sourceCollectionId,
+    targetCollectionId,
+  );
+
+  return mergeVisibleAndHiddenProjects(
+    normalizedSelection,
+    reorderedCollections.flatMap((managedCollection) => managedCollection.projects),
+  );
+}
+
 export function moveManagedProject(
   selection: WorkspaceSelection | null,
   projectId: string,
@@ -597,6 +642,46 @@ export function moveManagedProject(
   reorderedCollections[collectionIndex] = {
     ...collection,
     projects: reorderedProjects,
+  };
+
+  return mergeVisibleAndHiddenProjects(
+    normalizedSelection,
+    reorderedCollections.flatMap((managedCollection) => managedCollection.projects),
+  );
+}
+
+export function reorderManagedProjects(
+  selection: WorkspaceSelection | null,
+  sourceProjectId: string,
+  targetProjectId: string,
+) {
+  const normalizedSelection = normalizeWorkspaceSelection(selection);
+  if (!normalizedSelection || sourceProjectId === targetProjectId) {
+    return normalizedSelection;
+  }
+
+  const collections = getManagedProjectCollections(normalizedSelection);
+  const collectionIndex = collections.findIndex((collection) =>
+    collection.projects.some(
+      (project) => project.id === sourceProjectId || project.id === targetProjectId,
+    ),
+  );
+  if (collectionIndex === -1) {
+    return normalizedSelection;
+  }
+
+  const collection = collections[collectionIndex];
+  if (
+    !collection.projects.some((project) => project.id === sourceProjectId) ||
+    !collection.projects.some((project) => project.id === targetProjectId)
+  ) {
+    return normalizedSelection;
+  }
+
+  const reorderedCollections = collections.slice();
+  reorderedCollections[collectionIndex] = {
+    ...collection,
+    projects: reorderListByIds(collection.projects, sourceProjectId, targetProjectId),
   };
 
   return mergeVisibleAndHiddenProjects(

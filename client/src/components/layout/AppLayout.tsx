@@ -92,6 +92,38 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const routeKey = `${location}${search}`;
   const { canGoBack, canGoForward } = useAppNavigation(routeKey);
   const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase());
+  const syncStatusLabel = useMemo(() => {
+    if (!snapshot) {
+      return "Waiting for workspace";
+    }
+
+    if (isFetching && snapshot.sync?.state === "fresh") {
+      return "Refreshing workspace...";
+    }
+
+    if (snapshot.sync?.state === "offline") {
+      return `Offline · last synced ${format(
+        new Date(snapshot.sync.lastSuccessfulSyncAt ?? snapshot.generatedAt),
+        "HH:mm:ss",
+      )}`;
+    }
+
+    if (snapshot.sync?.state === "error") {
+      return `Refresh failed · using ${format(
+        new Date(snapshot.sync.lastSuccessfulSyncAt ?? snapshot.generatedAt),
+        "HH:mm:ss",
+      )}`;
+    }
+
+    if (snapshot.sync?.state === "stale") {
+      return `Cached snapshot · ${format(
+        new Date(snapshot.sync.lastSuccessfulSyncAt ?? snapshot.generatedAt),
+        "HH:mm:ss",
+      )}`;
+    }
+
+    return `Updated ${format(new Date(snapshot.generatedAt), "HH:mm:ss")}`;
+  }, [isFetching, snapshot]);
 
   useWorkspaceAlerts(snapshot, preferences);
   useWorkspaceAutoRefresh();
@@ -356,13 +388,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3 no-drag">
               <div className="hidden xl:flex items-center gap-2 rounded-md border border-black/5 bg-secondary/60 px-2.5 py-1 text-[11px] text-muted-foreground">
                 <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-                <span>
-                  {snapshot
-                    ? isFetching
-                      ? "Refreshing workspace..."
-                      : `Updated ${format(new Date(snapshot.generatedAt), "HH:mm:ss")}`
-                    : "Waiting for workspace"}
-                </span>
+                <span title={snapshot?.sync?.message ?? undefined}>{syncStatusLabel}</span>
               </div>
               <button
                 type="button"

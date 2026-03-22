@@ -16,11 +16,10 @@ import { getDesktopApi } from "@/lib/desktop";
 import { getGitHubStatusMeta } from "@/lib/github-status";
 import { formatDistanceToNow } from "date-fns";
 import {
-  ArrowDown,
-  ArrowUp,
   Eye,
   EyeOff,
   Github,
+  GripVertical,
   HardDrive,
   Layers3,
   RotateCcw,
@@ -37,11 +36,11 @@ import {
   clearWorkspaceSelection,
   getManagedProjectCollections,
   getHiddenManagedProjects,
-  moveManagedProject,
-  moveManagedProjectCollection,
   removeManagedProject,
   removeManagedProjectCollection,
   removeManagedProjects,
+  reorderManagedProjectCollections,
+  reorderManagedProjects,
   renameManagedProjectCollection,
   setManagedProjectCollectionHidden,
   setManagedProjectsHidden,
@@ -55,6 +54,8 @@ export default function Settings() {
   const { preferences, setPreference } = useAppPreferences();
   const [isGitHubConnectOpen, setIsGitHubConnectOpen] = useState(false);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [draggedCollectionId, setDraggedCollectionId] = useState<string | null>(null);
+  const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
   const workspaceSelection = useWorkspaceSelection();
   const managedCollections = getManagedProjectCollections(workspaceSelection);
   const hiddenProjects = getHiddenManagedProjects(workspaceSelection);
@@ -122,18 +123,25 @@ export default function Settings() {
     );
   };
 
-  const handleMoveCollection = async (
-    collectionId: string,
-    direction: "up" | "down",
+  const handleReorderCollection = async (
+    sourceCollectionId: string,
+    targetCollectionId: string,
   ) => {
     await persistWorkspaceSelection(
-      moveManagedProjectCollection(workspaceSelection, collectionId, direction),
+      reorderManagedProjectCollections(
+        workspaceSelection,
+        sourceCollectionId,
+        targetCollectionId,
+      ),
     );
   };
 
-  const handleMoveProject = async (projectId: string, direction: "up" | "down") => {
+  const handleReorderProject = async (
+    sourceProjectId: string,
+    targetProjectId: string,
+  ) => {
     await persistWorkspaceSelection(
-      moveManagedProject(workspaceSelection, projectId, direction),
+      reorderManagedProjects(workspaceSelection, sourceProjectId, targetProjectId),
     );
   };
 
@@ -404,10 +412,30 @@ export default function Settings() {
                       </button>
                     </div>
                   </div>
-                  {managedCollections.map((collection, collectionIndex) => (
+                  {managedCollections.map((collection) => (
                     <div
                       key={collection.id}
-                      className="rounded-lg border border-border/60 bg-secondary/15 overflow-hidden"
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        if (
+                          draggedCollectionId &&
+                          draggedCollectionId !== collection.id
+                        ) {
+                          void handleReorderCollection(
+                            draggedCollectionId,
+                            collection.id,
+                          );
+                        }
+                        setDraggedCollectionId(null);
+                      }}
+                      className={`rounded-lg border border-border/60 bg-secondary/15 overflow-hidden ${
+                        draggedCollectionId === collection.id
+                          ? "ring-1 ring-primary/20"
+                          : ""
+                      }`}
                     >
                       <div className="flex flex-col gap-4 border-b border-border/40 bg-white/70 px-4 py-4">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -463,6 +491,16 @@ export default function Settings() {
                           </div>
 
                           <div className="flex flex-wrap items-center gap-1">
+                            <div
+                              className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm"
+                              aria-label={`Drag ${collection.name}`}
+                              draggable
+                              onDragEnd={() => setDraggedCollectionId(null)}
+                              onDragStart={() => setDraggedCollectionId(collection.id)}
+                              title="Drag to reorder collection"
+                            >
+                              <GripVertical className="h-3.5 w-3.5" />
+                            </div>
                             <button
                               type="button"
                               onClick={() => void handleSetCollectionHidden(collection.id, true)}
@@ -479,24 +517,6 @@ export default function Settings() {
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleMoveCollection(collection.id, "up")}
-                              disabled={collectionIndex === 0}
-                              className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-secondary disabled:opacity-40"
-                              aria-label={`Move ${collection.name} up`}
-                            >
-                              <ArrowUp className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleMoveCollection(collection.id, "down")}
-                              disabled={collectionIndex === managedCollections.length - 1}
-                              className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-secondary disabled:opacity-40"
-                              aria-label={`Move ${collection.name} down`}
-                            >
-                              <ArrowDown className="h-3.5 w-3.5" />
-                            </button>
                           </div>
                         </div>
 
@@ -508,10 +528,30 @@ export default function Settings() {
                       </div>
 
                       <div className="divide-y divide-border/40">
-                        {collection.projects.map((project, projectIndex) => (
+                        {collection.projects.map((project) => (
                           <div
                             key={project.localPath ?? project.id}
-                            className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                            onDragOver={(event) => {
+                              event.preventDefault();
+                            }}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              if (
+                                draggedProjectId &&
+                                draggedProjectId !== project.id
+                              ) {
+                                void handleReorderProject(
+                                  draggedProjectId,
+                                  project.id,
+                                );
+                              }
+                              setDraggedProjectId(null);
+                            }}
+                            className={`flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${
+                              draggedProjectId === project.id
+                                ? "bg-primary/[0.04]"
+                                : ""
+                            }`}
                           >
                             <div className="flex min-w-0 items-start gap-3">
                               <Checkbox
@@ -536,6 +576,16 @@ export default function Settings() {
                             </div>
 
                             <div className="flex flex-wrap items-center gap-1">
+                              <div
+                                className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm"
+                                aria-label={`Drag ${project.name}`}
+                                draggable
+                                onDragEnd={() => setDraggedProjectId(null)}
+                                onDragStart={() => setDraggedProjectId(project.id)}
+                                title="Drag to reorder project"
+                              >
+                                <GripVertical className="h-3.5 w-3.5" />
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => void handleSetProjectHidden(project.id, true)}
@@ -543,24 +593,6 @@ export default function Settings() {
                                 aria-label={`Hide ${project.name}`}
                               >
                                 <EyeOff className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleMoveProject(project.id, "up")}
-                                disabled={projectIndex === 0}
-                                className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-secondary disabled:opacity-40"
-                                aria-label={`Move ${project.name} up`}
-                              >
-                                <ArrowUp className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleMoveProject(project.id, "down")}
-                                disabled={projectIndex === collection.projects.length - 1}
-                                className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-secondary disabled:opacity-40"
-                                aria-label={`Move ${project.name} down`}
-                              >
-                                <ArrowDown className="h-3.5 w-3.5" />
                               </button>
                               <button
                                 type="button"

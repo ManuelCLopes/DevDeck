@@ -2,6 +2,7 @@ import { Suspense, lazy, useMemo, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import ProjectCard from "@/components/dashboard/ProjectCard";
 import ProjectRow from "@/components/dashboard/ProjectRow";
+import PullRequestQueueControl from "@/components/pull-requests/PullRequestQueueControl";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
@@ -10,11 +11,14 @@ import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
 import {
-  getMarkedPullRequestIds,
-  setPullRequestMarkedForReview,
+  getPullRequestQueueIds,
+  getPullRequestWatchStatus,
+  setPullRequestWatchStatus,
+  type PullRequestWatchStatus,
 } from "@/lib/pull-request-watchlist";
 import { getCiStatusMeta } from "@/lib/project-health";
 import {
+  getAuthoredPullRequestStatusMeta,
   getPullRequestSignalBadges,
   pullRequestHasNoReviews,
   pullRequestNeedsFollowUp,
@@ -25,7 +29,6 @@ import { Link, useSearch } from "wouter";
 import {
   Activity,
   ArrowUpRight,
-  Bookmark,
   Check,
   ChevronLeft,
   Clock3,
@@ -47,41 +50,6 @@ import {
 const PullRequestDetailDialog = lazy(
   () => import("@/components/pull-requests/PullRequestDetailDialog"),
 );
-
-function getAuthoredPullRequestStatusMeta(status: string) {
-  switch (status) {
-    case "draft":
-      return {
-        className:
-          "border-[#d0d7de] bg-[#f6f8fa] text-[#57606a]",
-        label: "Draft",
-      };
-    case "reviewed":
-      return {
-        className:
-          "border-[#1a7f37]/20 bg-[#dafbe1] text-[#1a7f37]",
-        label: "Reviewed",
-      };
-    case "merged":
-      return {
-        className:
-          "border-[#8250df]/20 bg-[#fbefff] text-[#8250df]",
-        label: "Merged",
-      };
-    case "closed":
-      return {
-        className:
-          "border-[#cf222e]/20 bg-[#ffebe9] text-[#cf222e]",
-        label: "Closed",
-      };
-    default:
-      return {
-        className:
-          "border-[#1a7f37]/20 bg-[#dafbe1] text-[#1a7f37]",
-        label: "Open",
-      };
-  }
-}
 
 export default function Dashboard() {
   const formatCount = (value: number) => new Intl.NumberFormat().format(value);
@@ -109,7 +77,11 @@ export default function Dashboard() {
     ? pullRequests.filter((pullRequest) => pullRequest.projectId === focusedProject.id)
     : pullRequests;
   const markedPullRequestIds = useMemo(
-    () => getMarkedPullRequestIds(pullRequestWatchlist),
+    () => getPullRequestQueueIds(pullRequestWatchlist, "marked"),
+    [pullRequestWatchlist],
+  );
+  const inReviewPullRequestIds = useMemo(
+    () => getPullRequestQueueIds(pullRequestWatchlist, "in_review"),
     [pullRequestWatchlist],
   );
   const selectedPullRequest =
@@ -149,6 +121,9 @@ export default function Dashboard() {
   ).length;
   const markedPullRequestCount = visiblePullRequests.filter((pullRequest) =>
     markedPullRequestIds.has(pullRequest.id),
+  ).length;
+  const inReviewPullRequestCount = visiblePullRequests.filter((pullRequest) =>
+    inReviewPullRequestIds.has(pullRequest.id),
   ).length;
   const workspaceLabel = workspaceSelection?.rootPath ?? workspaceSelection?.rootName ?? "~/Developer";
   const overviewPullRequestsPagination = usePagination(
@@ -202,11 +177,11 @@ export default function Dashboard() {
     window.open(targetUrl, "_blank", "noopener,noreferrer");
   };
 
-  const handleToggleMarkedPullRequest = (pullRequestId: string) => {
-    setPullRequestMarkedForReview(
-      pullRequestId,
-      !markedPullRequestIds.has(pullRequestId),
-    );
+  const handleSetPullRequestQueueStatus = (
+    pullRequestId: string,
+    status: PullRequestWatchStatus | null,
+  ) => {
+    setPullRequestWatchStatus(pullRequestId, status);
   };
 
   return (
@@ -309,10 +284,11 @@ export default function Dashboard() {
                       <span className="min-w-0 text-right font-semibold text-foreground">{focusedProjectPullRequests.length}</span>
                     </div>
                     <div className="flex items-start justify-between gap-4">
-                      <span className="text-muted-foreground">Marked by you</span>
+                      <span className="text-muted-foreground">In your queue</span>
                       <span className="min-w-0 text-right font-semibold text-foreground">
                         {focusedProjectPullRequests.filter((pullRequest) =>
-                          markedPullRequestIds.has(pullRequest.id),
+                          markedPullRequestIds.has(pullRequest.id) ||
+                          inReviewPullRequestIds.has(pullRequest.id),
                         ).length}
                       </span>
                     </div>
@@ -460,13 +436,19 @@ export default function Dashboard() {
 
                   <div className="space-y-3">
                     {focusedPullRequestsPagination.paginatedItems.map((pullRequest) => {
-                      const markedForReview = markedPullRequestIds.has(pullRequest.id);
+                      const watchStatus = getPullRequestWatchStatus(
+                        pullRequest.id,
+                        pullRequestWatchlist,
+                      );
                       const signalBadges = getPullRequestSignalBadges(
                         pullRequest,
-                        markedForReview,
+                        watchStatus,
                       );
                       const visibleBadges = signalBadges.filter(
-                        (badge) => badge.label === "marked for review",
+                        (badge) =>
+                          badge.label === "marked" ||
+                          badge.label === "in review" ||
+                          badge.label === "done",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =
@@ -513,20 +495,17 @@ export default function Dashboard() {
                                 <Github className="h-3.5 w-3.5" />
                                 View
                               </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleToggleMarkedPullRequest(pullRequest.id);
-                                }}
-                                className={`h-8 rounded-md border px-2 text-[11px] font-medium transition-colors ${
-                                  markedForReview
-                                    ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-                                    : "border-border/60 bg-white text-foreground hover:bg-black/5"
-                                }`}
-                              >
-                                {markedForReview ? "Marked" : "Mark"}
-                              </button>
+                              <div onClick={(event) => event.stopPropagation()}>
+                                <PullRequestQueueControl
+                                  onStatusChange={(status) =>
+                                    handleSetPullRequestQueueStatus(
+                                      pullRequest.id,
+                                      status,
+                                    )
+                                  }
+                                  status={watchStatus}
+                                />
+                              </div>
                             </div>
                           </div>
                           {visibleBadges.length > 0 && (
@@ -664,13 +643,19 @@ export default function Dashboard() {
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                 <div className="space-y-3">
                     {overviewPullRequestsPagination.paginatedItems.map((pullRequest) => {
-                      const markedForReview = markedPullRequestIds.has(pullRequest.id);
+                      const watchStatus = getPullRequestWatchStatus(
+                        pullRequest.id,
+                        pullRequestWatchlist,
+                      );
                       const signalBadges = getPullRequestSignalBadges(
                         pullRequest,
-                        markedForReview,
+                        watchStatus,
                       );
                       const visibleBadges = signalBadges.filter(
-                        (badge) => badge.label === "marked for review",
+                        (badge) =>
+                          badge.label === "marked" ||
+                          badge.label === "in review" ||
+                          badge.label === "done",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =
@@ -717,21 +702,17 @@ export default function Dashboard() {
                                 <Github className="h-3.5 w-3.5" />
                                 View
                               </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleToggleMarkedPullRequest(pullRequest.id);
-                                }}
-                                className={`inline-flex h-8 items-center rounded-md border px-2 text-[11px] font-medium transition-colors ${
-                                  markedForReview
-                                    ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-                                    : "border-border/60 bg-white text-foreground hover:bg-black/5"
-                                }`}
-                              >
-                                <Bookmark className="mr-1.5 h-3.5 w-3.5" />
-                                {markedForReview ? "Marked" : "Mark"}
-                              </button>
+                              <div onClick={(event) => event.stopPropagation()}>
+                                <PullRequestQueueControl
+                                  onStatusChange={(status) =>
+                                    handleSetPullRequestQueueStatus(
+                                      pullRequest.id,
+                                      status,
+                                    )
+                                  }
+                                  status={watchStatus}
+                                />
+                              </div>
                             </div>
                           </div>
                           {visibleBadges.length > 0 && (

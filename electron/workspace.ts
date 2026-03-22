@@ -862,7 +862,7 @@ function getLatestViewerReviewTimestamp(
 function getAuthoredPullRequestStatus(
   pullRequest: Pick<
     GitHubPullRequestRecord,
-    "isDraft" | "mergedAt" | "reviews" | "state"
+    "isDraft" | "mergedAt" | "reviewDecision" | "reviews" | "state"
   >,
   authorLogin: string | null,
 ) {
@@ -878,13 +878,23 @@ function getAuthoredPullRequestStatus(
     return "draft" as const;
   }
 
+  if (pullRequest.reviewDecision === "CHANGES_REQUESTED") {
+    return "changes_requested" as const;
+  }
+
+  if (pullRequest.reviewDecision === "APPROVED") {
+    return "approved" as const;
+  }
+
   const reviewerLogins = normalizeReviewerLogins({
     author: authorLogin ? { login: authorLogin } : null,
     latestReviews: pullRequest.reviews,
     reviews: pullRequest.reviews,
   });
 
-  return reviewerLogins.length > 0 ? ("reviewed" as const) : ("open" as const);
+  return reviewerLogins.length > 0
+    ? ("reviewed" as const)
+    : ("waiting_for_review" as const);
 }
 
 export function clearWorkspaceSnapshotCaches() {
@@ -1878,6 +1888,12 @@ function buildWorkspaceSnapshot(
     pullRequests,
     projects,
     reviews,
+    sync: {
+      lastAttemptedAt: new Date().toISOString(),
+      lastSuccessfulSyncAt: new Date().toISOString(),
+      message: null,
+      state: "fresh",
+    },
     summary: {
       healthyRepositories: projects.filter((project) => project.status === "healthy")
         .length,

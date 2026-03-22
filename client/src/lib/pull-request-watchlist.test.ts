@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  getPullRequestWatchStatus,
   getPullRequestWatchlist,
   setPullRequestMarkedForReview,
+  setPullRequestWatchStatus,
 } from "./pull-request-watchlist";
 
 class MemoryStorage {
@@ -88,9 +90,52 @@ test("setPullRequestMarkedForReview persists and removes local watchlist entries
   try {
     setPullRequestMarkedForReview("repo#12", true);
     assert.deepEqual(Object.keys(getPullRequestWatchlist()), ["repo#12"]);
+    assert.equal(getPullRequestWatchStatus("repo#12"), "marked");
 
     setPullRequestMarkedForReview("repo#12", false);
     assert.deepEqual(getPullRequestWatchlist(), {});
+  } finally {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: previousWindow,
+    });
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: previousLocalStorage,
+    });
+  }
+});
+
+test("setPullRequestWatchStatus upgrades entries through queue stages", () => {
+  const previousWindow = globalThis.window;
+  const previousLocalStorage = globalThis.localStorage;
+  const localStorage = new MemoryStorage() as unknown as Storage;
+  const fakeWindow = {
+    addEventListener() {},
+    dispatchEvent() {
+      return true;
+    },
+    removeEventListener() {},
+  } as unknown as Window & typeof globalThis;
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: fakeWindow,
+  });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: localStorage,
+  });
+
+  try {
+    setPullRequestWatchStatus("repo#99", "in_review");
+    assert.equal(getPullRequestWatchStatus("repo#99"), "in_review");
+
+    setPullRequestWatchStatus("repo#99", "done");
+    assert.equal(getPullRequestWatchStatus("repo#99"), "done");
+
+    setPullRequestWatchStatus("repo#99", null);
+    assert.equal(getPullRequestWatchStatus("repo#99"), null);
   } finally {
     Object.defineProperty(globalThis, "window", {
       configurable: true,
