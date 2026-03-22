@@ -1,4 +1,5 @@
-import { Switch, Route, useLocation } from "wouter";
+import { Router as WouterRouter, Switch, Route, useLocation } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -32,7 +33,7 @@ function AppLoadingScreen() {
   );
 }
 
-function Router() {
+function AppRouter() {
   const [location, setLocation] = useLocation();
   const [isInitializing, setIsInitializing] = useState(true);
   const workspaceSelection = useWorkspaceSelection();
@@ -81,11 +82,15 @@ function Router() {
 }
 
 function App() {
+  const locationHook = getDesktopApi() ? useHashLocation : undefined;
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
+        <WouterRouter hook={locationHook}>
+          <AppRouter />
+        </WouterRouter>
       </TooltipProvider>
     </QueryClientProvider>
   );

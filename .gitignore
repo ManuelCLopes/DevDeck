@@ -9,3 +9,5 @@ vite.config.ts.*
 build/icon.icns
 build/icon.iconset/
 build/icon.png
+playwright-report
+test-results

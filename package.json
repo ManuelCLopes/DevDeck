@@ -21,6 +21,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test": "tsx --test client/src/lib/*.test.ts shared/*.test.ts electron/*.test.ts",
+    "test:e2e": "playwright test",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
@@ -89,6 +90,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/vite": "^4.1.14",
     "@types/connect-pg-simple": "^7.0.3",
     "@types/express": "^5.0.0",

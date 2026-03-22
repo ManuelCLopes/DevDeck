@@ -17,7 +17,8 @@ function getPackageName(id: string) {
   return pathSegments[0] ?? null;
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  base: command === "build" ? "./" : "/",
   plugins: [
     react(),
     tailwindcss(),
@@ -94,4 +95,4 @@ export default defineConfig({
       deny: ["**/.*"],
     },
   },
-});
+}));

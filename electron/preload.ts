@@ -17,6 +17,19 @@ interface WorkspaceMonitorState {
   selection: WorkspaceSelection | null;
 }
 
+const e2eBootstrapSelection = process.env.DEVDECK_E2E_BOOTSTRAP_SELECTION;
+if (e2eBootstrapSelection) {
+  try {
+    window.localStorage.setItem(
+      "devdeck_workspace_selection",
+      e2eBootstrapSelection,
+    );
+    window.localStorage.setItem("devdeck_onboarding_completed", "true");
+  } catch {
+    // Ignore test bootstrap failures and let the app continue normally.
+  }
+}
+
 const devdeck = {
   addPullRequestComment(payload: {
     body: string;
