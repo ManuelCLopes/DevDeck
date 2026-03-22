@@ -97,6 +97,7 @@ async function launchDesktopApp(
     env: {
       ...process.env,
       DEVDECK_E2E_BOOTSTRAP_SELECTION: JSON.stringify(selection),
+      DEVDECK_GITHUB_CLIENT_ID: "",
       DEVDECK_GITHUB_STORAGE: "file",
       DEVDECK_GITHUB_TOKEN_PATH: join(userHome, "github-token.json"),
       HOME: userHome,
@@ -181,6 +182,39 @@ test("preferences supports drag reordering and hide/restore curation", async () 
 
     await page.getByRole("button", { name: "Restore", exact: true }).click();
     await expect(page.locator("aside")).toContainText("alpha");
+  } finally {
+    await electronApp.close();
+    rmSync(workspace.tempDir, { force: true, recursive: true });
+  }
+});
+
+test("preferences exposes the production token fallback when device flow is unavailable", async () => {
+  const workspace = createTestWorkspace();
+  const selection = createWorkspaceSelection(workspace.rootDir);
+  const { electronApp, page } = await launchDesktopApp(
+    workspace.userHome,
+    selection,
+  );
+
+  try {
+    await page.locator('a[href="#/settings"]').click();
+    await expect(
+      page.getByRole("heading", { name: "Preferences", exact: true }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Connect GitHub" }).click();
+
+    await expect(
+      page.getByRole("heading", { name: "Connect GitHub" }),
+    ).toBeVisible();
+    await expect(page.getByText("Device Sign-In Unavailable")).toBeVisible();
+    await expect(
+      page.getByText("DEVDECK_GITHUB_CLIENT_ID", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("Paste a GitHub Token")).toBeVisible();
+    await expect(
+      page.getByText(/local DevDeck credential file/),
+    ).toBeVisible();
   } finally {
     await electronApp.close();
     rmSync(workspace.tempDir, { force: true, recursive: true });

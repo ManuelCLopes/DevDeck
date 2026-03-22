@@ -32,6 +32,8 @@ interface GitHubDeviceAccessTokenResponse {
 
 export interface GitHubAuthCapabilities {
   deviceFlowAvailable: boolean;
+  deviceFlowReason: string | null;
+  storageBackend: "file" | "keychain";
 }
 
 export interface GitHubDeviceAuthSession {
@@ -211,8 +213,14 @@ export async function clearStoredGitHubToken() {
 }
 
 export function getGitHubAuthCapabilities(): GitHubAuthCapabilities {
+  const deviceFlowAvailable = Boolean(getGitHubOAuthClientId());
+
   return {
-    deviceFlowAvailable: Boolean(getGitHubOAuthClientId()),
+    deviceFlowAvailable,
+    deviceFlowReason: deviceFlowAvailable
+      ? null
+      : "This build does not include a GitHub OAuth client ID yet. Use a personal access token or configure DEVDECK_GITHUB_CLIENT_ID for device-flow sign-in.",
+    storageBackend: shouldUseKeychainStorage() ? "keychain" : "file",
   };
 }
 

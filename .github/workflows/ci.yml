@@ -32,6 +32,9 @@ jobs:
       - name: Build application
         run: npm run build
 
+      - name: Run release preflight
+        run: npm run release:check
+
   desktop-smoke:
     runs-on: macos-latest
 
@@ -56,3 +59,6 @@ jobs:
 
       - name: Package macOS app directory
         run: npm run pack:mac
+
+      - name: Validate packaged app artifacts
+        run: npm run release:check:artifacts

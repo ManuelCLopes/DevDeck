@@ -32,10 +32,21 @@ test("GitHub token storage falls back to file mode when configured", async () =>
 
 test("GitHub auth capabilities follow the configured OAuth client id", () => {
   delete process.env.DEVDECK_GITHUB_CLIENT_ID;
-  assert.equal(getGitHubAuthCapabilities().deviceFlowAvailable, false);
+  process.env.DEVDECK_GITHUB_STORAGE = "file";
+  assert.deepEqual(getGitHubAuthCapabilities(), {
+    deviceFlowAvailable: false,
+    deviceFlowReason:
+      "This build does not include a GitHub OAuth client ID yet. Use a personal access token or configure DEVDECK_GITHUB_CLIENT_ID for device-flow sign-in.",
+    storageBackend: "file",
+  });
 
   process.env.DEVDECK_GITHUB_CLIENT_ID = "client-id";
-  assert.equal(getGitHubAuthCapabilities().deviceFlowAvailable, true);
+  assert.deepEqual(getGitHubAuthCapabilities(), {
+    deviceFlowAvailable: true,
+    deviceFlowReason: null,
+    storageBackend: "file",
+  });
 
+  delete process.env.DEVDECK_GITHUB_STORAGE;
   delete process.env.DEVDECK_GITHUB_CLIENT_ID;
 });

@@ -24,7 +24,11 @@ interface DevDeckDesktopApi {
   }): Promise<void>;
   clearGitHubToken(): Promise<void>;
   copyToClipboard(value: string): Promise<void>;
-  getGitHubAuthCapabilities(): Promise<{ deviceFlowAvailable: boolean }>;
+  getGitHubAuthCapabilities(): Promise<{
+    deviceFlowAvailable: boolean;
+    deviceFlowReason: string | null;
+    storageBackend: "file" | "keychain";
+  }>;
   loadWorkspaceSnapshot(selection: WorkspaceSelection): Promise<WorkspaceSnapshot>;
   onNavigate(listener: (targetPath: string) => void): () => void;
   onWorkspaceSnapshotUpdated(

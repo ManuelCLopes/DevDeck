@@ -14,11 +14,11 @@ The app now runs through Electron on top of the existing React and Vite UI, so i
 
 ## Open-source status
 
-DevDeck is open-source and usable today, but it should still be treated as an experimental alpha:
+DevDeck is open-source and now maintained as a macOS release candidate:
 
 - local repository scanning and GitHub PR sync are real
-- some repository insights are still inferred from local Git metadata only
-- release signing and notarization depend on maintainers providing Apple credentials
+- desktop packaging, smoke coverage, and release preflight checks are in place
+- public production releases still depend on maintainers providing Apple signing and notarization credentials
 - the app is currently macOS-first
 
 If you are opening issues or pull requests, expect active iteration and some rough edges around platform support and workflow polish.
@@ -45,7 +45,7 @@ cp .env.example .env
 Available variables:
 
 - `DEVDECK_GITHUB_CLIENT_ID`
-  Enables GitHub device-flow sign-in inside the desktop app.
+  Required for production desktop releases if you want in-app GitHub device-flow sign-in.
   If you leave this unset, DevDeck still lets you paste a GitHub token manually in `Preferences > GitHub Access`.
 - `CSC_LINK` and `CSC_KEY_PASSWORD`
   Optional for release builds. Provide a Developer ID Application certificate in base64 `.p12` form plus its password so `electron-builder` can sign the macOS app.
@@ -146,6 +146,12 @@ To create distributable archives instead of just the unpacked app bundle:
 npm run dist:mac
 ```
 
+Validate the full release-candidate surface locally:
+
+```bash
+npm run rc:check
+```
+
 For a signed and notarized build, export either:
 
 - `APPLE_NOTARY_PROFILE`
@@ -162,7 +168,10 @@ It can be triggered manually or by pushing a tag like `v1.0.0`, and it will:
 - install dependencies with `npm ci`
 - run `npm run check`
 - run `npm test`
+- run `npm run test:e2e`
+- enforce release preflight checks for signing, notarization, and GitHub auth
 - build signed macOS artifacts with `npm run dist:mac`
+- validate the signed `.app` bundle before upload
 - upload the generated `.dmg` and `.zip`
 - publish them to the GitHub release for tagged builds
 
@@ -180,6 +189,7 @@ If you want to contribute, start here:
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - [SECURITY.md](SECURITY.md)
 - [LICENSE](LICENSE)
+- [RELEASING.md](RELEASING.md)
 
 ## Type check
 
@@ -216,6 +226,8 @@ npm run dev:web        # run the older Express/Vite browser shell
 npm run build          # build client, server, and Electron bundles
 npm run pack:mac       # create an unpacked macOS app bundle
 npm run dist:mac       # create macOS distributables
+npm run rc:check       # run the release-candidate validation pass
+npm run release:check  # inspect release readiness and packaging requirements
 npm run check          # run TypeScript type checking
 npm run db:push        # push Drizzle schema changes, requires DATABASE_URL
 ```

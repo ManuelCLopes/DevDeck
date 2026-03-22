@@ -25,6 +25,8 @@ interface GitHubConnectDialogProps {
 
 interface GitHubAuthCapabilities {
   deviceFlowAvailable: boolean;
+  deviceFlowReason: string | null;
+  storageBackend: "file" | "keychain";
 }
 
 interface GitHubDeviceAuthSession {
@@ -43,6 +45,8 @@ export default function GitHubConnectDialog({
   const desktopApi = getDesktopApi();
   const [capabilities, setCapabilities] = useState<GitHubAuthCapabilities>({
     deviceFlowAvailable: false,
+    deviceFlowReason: null,
+    storageBackend: "keychain",
   });
   const [deviceSession, setDeviceSession] = useState<GitHubDeviceAuthSession | null>(
     null,
@@ -58,7 +62,11 @@ export default function GitHubConnectDialog({
       return;
     }
 
-    setCapabilities({ deviceFlowAvailable: false });
+    setCapabilities({
+      deviceFlowAvailable: false,
+      deviceFlowReason: null,
+      storageBackend: "keychain",
+    });
     setDeviceSession(null);
     setErrorMessage(null);
     setIsPollingDeviceFlow(false);
@@ -73,9 +81,18 @@ export default function GitHubConnectDialog({
     }
 
     void desktopApi.getGitHubAuthCapabilities().then(setCapabilities).catch(() => {
-      setCapabilities({ deviceFlowAvailable: false });
+      setCapabilities({
+        deviceFlowAvailable: false,
+        deviceFlowReason: "DevDeck could not determine whether GitHub device sign-in is available in this build.",
+        storageBackend: "keychain",
+      });
     });
   }, [desktopApi, open]);
+
+  const tokenStorageLabel =
+    capabilities.storageBackend === "keychain"
+      ? "macOS Keychain"
+      : "a local DevDeck credential file";
 
   useEffect(() => {
     if (!open || !deviceSession || !desktopApi?.pollGitHubDeviceAuth) {
@@ -277,6 +294,23 @@ export default function GitHubConnectDialog({
             </div>
           )}
 
+          {!capabilities.deviceFlowAvailable && (
+            <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 space-y-2">
+              <p className="text-sm font-semibold text-foreground">
+                Device Sign-In Unavailable
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {capabilities.deviceFlowReason ??
+                  "This build does not currently support GitHub device-flow sign-in."}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Release builds should provide{" "}
+                <span className="font-mono">DEVDECK_GITHUB_CLIENT_ID</span> so
+                users can connect GitHub without manually creating a token.
+              </p>
+            </div>
+          )}
+
           <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 space-y-3">
             <div className="space-y-1">
               <p className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -302,8 +336,8 @@ export default function GitHubConnectDialog({
 
             <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] text-muted-foreground">
-                The token is stored locally on this Mac and is never committed
-                into your repository.
+                The token is stored locally in {tokenStorageLabel} and is never
+                committed into your repository.
               </p>
               <Button
                 type="button"
