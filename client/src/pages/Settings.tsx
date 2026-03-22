@@ -18,6 +18,8 @@ import { formatDistanceToNow } from "date-fns";
 import {
   ArrowDown,
   ArrowUp,
+  Eye,
+  EyeOff,
   Github,
   HardDrive,
   Layers3,
@@ -34,12 +36,15 @@ import { clearWorkspaceHandle } from "@/lib/workspace-handle";
 import {
   clearWorkspaceSelection,
   getManagedProjectCollections,
+  getHiddenManagedProjects,
   moveManagedProject,
   moveManagedProjectCollection,
   removeManagedProject,
   removeManagedProjectCollection,
   removeManagedProjects,
   renameManagedProjectCollection,
+  setManagedProjectCollectionHidden,
+  setManagedProjectsHidden,
   setWorkspaceSelection,
 } from "@/lib/workspace-selection";
 import type { WorkspaceSelection } from "@shared/workspace";
@@ -52,6 +57,18 @@ export default function Settings() {
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const workspaceSelection = useWorkspaceSelection();
   const managedCollections = getManagedProjectCollections(workspaceSelection);
+  const hiddenProjects = getHiddenManagedProjects(workspaceSelection);
+  const hiddenProjectCount = hiddenProjects.length;
+  const visibleProjectCount =
+    workspaceSelection?.projects.filter((project) => !project.hidden).length ?? 0;
+  const hiddenCollections = getManagedProjectCollections(workspaceSelection, {
+    includeHidden: true,
+  })
+    .map((collection) => ({
+      ...collection,
+      projects: collection.projects.filter((project) => project.hidden),
+    }))
+    .filter((collection) => collection.projects.length > 0);
   const githubStatus = snapshot?.githubStatus;
   const connected = githubStatus?.authenticated ?? false;
   const githubStatusMeta = getGitHubStatusMeta(githubStatus);
@@ -173,6 +190,64 @@ export default function Settings() {
     setSelectedProjectIds([]);
   };
 
+  const handleHideSelectedProjects = async () => {
+    if (selectedProjectIds.length === 0) {
+      return;
+    }
+
+    await persistWorkspaceSelection(
+      setManagedProjectsHidden(workspaceSelection, selectedProjectIds, true),
+    );
+    setSelectedProjectIds([]);
+  };
+
+  const handleSetProjectHidden = async (projectId: string, hidden: boolean) => {
+    if (hidden) {
+      setSelectedProjectIds((currentSelection) =>
+        currentSelection.filter((selectedProjectId) => selectedProjectId !== projectId),
+      );
+    }
+
+    await persistWorkspaceSelection(
+      setManagedProjectsHidden(workspaceSelection, [projectId], hidden),
+    );
+  };
+
+  const handleSetCollectionHidden = async (
+    collectionId: string,
+    hidden: boolean,
+  ) => {
+    if (hidden) {
+      const collection = managedCollections.find(
+        (managedCollection) => managedCollection.id === collectionId,
+      );
+      if (collection) {
+        const collectionProjectIds = new Set(collection.projects.map((project) => project.id));
+        setSelectedProjectIds((currentSelection) =>
+          currentSelection.filter((projectId) => !collectionProjectIds.has(projectId)),
+        );
+      }
+    }
+
+    await persistWorkspaceSelection(
+      setManagedProjectCollectionHidden(workspaceSelection, collectionId, hidden),
+    );
+  };
+
+  const handleRestoreAllHiddenProjects = async () => {
+    if (hiddenProjectCount === 0) {
+      return;
+    }
+
+    await persistWorkspaceSelection(
+      setManagedProjectsHidden(
+        workspaceSelection,
+        hiddenProjects.map((project) => project.id),
+        false,
+      ),
+    );
+  };
+
   const handleRemoveCollection = async (collectionId: string) => {
     const collection = managedCollections.find(
       (managedCollection) => managedCollection.id === collectionId,
@@ -280,8 +355,11 @@ export default function Settings() {
                     <h3 className="font-semibold text-sm">Managed Projects</h3>
                     <p className="text-xs text-muted-foreground mt-1">
                       {workspaceSelection
-                        ? `${workspaceSelection.projects.length} projects across ${managedCollections.length} ${managedCollections.length === 1 ? "collection" : "collections"}.`
+                        ? `${visibleProjectCount} visible ${visibleProjectCount === 1 ? "project" : "projects"} across ${managedCollections.length} ${managedCollections.length === 1 ? "collection" : "collections"}${hiddenProjectCount > 0 ? ` · ${hiddenProjectCount} hidden` : ""}.`
                         : "Select folders where your git repositories live."}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Hidden projects stay monitored but disappear from the sidebar until restored.
                     </p>
                   </div>
                 </div>
@@ -304,17 +382,27 @@ export default function Settings() {
                           : "Bulk curation"}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Select projects across collections to remove them in one step.
+                        Select visible projects across collections to hide or remove them in one step.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleRemoveSelectedProjects()}
-                      disabled={selectedProjectIds.length === 0}
-                      className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Remove Selected
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleHideSelectedProjects()}
+                        disabled={selectedProjectIds.length === 0}
+                        className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Hide Selected
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleRemoveSelectedProjects()}
+                        disabled={selectedProjectIds.length === 0}
+                        className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Remove Selected
+                      </button>
+                    </div>
                   </div>
                   {managedCollections.map((collection, collectionIndex) => (
                     <div
@@ -375,6 +463,14 @@ export default function Settings() {
                           </div>
 
                           <div className="flex flex-wrap items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => void handleSetCollectionHidden(collection.id, true)}
+                              className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-secondary"
+                              aria-label={`Hide ${collection.name}`}
+                            >
+                              <EyeOff className="h-3.5 w-3.5" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => void handleRemoveCollection(collection.id)}
@@ -442,6 +538,14 @@ export default function Settings() {
                             <div className="flex flex-wrap items-center gap-1">
                               <button
                                 type="button"
+                                onClick={() => void handleSetProjectHidden(project.id, true)}
+                                className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-secondary"
+                                aria-label={`Hide ${project.name}`}
+                              >
+                                <EyeOff className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => void handleMoveProject(project.id, "up")}
                                 disabled={projectIndex === 0}
                                 className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-secondary disabled:opacity-40"
@@ -472,6 +576,92 @@ export default function Settings() {
                       </div>
                     </div>
                   ))}
+
+                  {hiddenCollections.length > 0 ? (
+                    <div className="space-y-3 pt-2">
+                      <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">Hidden Projects</p>
+                          <p className="text-xs text-muted-foreground">
+                            {hiddenProjectCount} hidden {hiddenProjectCount === 1 ? "project" : "projects"} are still monitored but removed from the sidebar.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleRestoreAllHiddenProjects()}
+                          className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
+                        >
+                          Restore All
+                        </button>
+                      </div>
+
+                      {hiddenCollections.map((collection) => (
+                        <div
+                          key={`hidden:${collection.id}`}
+                          className="rounded-lg border border-dashed border-border/60 bg-white/80 overflow-hidden"
+                        >
+                          <div className="flex flex-col gap-3 border-b border-border/40 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                {collection.name}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {collection.projects.length} hidden {collection.projects.length === 1 ? "project" : "projects"}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void handleSetCollectionHidden(collection.id, false)}
+                              className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
+                            >
+                              Restore Collection
+                            </button>
+                          </div>
+
+                          <div className="divide-y divide-border/40">
+                            {collection.projects.map((project) => (
+                              <div
+                                key={`hidden:${project.localPath ?? project.id}`}
+                                className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-foreground">
+                                    {project.name}
+                                  </p>
+                                  <p
+                                    className="truncate font-mono text-[11px] text-muted-foreground"
+                                    title={project.localPath ?? project.relativePath ?? project.name}
+                                  >
+                                    {project.localPath ?? project.relativePath ?? project.name}
+                                  </p>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleSetProjectHidden(project.id, false)}
+                                    className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
+                                  >
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <Eye className="h-3.5 w-3.5" />
+                                      Restore
+                                    </span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleRemoveProject(project.id)}
+                                    className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-red-50 hover:text-red-600"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>

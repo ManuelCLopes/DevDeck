@@ -31,6 +31,7 @@ export type WorkspaceGitHubState =
 export interface MonitoredProject {
   collectionId?: string;
   collectionName?: string;
+  hidden?: boolean;
   id: string;
   isRoot?: boolean;
   localPath?: string;

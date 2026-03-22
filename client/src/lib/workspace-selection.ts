@@ -101,6 +101,7 @@ function normalizeProject(
     ...project,
     collectionId: getCollectionId(project, workspaceName, workspacePath, localPath ?? project.id),
     collectionName: getCollectionName(project, workspaceName),
+    hidden: project.hidden === true,
     localPath,
     order: typeof project.order === "number" ? project.order : index,
     relativePath,
@@ -204,6 +205,20 @@ function buildSelectionFromOrderedProjects(
   } satisfies WorkspaceSelection;
 }
 
+function mergeVisibleAndHiddenProjects(
+  selection: WorkspaceSelection,
+  orderedVisibleProjects: MonitoredProject[],
+) {
+  const hiddenProjects = selection.projects
+    .filter((project) => project.hidden)
+    .sort(compareProjects);
+
+  return buildSelectionFromOrderedProjects(selection, [
+    ...orderedVisibleProjects,
+    ...hiddenProjects,
+  ]);
+}
+
 export function subscribeWorkspaceSelection(listener: () => void) {
   if (typeof window === "undefined") {
     return () => {};
@@ -293,6 +308,7 @@ export function mergeWorkspaceSelection(
         ...project,
         collectionId: existingProject.collectionId ?? project.collectionId,
         collectionName: existingProject.collectionName ?? project.collectionName,
+        hidden: existingProject.hidden ?? project.hidden,
         localPath: project.localPath ?? existingProject.localPath,
         order: existingProject.order ?? project.order,
         workspaceName: project.workspaceName ?? existingProject.workspaceName,
@@ -334,13 +350,21 @@ export function getMonitoredProjects(selection: WorkspaceSelection | null) {
   return selection?.projects.slice().sort(compareProjects) ?? [];
 }
 
-export function getManagedProjectCollections(selection: WorkspaceSelection | null) {
+export function getManagedProjectCollections(
+  selection: WorkspaceSelection | null,
+  options?: { includeHidden?: boolean },
+) {
   if (!selection) {
     return [] as ManagedProjectCollection[];
   }
 
+  const includeHidden = options?.includeHidden === true;
   const collections = new Map<string, ManagedProjectCollection>();
   for (const project of getMonitoredProjects(selection)) {
+    if (!includeHidden && project.hidden) {
+      continue;
+    }
+
     const collectionId = project.collectionId ?? createCollectionId(project.name, project.localPath);
     const existingCollection = collections.get(collectionId);
 
@@ -368,6 +392,10 @@ export function getManagedProjectCollections(selection: WorkspaceSelection | nul
 
     return left.name.localeCompare(right.name);
   });
+}
+
+export function getHiddenManagedProjects(selection: WorkspaceSelection | null) {
+  return getMonitoredProjects(selection).filter((project) => project.hidden);
 }
 
 export function hasValidWorkspaceSelection(selection: WorkspaceSelection | null) {
@@ -457,6 +485,51 @@ export function renameManagedProjectCollection(
   });
 }
 
+export function setManagedProjectsHidden(
+  selection: WorkspaceSelection | null,
+  projectIds: Iterable<string>,
+  hidden: boolean,
+) {
+  const normalizedSelection = normalizeWorkspaceSelection(selection);
+  if (!normalizedSelection) {
+    return null;
+  }
+
+  const projectIdSet = projectIds instanceof Set ? projectIds : new Set(projectIds);
+  if (projectIdSet.size === 0) {
+    return normalizedSelection;
+  }
+
+  return normalizeWorkspaceSelection({
+    ...normalizedSelection,
+    projects: normalizedSelection.projects.map((project) =>
+      projectIdSet.has(project.id)
+        ? {
+            ...project,
+            hidden,
+          }
+        : project,
+    ),
+  });
+}
+
+export function setManagedProjectCollectionHidden(
+  selection: WorkspaceSelection | null,
+  collectionId: string,
+  hidden: boolean,
+) {
+  const normalizedSelection = normalizeWorkspaceSelection(selection);
+  if (!normalizedSelection) {
+    return null;
+  }
+
+  const collectionProjectIds = normalizedSelection.projects
+    .filter((project) => project.collectionId === collectionId)
+    .map((project) => project.id);
+
+  return setManagedProjectsHidden(normalizedSelection, collectionProjectIds, hidden);
+}
+
 export function moveManagedProjectCollection(
   selection: WorkspaceSelection | null,
   collectionId: string,
@@ -482,7 +555,7 @@ export function moveManagedProjectCollection(
   const [collection] = reorderedCollections.splice(currentIndex, 1);
   reorderedCollections.splice(targetIndex, 0, collection);
 
-  return buildSelectionFromOrderedProjects(
+  return mergeVisibleAndHiddenProjects(
     normalizedSelection,
     reorderedCollections.flatMap((managedCollection) => managedCollection.projects),
   );
@@ -526,7 +599,7 @@ export function moveManagedProject(
     projects: reorderedProjects,
   };
 
-  return buildSelectionFromOrderedProjects(
+  return mergeVisibleAndHiddenProjects(
     normalizedSelection,
     reorderedCollections.flatMap((managedCollection) => managedCollection.projects),
   );

@@ -66,6 +66,24 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const workspaceSelection = useWorkspaceSelection();
   const managedCollections = getManagedProjectCollections(workspaceSelection);
+  const hiddenProjectIds = useMemo(
+    () =>
+      new Set(
+        workspaceSelection?.projects
+          .filter((project) => project.hidden)
+          .map((project) => project.id) ?? [],
+      ),
+    [workspaceSelection],
+  );
+  const hiddenProjectNames = useMemo(
+    () =>
+      new Set(
+        workspaceSelection?.projects
+          .filter((project) => project.hidden)
+          .map((project) => project.name) ?? [],
+      ),
+    [workspaceSelection],
+  );
   const selectedProjectId = new URLSearchParams(search).get("project");
   const { data: snapshot, isFetching, refetch } = useWorkspaceSnapshot();
   const { preferences } = useAppPreferences();
@@ -89,6 +107,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     }
 
     const projectResults = snapshot.projects
+      .filter((project) => !hiddenProjectIds.has(project.id))
       .filter((project) =>
         deferredSearchQuery.length === 0
           ? true
@@ -105,6 +124,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       )
       .slice(0, 6);
     const pullRequestResults = snapshot.pullRequests
+      .filter((pullRequest) => !hiddenProjectIds.has(pullRequest.projectId))
       .filter((pullRequest) =>
         deferredSearchQuery.length === 0
           ? true
@@ -122,6 +142,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       )
       .slice(0, 6);
     const activityResults = snapshot.activities
+      .filter((activity) => !hiddenProjectNames.has(activity.repo))
       .filter((activity) =>
         deferredSearchQuery.length === 0
           ? true
@@ -142,7 +163,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       projects: projectResults,
       pullRequests: pullRequestResults,
     };
-  }, [deferredSearchQuery, snapshot]);
+  }, [deferredSearchQuery, hiddenProjectIds, hiddenProjectNames, snapshot]);
 
   const navItems = [
     { href: "/", icon: LayoutGrid, label: "Overview" },
