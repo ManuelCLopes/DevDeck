@@ -106,7 +106,7 @@ test("setPullRequestMarkedForReview persists and removes local watchlist entries
   }
 });
 
-test("setPullRequestWatchStatus upgrades entries through queue stages", () => {
+test("setPullRequestWatchStatus persists the reviewed stage", () => {
   const previousWindow = globalThis.window;
   const previousLocalStorage = globalThis.localStorage;
   const localStorage = new MemoryStorage() as unknown as Storage;
@@ -128,14 +128,65 @@ test("setPullRequestWatchStatus upgrades entries through queue stages", () => {
   });
 
   try {
-    setPullRequestWatchStatus("repo#99", "in_review");
-    assert.equal(getPullRequestWatchStatus("repo#99"), "in_review");
-
-    setPullRequestWatchStatus("repo#99", "done");
-    assert.equal(getPullRequestWatchStatus("repo#99"), "done");
+    setPullRequestWatchStatus("repo#99", "reviewed");
+    assert.equal(getPullRequestWatchStatus("repo#99"), "reviewed");
 
     setPullRequestWatchStatus("repo#99", null);
     assert.equal(getPullRequestWatchStatus("repo#99"), null);
+  } finally {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: previousWindow,
+    });
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: previousLocalStorage,
+    });
+  }
+});
+
+test("getPullRequestWatchlist normalizes legacy queue statuses to reviewed", () => {
+  const previousWindow = globalThis.window;
+  const previousLocalStorage = globalThis.localStorage;
+  const localStorage = new MemoryStorage() as unknown as Storage;
+  const fakeWindow = {
+    addEventListener() {},
+    dispatchEvent() {
+      return true;
+    },
+    removeEventListener() {},
+  } as unknown as Window & typeof globalThis;
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: fakeWindow,
+  });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: localStorage,
+  });
+
+  try {
+    localStorage.setItem(
+      "devdeck:pull-request-watchlist",
+      JSON.stringify({
+        "repo#12": {
+          markedAt: "2026-03-18T20:00:00.000Z",
+          status: "in_review",
+          updatedAt: "2026-03-18T20:30:00.000Z",
+        },
+        "repo#13": {
+          markedAt: "2026-03-18T21:00:00.000Z",
+          status: "done",
+          updatedAt: "2026-03-18T21:30:00.000Z",
+        },
+      }),
+    );
+
+    const watchlist = getPullRequestWatchlist();
+
+    assert.equal(watchlist["repo#12"]?.status, "reviewed");
+    assert.equal(watchlist["repo#13"]?.status, "reviewed");
   } finally {
     Object.defineProperty(globalThis, "window", {
       configurable: true,

@@ -1,4 +1,4 @@
-export type PullRequestWatchStatus = "marked" | "in_review" | "done";
+export type PullRequestWatchStatus = "marked" | "reviewed";
 
 export interface PullRequestWatchlistEntry {
   markedAt: string;
@@ -16,7 +16,15 @@ let cachedWatchlistRaw: string | null = null;
 let cachedWatchlist: PullRequestWatchlist = EMPTY_PULL_REQUEST_WATCHLIST;
 
 function isPullRequestWatchStatus(value: string): value is PullRequestWatchStatus {
-  return value === "marked" || value === "in_review" || value === "done";
+  return value === "marked" || value === "reviewed";
+}
+
+function normalizePullRequestWatchStatus(value: string | null | undefined): PullRequestWatchStatus {
+  if (value === "reviewed" || value === "in_review" || value === "done") {
+    return "reviewed";
+  }
+
+  return "marked";
 }
 
 function normalizePullRequestWatchlist(
@@ -54,10 +62,9 @@ function normalizePullRequestWatchlist(
           : new Date().toISOString();
       watchlist[pullRequestId] = {
         markedAt,
-        status:
-          typeof entry?.status === "string" && isPullRequestWatchStatus(entry.status)
-            ? entry.status
-            : "marked",
+        status: normalizePullRequestWatchStatus(
+          typeof entry?.status === "string" ? entry.status : undefined,
+        ),
         updatedAt:
           typeof entry?.updatedAt === "string" && entry.updatedAt.length > 0
             ? entry.updatedAt

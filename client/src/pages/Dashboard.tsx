@@ -10,6 +10,7 @@ import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
+import { getProjectTagClassName } from "@/lib/project-tag-color";
 import {
   getPullRequestQueueIds,
   getPullRequestWatchStatus,
@@ -18,11 +19,13 @@ import {
 } from "@/lib/pull-request-watchlist";
 import { getCiStatusMeta } from "@/lib/project-health";
 import {
+  filterPullRequestsByDependabotVisibility,
   getAuthoredPullRequestStatusMeta,
   getPullRequestSignalBadges,
   pullRequestHasNoReviews,
   pullRequestNeedsFollowUp,
   pullRequestNeedsViewerReview,
+  SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY,
 } from "@/lib/pull-request-utils";
 import { formatDistanceToNow } from "date-fns";
 import { Link, useSearch } from "wouter";
@@ -30,6 +33,7 @@ import {
   Activity,
   ArrowUpRight,
   Check,
+  Circle,
   ChevronLeft,
   Clock3,
   Filter,
@@ -53,6 +57,8 @@ const PullRequestDetailDialog = lazy(
 
 export default function Dashboard() {
   const formatCount = (value: number) => new Intl.NumberFormat().format(value);
+  const [showDependabotPullRequests, setShowDependabotPullRequests] =
+    usePersistentState<boolean>(SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY, true);
   const [viewMode, setViewMode] = usePersistentState<"grid" | "list">(
     "devdeck:dashboard:view-mode",
     "grid",
@@ -69,7 +75,15 @@ export default function Dashboard() {
   const pullRequestWatchlist = usePullRequestWatchlist();
 
   const projects = snapshot?.projects ?? [];
-  const pullRequests = snapshot?.pullRequests ?? [];
+  const allPullRequests = snapshot?.pullRequests ?? [];
+  const pullRequests = useMemo(
+    () =>
+      filterPullRequestsByDependabotVisibility(
+        allPullRequests,
+        showDependabotPullRequests,
+      ),
+    [allPullRequests, showDependabotPullRequests],
+  );
   const authoredPullRequests = snapshot?.authoredPullRequests ?? [];
   const focusedProject = projects.find((project) => project.id === focusedProjectId) ?? null;
   const visibleProjects = focusedProject ? [focusedProject] : projects;
@@ -80,8 +94,8 @@ export default function Dashboard() {
     () => getPullRequestQueueIds(pullRequestWatchlist, "marked"),
     [pullRequestWatchlist],
   );
-  const inReviewPullRequestIds = useMemo(
-    () => getPullRequestQueueIds(pullRequestWatchlist, "in_review"),
+  const reviewedPullRequestIds = useMemo(
+    () => getPullRequestQueueIds(pullRequestWatchlist, "reviewed"),
     [pullRequestWatchlist],
   );
   const selectedPullRequest =
@@ -121,9 +135,6 @@ export default function Dashboard() {
   ).length;
   const markedPullRequestCount = visiblePullRequests.filter((pullRequest) =>
     markedPullRequestIds.has(pullRequest.id),
-  ).length;
-  const inReviewPullRequestCount = visiblePullRequests.filter((pullRequest) =>
-    inReviewPullRequestIds.has(pullRequest.id),
   ).length;
   const workspaceLabel = workspaceSelection?.rootPath ?? workspaceSelection?.rootName ?? "~/Developer";
   const overviewPullRequestsPagination = usePagination(
@@ -288,7 +299,7 @@ export default function Dashboard() {
                       <span className="min-w-0 text-right font-semibold text-foreground">
                         {focusedProjectPullRequests.filter((pullRequest) =>
                           markedPullRequestIds.has(pullRequest.id) ||
-                          inReviewPullRequestIds.has(pullRequest.id),
+                          reviewedPullRequestIds.has(pullRequest.id),
                         ).length}
                       </span>
                     </div>
@@ -433,6 +444,19 @@ export default function Dashboard() {
                     <MessageSquare className="w-4 h-4 text-primary" />
                     <h2 className="text-sm font-semibold tracking-tight">Open Pull Requests</h2>
                   </div>
+                  <div className="mb-4 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowDependabotPullRequests((current) => !current)
+                      }
+                      className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
+                    >
+                      {showDependabotPullRequests
+                        ? "Hide Dependabot"
+                        : "Show Dependabot"}
+                    </button>
+                  </div>
 
                   <div className="space-y-3">
                     {focusedPullRequestsPagination.paginatedItems.map((pullRequest) => {
@@ -447,8 +471,7 @@ export default function Dashboard() {
                       const visibleBadges = signalBadges.filter(
                         (badge) =>
                           badge.label === "marked" ||
-                          badge.label === "in review" ||
-                          badge.label === "done",
+                          badge.label === "reviewed",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =
@@ -456,6 +479,8 @@ export default function Dashboard() {
                           <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
                         ) : pullRequest.ciStatus === "failing" ? (
                           <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                        ) : pullRequest.ciStatus === "pending" ? (
+                          <Circle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 fill-current text-chart-2" />
                         ) : null;
 
                       return (
@@ -639,6 +664,15 @@ export default function Dashboard() {
                   </a>
                 </Link>
               </div>
+              <div className="mb-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowDependabotPullRequests((current) => !current)}
+                  className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
+                >
+                  {showDependabotPullRequests ? "Hide Dependabot" : "Show Dependabot"}
+                </button>
+              </div>
 
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                 <div className="space-y-3">
@@ -654,8 +688,7 @@ export default function Dashboard() {
                       const visibleBadges = signalBadges.filter(
                         (badge) =>
                           badge.label === "marked" ||
-                          badge.label === "in review" ||
-                          badge.label === "done",
+                          badge.label === "reviewed",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =
@@ -663,6 +696,8 @@ export default function Dashboard() {
                           <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
                         ) : pullRequest.ciStatus === "failing" ? (
                           <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                        ) : pullRequest.ciStatus === "pending" ? (
+                          <Circle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 fill-current text-chart-2" />
                         ) : null;
 
                       return (
@@ -686,9 +721,14 @@ export default function Dashboard() {
                                 </p>
                                 {ciStatusIcon}
                               </div>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {pullRequest.repo} · {pullRequest.headBranch} into {pullRequest.baseBranch}
-                              </p>
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span className={getProjectTagClassName(pullRequest.repo)}>
+                                  {pullRequest.repo}
+                                </span>
+                                <span className="break-words">
+                                  {pullRequest.headBranch} into {pullRequest.baseBranch}
+                                </span>
+                              </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-2 self-start">
                               <button

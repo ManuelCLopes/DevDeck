@@ -1,4 +1,4 @@
-import { Bookmark, CheckCheck, ChevronDown, ListChecks, MinusCircle } from "lucide-react";
+import { Bookmark, CheckCheck, ChevronDown } from "lucide-react";
 import type { PullRequestWatchStatus } from "@/lib/pull-request-watchlist";
 import { getPullRequestWatchStatusMeta } from "@/lib/pull-request-utils";
 import {
@@ -15,26 +15,17 @@ interface PullRequestQueueControlProps {
 }
 
 function getQueueStatusIcon(status: PullRequestWatchStatus | null) {
-  switch (status) {
-    case "in_review":
-      return ListChecks;
-    case "done":
-      return CheckCheck;
-    default:
-      return Bookmark;
-  }
+  return status === "reviewed" ? CheckCheck : Bookmark;
 }
 
 function getQueueButtonLabel(status: PullRequestWatchStatus | null) {
   switch (status) {
-    case "in_review":
-      return "In Review";
-    case "done":
-      return "Done";
+    case "reviewed":
+      return "Reviewed";
     case "marked":
       return "Marked";
     default:
-      return "Queue";
+      return "Mark";
   }
 }
 
@@ -65,19 +56,11 @@ export default function PullRequestQueueControl({
       <DropdownMenuContent align="end" className="w-44">
         <DropdownMenuItem onSelect={() => onStatusChange("marked")}>
           <Bookmark className="h-4 w-4" />
-          Marked
+          Mark to Review
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onStatusChange("in_review")}>
-          <ListChecks className="h-4 w-4" />
-          In Review
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onStatusChange("done")}>
+        <DropdownMenuItem onSelect={() => onStatusChange("reviewed")}>
           <CheckCheck className="h-4 w-4" />
-          Done
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onStatusChange(null)}>
-          <MinusCircle className="h-4 w-4" />
-          Clear
+          Reviewed
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

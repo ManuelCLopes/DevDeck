@@ -9,12 +9,15 @@ import { getDesktopApi } from "@/lib/desktop";
 import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
 import { getPullRequestWatchStatus } from "@/lib/pull-request-watchlist";
 import {
+  filterPullRequestsByDependabotVisibility,
   getPullRequestSignalBadges,
   pullRequestHasNoReviews,
+  SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY,
 } from "@/lib/pull-request-utils";
 import { formatDistanceToNow } from "date-fns";
 import {
   Check,
+  Circle,
   Copy,
   FolderGit2,
   TerminalSquare,
@@ -38,6 +41,8 @@ const PullRequestDetailDialog = lazy(
 );
 
 export default function Projects() {
+  const [showDependabotPullRequests, setShowDependabotPullRequests] =
+    usePersistentState<boolean>(SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY, true);
   const [searchQuery, setSearchQuery] = usePersistentState(
     "devdeck:projects:search",
     "",
@@ -81,11 +86,14 @@ export default function Projects() {
   const selectedProjectPullRequests = useMemo(
     () =>
       selectedProject
-        ? (snapshot?.pullRequests ?? []).filter(
-            (pullRequest) => pullRequest.projectId === selectedProject.id,
+        ? filterPullRequestsByDependabotVisibility(
+            (snapshot?.pullRequests ?? []).filter(
+              (pullRequest) => pullRequest.projectId === selectedProject.id,
+            ),
+            showDependabotPullRequests,
           )
         : [],
-    [selectedProject, snapshot?.pullRequests],
+    [selectedProject, showDependabotPullRequests, snapshot?.pullRequests],
   );
   const selectedProjectPullRequestsPagination = usePagination(
     selectedProjectPullRequests,
@@ -328,7 +336,18 @@ export default function Projects() {
                 <div className="h-px bg-border/50 w-full"></div>
 
                 <div>
-                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Open Pull Requests</h3>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Open Pull Requests</h3>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowDependabotPullRequests((current) => !current)
+                      }
+                      className="h-7 px-2.5 rounded-md text-[10px] font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
+                    >
+                      {showDependabotPullRequests ? "Hide Dependabot" : "Show Dependabot"}
+                    </button>
+                  </div>
                   <div className="space-y-2">
                     {selectedProjectPullRequestsPagination.paginatedItems.map((pullRequest) => {
                       const watchStatus = getPullRequestWatchStatus(
@@ -342,8 +361,7 @@ export default function Projects() {
                       const visibleBadges = signalBadges.filter(
                         (badge) =>
                           badge.label === "marked" ||
-                          badge.label === "in review" ||
-                          badge.label === "done",
+                          badge.label === "reviewed",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =
@@ -351,6 +369,8 @@ export default function Projects() {
                           <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
                         ) : pullRequest.ciStatus === "failing" ? (
                           <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                        ) : pullRequest.ciStatus === "pending" ? (
+                          <Circle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 fill-current text-chart-2" />
                         ) : null;
 
                       return (

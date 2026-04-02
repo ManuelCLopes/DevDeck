@@ -15,12 +15,14 @@ import {
   type PullRequestWatchStatus,
 } from "@/lib/pull-request-watchlist";
 import {
+  filterPullRequestsByDependabotVisibility,
   filterPullRequestsByFocus,
   getAuthoredPullRequestStatusMeta,
   getPullRequestSignalBadges,
   pullRequestHasNoReviews,
   pullRequestNeedsFollowUp,
   pullRequestNeedsViewerReview,
+  SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY,
   type PullRequestFocus,
 } from "@/lib/pull-request-utils";
 import { REVIEW_FOCUS_STORAGE_KEY } from "@/lib/review-focus";
@@ -29,6 +31,7 @@ import {
   AlertCircle,
   Check,
   CheckCircle2,
+  Circle,
   Clock,
   Github,
   GitPullRequest,
@@ -49,6 +52,8 @@ type ReviewQueueFocus = "all" | PullRequestWatchStatus;
 export default function Reviews() {
   const [location, setLocation] = useLocation();
   const search = useSearch();
+  const [showDependabotPullRequests, setShowDependabotPullRequests] =
+    usePersistentState<boolean>(SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY, true);
   const [focusFilter, setFocusFilter] = usePersistentState<PullRequestFocus>(
     REVIEW_FOCUS_STORAGE_KEY,
     "all",
@@ -59,7 +64,15 @@ export default function Reviews() {
   );
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
   const pullRequestWatchlist = usePullRequestWatchlist();
-  const pullRequests = snapshot?.pullRequests ?? [];
+  const allPullRequests = snapshot?.pullRequests ?? [];
+  const pullRequests = useMemo(
+    () =>
+      filterPullRequestsByDependabotVisibility(
+        allPullRequests,
+        showDependabotPullRequests,
+      ),
+    [allPullRequests, showDependabotPullRequests],
+  );
   const reviews = snapshot?.reviews ?? [];
   const filteredPullRequests = useMemo(
     () => filterPullRequestsByFocus(pullRequests, focusFilter, pullRequestWatchlist),
@@ -69,12 +82,8 @@ export default function Reviews() {
     () => getPullRequestQueueIds(pullRequestWatchlist, "marked"),
     [pullRequestWatchlist],
   );
-  const inReviewPullRequestIds = useMemo(
-    () => getPullRequestQueueIds(pullRequestWatchlist, "in_review"),
-    [pullRequestWatchlist],
-  );
-  const donePullRequestIds = useMemo(
-    () => getPullRequestQueueIds(pullRequestWatchlist, "done"),
+  const reviewedPullRequestIds = useMemo(
+    () => getPullRequestQueueIds(pullRequestWatchlist, "reviewed"),
     [pullRequestWatchlist],
   );
   const activeReviews = reviews.filter((review) => review.status === "active");
@@ -92,11 +101,8 @@ export default function Reviews() {
   const markedPullRequestCount = pullRequests.filter((pullRequest) =>
     markedPullRequestIds.has(pullRequest.id),
   ).length;
-  const inReviewPullRequestCount = pullRequests.filter((pullRequest) =>
-    inReviewPullRequestIds.has(pullRequest.id),
-  ).length;
-  const donePullRequestCount = pullRequests.filter((pullRequest) =>
-    donePullRequestIds.has(pullRequest.id),
+  const reviewedPullRequestCount = pullRequests.filter((pullRequest) =>
+    reviewedPullRequestIds.has(pullRequest.id),
   ).length;
   const activeAuthoredPullRequestCount = (snapshot?.authoredPullRequests ?? []).filter(
     (pullRequest) =>
@@ -157,12 +163,16 @@ export default function Reviews() {
 
   useEffect(() => {
     const nextFocus = new URLSearchParams(search).get("focus");
+    if (nextFocus === "in_review" || nextFocus === "done") {
+      setFocusFilter("reviewed");
+      return;
+    }
+
     if (
       nextFocus === "all" ||
       nextFocus === "my_queue" ||
       nextFocus === "marked_for_review" ||
-      nextFocus === "in_review" ||
-      nextFocus === "done" ||
+      nextFocus === "reviewed" ||
       nextFocus === "no_reviews" ||
       nextFocus === "checks_failing" ||
       nextFocus === "checks_passing" ||
@@ -176,6 +186,20 @@ export default function Reviews() {
       setFocusFilter(nextFocus);
     }
   }, [search, setFocusFilter]);
+
+  useEffect(() => {
+    const persistedFocus = String(focusFilter);
+    if (persistedFocus === "in_review" || persistedFocus === "done") {
+      setFocusFilter("reviewed");
+    }
+  }, [focusFilter, setFocusFilter]);
+
+  useEffect(() => {
+    const persistedQueueFocus = String(queueFocus);
+    if (persistedQueueFocus === "in_review" || persistedQueueFocus === "done") {
+      setQueueFocus("reviewed");
+    }
+  }, [queueFocus, setQueueFocus]);
 
   const handleOpenPullRequest = async (targetUrl: string) => {
     const desktopApi = getDesktopApi();
@@ -205,8 +229,7 @@ export default function Reviews() {
   }> = [
     { count: pullRequests.length, id: "all", label: "All PRs" },
     {
-      count:
-        markedPullRequestCount + inReviewPullRequestCount + donePullRequestCount,
+      count: markedPullRequestCount + reviewedPullRequestCount,
       id: "my_queue",
       label: "My Queue",
     },
@@ -216,14 +239,9 @@ export default function Reviews() {
       label: "Marked For Review",
     },
     {
-      count: inReviewPullRequestCount,
-      id: "in_review",
-      label: "In Review",
-    },
-    {
-      count: donePullRequestCount,
-      id: "done",
-      label: "Done",
+      count: reviewedPullRequestCount,
+      id: "reviewed",
+      label: "Reviewed",
     },
     {
       count: filterPullRequestsByFocus(pullRequests, "no_reviews").length,
@@ -251,8 +269,7 @@ export default function Reviews() {
     authored_by_me: "You do not currently have open pull requests in this workspace.",
     changes_requested: "No pull requests are currently waiting on requested changes.",
     marked_for_review: "You have not marked any pull requests for review yet.",
-    in_review: "You do not currently have any pull requests marked as in review.",
-    done: "You have not completed any local review queue items yet.",
+    reviewed: "You do not currently have any pull requests marked as reviewed.",
     needs_my_follow_up: "Nothing currently needs your follow-up.",
     needs_my_review: "You do not currently have a review queue here.",
     reviewed_by_me: "You have not reviewed any of the current open pull requests yet.",
@@ -273,14 +290,23 @@ export default function Reviews() {
                 "Open GitHub pull requests from your connected repositories."}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowDependabotPullRequests((current) => !current)}
+              className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
+            >
+              {showDependabotPullRequests ? "Hide Dependabot" : "Show Dependabot"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
@@ -356,17 +382,14 @@ export default function Reviews() {
                     My Queue
                   </h2>
                   <span className="rounded-sm border border-border/60 bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-secondary-foreground">
-                    {markedPullRequestCount + inReviewPullRequestCount + donePullRequestCount}
+                    {markedPullRequestCount + reviewedPullRequestCount}
                   </span>
                 </div>
               </div>
               <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
                 {[
                   {
-                    count:
-                      markedPullRequestCount +
-                      inReviewPullRequestCount +
-                      donePullRequestCount,
+                    count: markedPullRequestCount + reviewedPullRequestCount,
                     id: "all" as const,
                     label: "All Queue Items",
                   },
@@ -376,14 +399,9 @@ export default function Reviews() {
                     label: "Marked",
                   },
                   {
-                    count: inReviewPullRequestCount,
-                    id: "in_review" as const,
-                    label: "In Review",
-                  },
-                  {
-                    count: donePullRequestCount,
-                    id: "done" as const,
-                    label: "Done",
+                    count: reviewedPullRequestCount,
+                    id: "reviewed" as const,
+                    label: "Reviewed",
                   },
                 ].map((filter) => (
                   <button
@@ -544,8 +562,7 @@ export default function Reviews() {
                       const visibleBadges = signalBadges.filter(
                         (badge) =>
                           badge.label === "marked" ||
-                          badge.label === "in review" ||
-                          badge.label === "done",
+                          badge.label === "reviewed",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =
@@ -553,6 +570,8 @@ export default function Reviews() {
                           <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
                         ) : pullRequest.ciStatus === "failing" ? (
                           <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                        ) : pullRequest.ciStatus === "pending" ? (
+                          <Circle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 fill-current text-chart-2" />
                         ) : null;
 
                       return (

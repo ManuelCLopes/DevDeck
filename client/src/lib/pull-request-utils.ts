@@ -9,12 +9,14 @@ import type {
   PullRequestWatchlist,
 } from "@/lib/pull-request-watchlist";
 
+export const SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY =
+  "devdeck:pull-requests:show-dependabot";
+
 export type PullRequestFocus =
   | "all"
   | "my_queue"
   | "marked_for_review"
-  | "in_review"
-  | "done"
+  | "reviewed"
   | "no_reviews"
   | "checks_failing"
   | "checks_passing"
@@ -32,6 +34,30 @@ interface PullRequestBadgeMeta {
 
 function normalizePullRequestWatchlist(value?: PullRequestWatchlist | null) {
   return value ?? {};
+}
+
+export function isDependabotPullRequest(
+  pullRequest: Pick<WorkspacePullRequestItem, "author">,
+) {
+  const author = pullRequest.author?.trim().toLowerCase() ?? "";
+
+  return (
+    author === "dependabot[bot]" ||
+    author === "dependabot-preview[bot]" ||
+    author.startsWith("dependabot")
+  );
+}
+
+export function filterPullRequestsByDependabotVisibility<
+  T extends Pick<WorkspacePullRequestItem, "author">,
+>(pullRequests: T[], showDependabotPullRequests: boolean) {
+  if (showDependabotPullRequests) {
+    return pullRequests;
+  }
+
+  return pullRequests.filter(
+    (pullRequest) => !isDependabotPullRequest(pullRequest),
+  );
 }
 
 export function getPullRequestStatusMeta(status: WorkspacePullRequestStatus) {
@@ -190,23 +216,15 @@ export function getPullRequestReviewEventMeta(state: string) {
 }
 
 export function getPullRequestWatchStatusMeta(status: PullRequestWatchStatus) {
-  switch (status) {
-    case "in_review":
-      return {
-        className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
-        label: "in review",
-      };
-    case "done":
-      return {
+  return status === "reviewed"
+    ? {
         className: "bg-chart-1/10 text-chart-1 border-chart-1/20",
-        label: "done",
-      };
-    default:
-      return {
+        label: "reviewed",
+      }
+    : {
         className: "bg-primary/10 text-primary border-primary/20",
         label: "marked",
       };
-  }
 }
 
 export function getAuthoredPullRequestStatusMeta(
@@ -332,13 +350,9 @@ export function filterPullRequestsByFocus(
       return pullRequests.filter((pullRequest) =>
         normalizedWatchlist[pullRequest.id]?.status === "marked",
       );
-    case "in_review":
+    case "reviewed":
       return pullRequests.filter((pullRequest) =>
-        normalizedWatchlist[pullRequest.id]?.status === "in_review",
-      );
-    case "done":
-      return pullRequests.filter((pullRequest) =>
-        normalizedWatchlist[pullRequest.id]?.status === "done",
+        normalizedWatchlist[pullRequest.id]?.status === "reviewed",
       );
     case "no_reviews":
       return pullRequests.filter(pullRequestHasNoReviews);

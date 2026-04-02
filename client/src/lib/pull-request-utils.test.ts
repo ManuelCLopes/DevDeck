@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  filterPullRequestsByDependabotVisibility,
   filterPullRequestsByFocus,
   getAuthoredPullRequestStatusMeta,
   getPullRequestCiStatusMeta,
@@ -8,6 +9,7 @@ import {
   getPullRequestReviewSummary,
   getPullRequestSignalBadges,
   getPullRequestStatusMeta,
+  isDependabotPullRequest,
   pullRequestNeedsAuthorFollowUp,
   pullRequestNeedsFollowUp,
   pullRequestNeedsViewerReview,
@@ -63,7 +65,7 @@ test("getPullRequestSignalBadges keeps only key PR signals", () => {
         reviewedByOthersCount: 0,
         reviewedByViewer: false,
       },
-      true,
+      "marked",
     ),
     [
       {
@@ -158,6 +160,49 @@ test("getPullRequestFollowUpMeta prioritizes post-review follow-up", () => {
       className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
       label: "needs your follow-up",
     },
+  );
+});
+
+test("isDependabotPullRequest detects dependabot authors", () => {
+  assert.equal(
+    isDependabotPullRequest({
+      author: "dependabot[bot]",
+    } as never),
+    true,
+  );
+  assert.equal(
+    isDependabotPullRequest({
+      author: "teammate",
+    } as never),
+    false,
+  );
+});
+
+test("filterPullRequestsByDependabotVisibility hides dependabot items when disabled", () => {
+  const pullRequests = [
+    {
+      author: "dependabot[bot]",
+      id: "repo-one#12",
+    },
+    {
+      author: "teammate",
+      id: "repo-two#8",
+    },
+  ];
+
+  assert.equal(
+    filterPullRequestsByDependabotVisibility(
+      pullRequests as never,
+      false,
+    ).length,
+    1,
+  );
+  assert.equal(
+    filterPullRequestsByDependabotVisibility(
+      pullRequests as never,
+      true,
+    ).length,
+    2,
   );
 });
 
@@ -259,12 +304,12 @@ test("filterPullRequestsByFocus narrows queue state filters", () => {
     },
     "repo-two#8": {
       markedAt: "2026-03-18T20:00:00.000Z",
-      status: "in_review" as const,
+      status: "reviewed" as const,
       updatedAt: "2026-03-18T20:00:00.000Z",
     },
     "repo-three#3": {
       markedAt: "2026-03-18T20:00:00.000Z",
-      status: "done" as const,
+      status: "reviewed" as const,
       updatedAt: "2026-03-18T20:00:00.000Z",
     },
   };
@@ -274,12 +319,8 @@ test("filterPullRequestsByFocus narrows queue state filters", () => {
     3,
   );
   assert.equal(
-    filterPullRequestsByFocus(pullRequests as never, "in_review", watchlist).length,
-    1,
-  );
-  assert.equal(
-    filterPullRequestsByFocus(pullRequests as never, "done", watchlist).length,
-    1,
+    filterPullRequestsByFocus(pullRequests as never, "reviewed", watchlist).length,
+    2,
   );
 });
 
