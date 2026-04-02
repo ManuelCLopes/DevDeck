@@ -147,20 +147,20 @@ function createRepositoryWithContributionStats(repositoryPath: string) {
     cwd: repositoryPath,
     stdio: "ignore",
   });
+  execFileSync("git", ["config", "user.name", "DevDeck Tests"], {
+    cwd: repositoryPath,
+    stdio: "ignore",
+  });
+  execFileSync("git", ["config", "user.email", "tests@devdeck.local"], {
+    cwd: repositoryPath,
+    stdio: "ignore",
+  });
 
   writeFileSync(join(repositoryPath, "README.md"), "alpha\n", "utf8");
   execFileSync("git", ["add", "README.md"], { cwd: repositoryPath, stdio: "ignore" });
   execFileSync(
     "git",
-    [
-      "-c",
-      "user.name=DevDeck Tests",
-      "-c",
-      "user.email=tests@devdeck.local",
-      "commit",
-      "-m",
-      "initial commit",
-    ],
+    ["commit", "-m", "initial commit"],
     {
       cwd: repositoryPath,
       stdio: "ignore",
@@ -171,14 +171,46 @@ function createRepositoryWithContributionStats(repositoryPath: string) {
   execFileSync("git", ["add", "README.md"], { cwd: repositoryPath, stdio: "ignore" });
   execFileSync(
     "git",
+    ["commit", "-m", "expand readme"],
+    {
+      cwd: repositoryPath,
+      stdio: "ignore",
+    },
+  );
+}
+
+function createRepositoryWithMixedContributionStats(repositoryPath: string) {
+  mkdirSync(repositoryPath, { recursive: true });
+  execFileSync("git", ["init", "-b", "main"], {
+    cwd: repositoryPath,
+    stdio: "ignore",
+  });
+  execFileSync("git", ["config", "user.name", "DevDeck Tests"], {
+    cwd: repositoryPath,
+    stdio: "ignore",
+  });
+  execFileSync("git", ["config", "user.email", "tests@devdeck.local"], {
+    cwd: repositoryPath,
+    stdio: "ignore",
+  });
+
+  writeFileSync(join(repositoryPath, "README.md"), "viewer\n", "utf8");
+  execFileSync("git", ["add", "README.md"], { cwd: repositoryPath, stdio: "ignore" });
+  execFileSync("git", ["commit", "-m", "viewer commit"], {
+    cwd: repositoryPath,
+    stdio: "ignore",
+  });
+
+  writeFileSync(join(repositoryPath, "README.md"), "viewer\nteammate\n", "utf8");
+  execFileSync("git", ["add", "README.md"], { cwd: repositoryPath, stdio: "ignore" });
+  execFileSync(
+    "git",
     [
-      "-c",
-      "user.name=DevDeck Tests",
-      "-c",
-      "user.email=tests@devdeck.local",
       "commit",
+      "--author",
+      "Teammate <teammate@example.com>",
       "-m",
-      "expand readme",
+      "teammate commit",
     ],
     {
       cwd: repositoryPath,
@@ -333,6 +365,31 @@ test("loadWorkspaceSnapshot aggregates user activity insights from local git his
     ),
     snapshot.userActivity.last7Days.linesDeleted,
   );
+
+  delete process.env.DEVDECK_GITHUB_STORAGE;
+  delete process.env.DEVDECK_GITHUB_TOKEN_PATH;
+  rmSync(tempDirectory, { force: true, recursive: true });
+});
+
+test("loadWorkspaceSnapshot counts only the configured contributor's local commits", async () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), "devdeck-user-activity-mixed-"));
+  const workspaceRoot = join(tempDirectory, "workspace");
+  const repositoryPath = join(workspaceRoot, "alpha");
+  process.env.DEVDECK_GITHUB_STORAGE = "file";
+  process.env.DEVDECK_GITHUB_TOKEN_PATH = join(tempDirectory, "github-token.json");
+
+  createRepositoryWithMixedContributionStats(repositoryPath);
+
+  const discovery = await discoverWorkspace(workspaceRoot);
+  const snapshot = await loadWorkspaceSnapshot({
+    projects: discovery.candidates,
+    rootName: discovery.rootName,
+    rootPath: discovery.rootPath,
+  });
+
+  assert.equal(snapshot.userActivity.last7Days.commits, 1);
+  assert.equal(snapshot.userActivity.last7Days.linesAdded, 1);
+  assert.equal(snapshot.userActivity.last7Days.linesDeleted, 0);
 
   delete process.env.DEVDECK_GITHUB_STORAGE;
   delete process.env.DEVDECK_GITHUB_TOKEN_PATH;

@@ -40,6 +40,15 @@ interface ReflogEntry {
   timestamp: string;
 }
 
+interface CommitActivityEntry {
+  authorEmail: string | null;
+  authorName: string | null;
+  commitSha: string;
+  linesAdded: number;
+  linesDeleted: number;
+  timestamp: string;
+}
+
 interface RepositoryScanResult {
   activities: WorkspaceSnapshot["activities"];
   authoredPullRequests: WorkspaceSnapshot["authoredPullRequests"];
@@ -362,6 +371,53 @@ function parseCommitDiffStats(output: string) {
   return statsByCommit;
 }
 
+function normalizeContributorIdentity(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function parseCommitActivityEntries(output: string) {
+  const entries: CommitActivityEntry[] = [];
+  let currentEntry: CommitActivityEntry | null = null;
+
+  for (const line of output.split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    if (line.startsWith("commit\u001f")) {
+      const [, commitSha, timestamp, authorName, authorEmail] = line.split("\u001f");
+      if (!commitSha || !timestamp) {
+        currentEntry = null;
+        continue;
+      }
+
+      currentEntry = {
+        authorEmail: authorEmail?.trim() || null,
+        authorName: authorName?.trim() || null,
+        commitSha,
+        linesAdded: 0,
+        linesDeleted: 0,
+        timestamp,
+      };
+      entries.push(currentEntry);
+      continue;
+    }
+
+    if (!currentEntry) {
+      continue;
+    }
+
+    const [addedRaw, deletedRaw] = line.split("\t");
+    const linesAdded = Number.parseInt(addedRaw ?? "", 10);
+    const linesDeleted = Number.parseInt(deletedRaw ?? "", 10);
+
+    currentEntry.linesAdded += Number.isFinite(linesAdded) ? linesAdded : 0;
+    currentEntry.linesDeleted += Number.isFinite(linesDeleted) ? linesDeleted : 0;
+  }
+
+  return entries;
+}
+
 const execFileAsync = promisify(execFile);
 
 function createRepositoryCandidate(
@@ -583,6 +639,76 @@ function parseRecentReflogEntries(logText: string | null, limit = 5) {
       message: match[6],
       timestamp: new Date(Number.parseInt(match[5], 10) * 1000).toISOString(),
     }));
+}
+
+async function getRepositoryContributorAliases(
+  repositoryPath: string,
+  headLogText: string | null,
+) {
+  const names = new Set<string>();
+  const emails = new Set<string>();
+
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["config", "--get-regexp", "^user\\.(name|email)$"],
+      { cwd: repositoryPath },
+    );
+
+    for (const line of stdout.split(/\r?\n/)) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) {
+        continue;
+      }
+
+      const [key, ...valueParts] = trimmedLine.split(/\s+/);
+      const value = valueParts.join(" ").trim();
+      if (!value) {
+        continue;
+      }
+
+      if (key === "user.email") {
+        emails.add(normalizeContributorIdentity(value));
+      } else if (key === "user.name") {
+        names.add(normalizeContributorIdentity(value));
+      }
+    }
+  } catch {
+    // Fall back to recent reflog actor identities when git user config is unavailable.
+  }
+
+  if (names.size === 0 && emails.size === 0) {
+    for (const entry of parseRecentReflogEntries(headLogText, 200)) {
+      const normalizedName = normalizeContributorIdentity(entry.authorName);
+      const normalizedEmail = normalizeContributorIdentity(entry.authorEmail);
+      if (normalizedName) {
+        names.add(normalizedName);
+      }
+      if (normalizedEmail) {
+        emails.add(normalizedEmail);
+      }
+    }
+  }
+
+  return { emails, names };
+}
+
+function isMatchingContributorActivity(
+  entry: Pick<CommitActivityEntry, "authorEmail" | "authorName">,
+  aliases: { emails: Set<string>; names: Set<string> },
+) {
+  const normalizedEmail = normalizeContributorIdentity(entry.authorEmail);
+  const normalizedName = normalizeContributorIdentity(entry.authorName);
+
+  if (normalizedEmail && aliases.emails.has(normalizedEmail)) {
+    return true;
+  }
+
+  if (normalizedName && aliases.names.has(normalizedName)) {
+    return true;
+  }
+
+  return false;
 }
 
 async function resolveDefaultBranchRef(
@@ -911,55 +1037,56 @@ async function getLocalUserActivitySummary(
   headLogText: string | null,
 ) {
   const summary = createEmptyUserActivitySummary();
-  const commitEntries = parseRecentReflogEntries(headLogText, 400).filter(
-    (entry) => entry.commitSha && entry.message.startsWith("commit"),
+  const contributorAliases = await getRepositoryContributorAliases(
+    repositoryPath,
+    headLogText,
   );
-
-  const commitTimestamps = new Map<string, string>();
-  for (const entry of commitEntries) {
-    if (entry.commitSha) {
-      commitTimestamps.set(entry.commitSha, entry.timestamp);
-    }
-  }
-
-  if (commitTimestamps.size === 0) {
+  if (contributorAliases.names.size === 0 && contributorAliases.emails.size === 0) {
     return summary;
   }
 
-  const commitShas = Array.from(commitTimestamps.keys());
-  let commitDiffStats = new Map<
-    string,
-    { linesAdded: number; linesDeleted: number }
-  >();
-
   try {
+    const oldestWindowStart = new Date(
+      Date.now() -
+        USER_ACTIVITY_WINDOWS[USER_ACTIVITY_WINDOWS.length - 1].days *
+          24 *
+          60 *
+          60 *
+          1000,
+    ).toISOString();
     const { stdout } = await execFileAsync(
       "git",
-      ["show", "--numstat", "--format=commit%x09%H", ...commitShas],
+      [
+        "log",
+        "--all",
+        `--since=${oldestWindowStart}`,
+        "--format=commit%x1f%H%x1f%aI%x1f%an%x1f%ae",
+        "--numstat",
+      ],
       {
         cwd: repositoryPath,
         maxBuffer: 1024 * 1024 * 2,
         timeout: 8000,
       },
     );
-    commitDiffStats = parseCommitDiffStats(stdout);
-  } catch {
-    // If diff stats cannot be read, keep commit counts and leave line totals at 0.
-  }
+    const commitEntries = parseCommitActivityEntries(stdout).filter((entry) =>
+      isMatchingContributorActivity(entry, contributorAliases),
+    );
 
-  for (const [commitSha, timestamp] of Array.from(commitTimestamps.entries())) {
-    const diffStats = commitDiffStats.get(commitSha);
-
-    forEachMatchingUserActivityWindow(timestamp, (key) => {
-      summary[key].commits += 1;
-      summary[key].linesAdded += diffStats?.linesAdded ?? 0;
-      summary[key].linesDeleted += diffStats?.linesDeleted ?? 0;
-      updateUserActivityPoint(summary, key, timestamp, (point) => {
-        point.commits += 1;
-        point.linesAdded += diffStats?.linesAdded ?? 0;
-        point.linesDeleted += diffStats?.linesDeleted ?? 0;
+    for (const entry of commitEntries) {
+      forEachMatchingUserActivityWindow(entry.timestamp, (key) => {
+        summary[key].commits += 1;
+        summary[key].linesAdded += entry.linesAdded;
+        summary[key].linesDeleted += entry.linesDeleted;
+        updateUserActivityPoint(summary, key, entry.timestamp, (point) => {
+          point.commits += 1;
+          point.linesAdded += entry.linesAdded;
+          point.linesDeleted += entry.linesDeleted;
+        });
       });
-    });
+    }
+  } catch {
+    // If git history cannot be read, keep local activity empty.
   }
 
   return summary;
