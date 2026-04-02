@@ -444,20 +444,6 @@ export default function Dashboard() {
                     <MessageSquare className="w-4 h-4 text-primary" />
                     <h2 className="text-sm font-semibold tracking-tight">Open Pull Requests</h2>
                   </div>
-                  <div className="mb-4 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowDependabotPullRequests((current) => !current)
-                      }
-                      className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
-                    >
-                      {showDependabotPullRequests
-                        ? "Hide Dependabot"
-                        : "Show Dependabot"}
-                    </button>
-                  </div>
-
                   <div className="space-y-3">
                     {focusedPullRequestsPagination.paginatedItems.map((pullRequest) => {
                       const watchStatus = getPullRequestWatchStatus(
@@ -665,13 +651,9 @@ export default function Dashboard() {
                 </Link>
               </div>
               <div className="mb-4 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowDependabotPullRequests((current) => !current)}
-                  className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
-                >
-                  {showDependabotPullRequests ? "Hide Dependabot" : "Show Dependabot"}
-                </button>
+                <p className="text-xs text-muted-foreground">
+                  Dependabot visibility is managed from the Pull Requests page.
+                </p>
               </div>
 
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">

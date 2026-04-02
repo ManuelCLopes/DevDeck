@@ -6,7 +6,6 @@ import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
-import { getGitHubStatusMeta } from "@/lib/github-status";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import {
   getPullRequestQueueIds,
@@ -35,7 +34,6 @@ import {
   Clock,
   Github,
   GitPullRequest,
-  MessageSquare,
   RefreshCw,
   X,
 } from "lucide-react";
@@ -73,7 +71,6 @@ export default function Reviews() {
       ),
     [allPullRequests, showDependabotPullRequests],
   );
-  const reviews = snapshot?.reviews ?? [];
   const filteredPullRequests = useMemo(
     () => filterPullRequestsByFocus(pullRequests, focusFilter, pullRequestWatchlist),
     [focusFilter, pullRequestWatchlist, pullRequests],
@@ -86,11 +83,6 @@ export default function Reviews() {
     () => getPullRequestQueueIds(pullRequestWatchlist, "reviewed"),
     [pullRequestWatchlist],
   );
-  const activeReviews = reviews.filter((review) => review.status === "active");
-  const staleReviews = reviews.filter((review) => review.status === "stale");
-  const draftPullRequestCount = pullRequests.filter(
-    (pullRequest) => pullRequest.status === "draft",
-  ).length;
   const requestedFromYouCount = pullRequests.filter(
     (pullRequest) =>
       pullRequest.isViewerRequestedReviewer &&
@@ -140,7 +132,6 @@ export default function Reviews() {
   );
   const selectedPullRequestId = new URLSearchParams(search).get("pr");
   const githubStatus = snapshot?.githubStatus;
-  const githubStatusMeta = getGitHubStatusMeta(githubStatus);
   const selectedPullRequest =
     pullRequests.find((pullRequest) => pullRequest.id === selectedPullRequestId) ?? null;
   const myQueuePagination = usePagination(queuePullRequests, 5, {
@@ -153,12 +144,6 @@ export default function Reviews() {
   });
   const authoredPullRequestsPagination = usePagination(authoredPullRequests, 5, {
     storageKey: "devdeck:reviews:authored-prs",
-  });
-  const activeReviewsPagination = usePagination(activeReviews, 6, {
-    storageKey: "devdeck:reviews:active-reviews",
-  });
-  const staleReviewsPagination = usePagination(staleReviews, 6, {
-    storageKey: "devdeck:reviews:stale-reviews",
   });
 
   useEffect(() => {
@@ -373,8 +358,8 @@ export default function Reviews() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+          <div className="space-y-8">
             <section>
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -693,77 +678,6 @@ export default function Reviews() {
               </div>
             </section>
 
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                    Local Branch Review Queue
-                  </h2>
-                  <span className="bg-secondary text-muted-foreground text-[10px] px-1.5 py-0.5 rounded-sm font-bold border border-border/60">
-                    {reviews.length}
-                  </span>
-                </div>
-              </div>
-              <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl px-4 py-1 shadow-sm overflow-hidden">
-                <div className="flex flex-col">
-                  {activeReviewsPagination.paginatedItems.map((review) => (
-                    <div
-                      key={review.id}
-                      className="flex items-start gap-3 py-3 px-4 -mx-4 border-b border-border/40 last:border-0"
-                    >
-                      <div className="mt-0.5">
-                        <CheckCircle2 className="w-4 h-4 text-chart-1" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="mb-0.5 flex flex-col gap-2">
-                          <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <span className="font-semibold text-[13px] text-foreground break-words">
-                              {review.branch}
-                            </span>
-                            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border bg-chart-1/10 text-chart-1 border-chart-1/20">
-                              active
-                            </span>
-                          </div>
-                        </div>
-
-                        <p className="text-[12px] text-muted-foreground mt-2 line-clamp-2">
-                          {review.summary}
-                        </p>
-
-                        <div className="mt-3 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
-                          <div className="flex min-w-0 flex-wrap items-center gap-4">
-                            <span className={getProjectTagClassName(review.repo)}>
-                              {review.repo}
-                            </span>
-                            {review.author && <span>{review.author}</span>}
-                          </div>
-                          <span className="whitespace-nowrap text-right">
-                            {formatDistanceToNow(new Date(review.updatedAt), {
-                              addSuffix: true,
-                            })}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {activeReviews.length === 0 && (
-                    <div className="py-6 text-center text-muted-foreground text-sm">
-                      {isLoading
-                        ? "Scanning your workspace..."
-                        : "No active local branch review items were found."}
-                    </div>
-                  )}
-                </div>
-                <PaginationControls
-                  currentPage={activeReviewsPagination.currentPage}
-                  onPageChange={activeReviewsPagination.setCurrentPage}
-                  pageSize={activeReviewsPagination.pageSize}
-                  totalItems={activeReviewsPagination.totalItems}
-                  label="review items"
-                  className="px-4 pb-4"
-                />
-              </div>
-            </section>
           </div>
 
           <div className="space-y-8">
@@ -841,98 +755,6 @@ export default function Reviews() {
                   label="authored pull requests"
                   className="pt-4"
                 />
-              </div>
-            </section>
-
-            <section>
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                  Stale Branches
-                </h2>
-                <span className="bg-secondary text-muted-foreground text-[10px] px-1.5 py-0.5 rounded-sm font-bold border border-border/60">
-                  {staleReviews.length}
-                </span>
-              </div>
-              <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm">
-                <div className="space-y-4">
-                  {staleReviewsPagination.paginatedItems.map((review) => (
-                    <div key={review.id} className="group relative">
-                      <div className="flex items-start gap-2">
-                        <div className="mt-0.5">
-                          <AlertCircle className="w-4 h-4 text-chart-3" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[12px] font-medium text-foreground truncate">
-                            {review.branch}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground mt-2 line-clamp-2">
-                            {review.summary}
-                          </p>
-                          <div className="mt-3 flex flex-col gap-2 text-[10px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
-                            <span
-                              className={getProjectTagClassName(
-                                review.repo,
-                                "min-w-0 max-w-full break-all text-[10px]",
-                              )}
-                            >
-                              {review.repo}
-                            </span>
-                            <span className="whitespace-nowrap text-right font-medium text-chart-3">
-                              {formatDistanceToNow(new Date(review.updatedAt), {
-                                addSuffix: true,
-                              })}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {staleReviews.length === 0 && (
-                    <div className="py-2 text-sm text-muted-foreground flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-chart-1" />
-                      No stale local branches right now.
-                    </div>
-                  )}
-                </div>
-                <PaginationControls
-                  currentPage={staleReviewsPagination.currentPage}
-                  onPageChange={staleReviewsPagination.setCurrentPage}
-                  pageSize={staleReviewsPagination.pageSize}
-                  totalItems={staleReviewsPagination.totalItems}
-                  label="stale branches"
-                  className="pt-6"
-                />
-              </div>
-            </section>
-
-            <section>
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                  GitHub Status
-                </h2>
-              </div>
-              <div className="bg-white/60 backdrop-blur-md border border-border/60 rounded-xl p-4 shadow-sm text-xs text-muted-foreground space-y-3">
-                <div className="flex items-start gap-3">
-                  <div className="bg-secondary/50 p-2 rounded-md border border-border">
-                    <Github className="w-4 h-4 text-foreground/70" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="font-medium text-foreground text-sm flex items-center gap-2">
-                      GitHub Connection
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${githubStatusMeta.className}`}>
-                        {githubStatusMeta.label}
-                      </span>
-                    </p>
-                    <p>{githubStatus?.message ?? "GitHub status is unavailable."}</p>
-                    <p>
-                      Connected repositories:{" "}
-                      {githubStatus?.connectedRepositoryCount ?? 0}
-                    </p>
-                    <p>
-                      Draft pull requests: {draftPullRequestCount}
-                    </p>
-                  </div>
-                </div>
               </div>
             </section>
           </div>

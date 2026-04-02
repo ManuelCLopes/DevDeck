@@ -32,7 +32,9 @@ import {
 } from "@/lib/app-navigation";
 import { useWorkspaceAlerts } from "@/hooks/use-workspace-alerts";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
+import { getDesktopApi } from "@/lib/desktop";
 import { getOpenAddProjectsDialogEvent } from "@/lib/project-import-events";
+import { setPullRequestWatchStatus } from "@/lib/pull-request-watchlist";
 import {
   getManagedProjectCollections,
 } from "@/lib/workspace-selection";
@@ -40,10 +42,15 @@ import { format } from "date-fns";
 import { 
   Settings, 
   Activity, 
+  Bookmark,
+  CheckCheck,
+  FolderOpen,
   FolderGit2,
   Bell,
+  Github,
   Search,
   LayoutGrid,
+  Plus,
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
@@ -66,6 +73,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const workspaceSelection = useWorkspaceSelection();
   const managedCollections = getManagedProjectCollections(workspaceSelection);
+  const desktopApi = getDesktopApi();
   const hiddenProjectIds = useMemo(
     () =>
       new Set(
@@ -232,6 +240,25 @@ export default function AppLayout({ children }: AppLayoutProps) {
       setIsSearchOpen(false);
       setSearchQuery("");
     });
+  };
+
+  const closeSearch = () => {
+    setIsSearchOpen(false);
+    setSearchQuery("");
+  };
+
+  const handleCommandAction = (action: () => void | Promise<void>) => {
+    closeSearch();
+    void Promise.resolve(action());
+  };
+
+  const handleOpenExternal = async (targetUrl: string) => {
+    if (desktopApi) {
+      await desktopApi.openExternal(targetUrl);
+      return;
+    }
+
+    window.open(targetUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -460,6 +487,39 @@ export default function AppLayout({ children }: AppLayoutProps) {
         />
         <CommandList>
           <CommandEmpty>No matching results.</CommandEmpty>
+          <CommandGroup heading="Quick Actions">
+            <CommandItem
+              value="add projects import workspace"
+              onSelect={() => handleCommandAction(() => setIsAddProjectsOpen(true))}
+            >
+              <Plus className="w-4 h-4 text-primary" />
+              <span className="font-medium">Add Projects</span>
+            </CommandItem>
+            <CommandItem
+              value="refresh workspace snapshot"
+              onSelect={() =>
+                handleCommandAction(async () => {
+                  await refetch();
+                })
+              }
+            >
+              <RefreshCw className="w-4 h-4 text-primary" />
+              <span className="font-medium">Refresh Workspace</span>
+            </CommandItem>
+            <CommandItem value="open pull requests inbox" onSelect={() => handleNavigate("/reviews")}>
+              <MessageSquare className="w-4 h-4 text-primary" />
+              <span className="font-medium">Open Pull Requests</span>
+            </CommandItem>
+            <CommandItem value="open activity inbox" onSelect={() => handleNavigate("/activity")}>
+              <Bell className="w-4 h-4 text-primary" />
+              <span className="font-medium">Open Activity Inbox</span>
+            </CommandItem>
+            <CommandItem value="open preferences settings" onSelect={() => handleNavigate("/settings")}>
+              <Settings className="w-4 h-4 text-primary" />
+              <span className="font-medium">Open Preferences</span>
+            </CommandItem>
+          </CommandGroup>
+          <CommandSeparator />
           <CommandGroup heading="Projects">
             {searchResults.projects.map((project) => (
               <CommandItem
@@ -480,6 +540,53 @@ export default function AppLayout({ children }: AppLayoutProps) {
               </CommandItem>
             ))}
           </CommandGroup>
+          {deferredSearchQuery.length > 0 && desktopApi ? (
+            <>
+              <CommandSeparator />
+              <CommandGroup heading="Project Actions">
+                {searchResults.projects
+                  .filter((project) => Boolean(project.localPath))
+                  .slice(0, 3)
+                  .map((project) => (
+                    <CommandItem
+                      key={`code:${project.id}`}
+                      value={`open ${project.name} in code vscode`}
+                      onSelect={() =>
+                        handleCommandAction(() =>
+                          desktopApi.openInCode(project.localPath),
+                        )
+                      }
+                    >
+                      <FolderGit2 className="w-4 h-4 text-primary" />
+                      <span className="truncate font-medium">
+                        Open {project.name} in VS Code
+                      </span>
+                      <CommandShortcut>Code</CommandShortcut>
+                    </CommandItem>
+                  ))}
+                {searchResults.projects
+                  .filter((project) => Boolean(project.localPath))
+                  .slice(0, 3)
+                  .map((project) => (
+                    <CommandItem
+                      key={`finder:${project.id}`}
+                      value={`reveal ${project.name} in finder`}
+                      onSelect={() =>
+                        handleCommandAction(() =>
+                          desktopApi.showItemInFinder(project.localPath),
+                        )
+                      }
+                    >
+                      <FolderOpen className="w-4 h-4 text-primary" />
+                      <span className="truncate font-medium">
+                        Reveal {project.name} in Finder
+                      </span>
+                      <CommandShortcut>Finder</CommandShortcut>
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            </>
+          ) : null}
           <CommandSeparator />
           <CommandGroup heading="Pull Requests">
             {searchResults.pullRequests.map((pullRequest) => (
@@ -503,6 +610,62 @@ export default function AppLayout({ children }: AppLayoutProps) {
               </CommandItem>
             ))}
           </CommandGroup>
+          {deferredSearchQuery.length > 0 ? (
+            <>
+              <CommandSeparator />
+              <CommandGroup heading="PR Actions">
+                {searchResults.pullRequests.slice(0, 3).map((pullRequest) => (
+                  <CommandItem
+                    key={`view:${pullRequest.id}`}
+                    value={`view github ${pullRequest.title} ${pullRequest.repo}`}
+                    onSelect={() =>
+                      handleCommandAction(() => handleOpenExternal(pullRequest.url))
+                    }
+                  >
+                    <Github className="w-4 h-4 text-primary" />
+                    <span className="truncate font-medium">
+                      View #{pullRequest.number} in GitHub
+                    </span>
+                    <CommandShortcut>{pullRequest.repo}</CommandShortcut>
+                  </CommandItem>
+                ))}
+                {searchResults.pullRequests.slice(0, 3).map((pullRequest) => (
+                  <CommandItem
+                    key={`mark:${pullRequest.id}`}
+                    value={`mark ${pullRequest.title} for review ${pullRequest.repo}`}
+                    onSelect={() =>
+                      handleCommandAction(() =>
+                        setPullRequestWatchStatus(pullRequest.id, "marked"),
+                      )
+                    }
+                  >
+                    <Bookmark className="w-4 h-4 text-primary" />
+                    <span className="truncate font-medium">
+                      Mark #{pullRequest.number} to Review
+                    </span>
+                    <CommandShortcut>Marked</CommandShortcut>
+                  </CommandItem>
+                ))}
+                {searchResults.pullRequests.slice(0, 3).map((pullRequest) => (
+                  <CommandItem
+                    key={`reviewed:${pullRequest.id}`}
+                    value={`set ${pullRequest.title} reviewed ${pullRequest.repo}`}
+                    onSelect={() =>
+                      handleCommandAction(() =>
+                        setPullRequestWatchStatus(pullRequest.id, "reviewed"),
+                      )
+                    }
+                  >
+                    <CheckCheck className="w-4 h-4 text-primary" />
+                    <span className="truncate font-medium">
+                      Set #{pullRequest.number} Reviewed
+                    </span>
+                    <CommandShortcut>Reviewed</CommandShortcut>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </>
+          ) : null}
           <CommandSeparator />
           <CommandGroup heading="Activity">
             {searchResults.activities.map((activity) => (

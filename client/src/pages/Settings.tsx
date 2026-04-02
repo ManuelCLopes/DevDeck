@@ -276,58 +276,76 @@ export default function Settings() {
   const lastWorkspaceSyncLabel = snapshot
     ? formatDistanceToNow(new Date(snapshot.generatedAt), { addSuffix: true })
     : "No workspace snapshot yet";
-  const toggleSettings: Array<{
-    desc: string;
-    id: Exclude<
-      keyof AppPreferences,
-      "autoRefreshEnabled" | "autoRefreshIntervalSeconds"
-    >;
-    label: string;
+  const toggleGroups: Array<{
+    items: Array<{
+      desc: string;
+      id: Exclude<
+        keyof AppPreferences,
+        "autoRefreshEnabled" | "autoRefreshIntervalSeconds"
+      >;
+      label: string;
+    }>;
+    title: string;
   }> = [
     {
-      desc: "Keep stale local review branches visually flagged across the app.",
-      id: "highlightStalePrs",
-      label: "Highlight Stale PRs",
+      title: "Refresh & Visibility",
+      items: [
+        {
+          desc: "Check for updates whenever the DevDeck window becomes active again.",
+          id: "refreshOnWindowFocus",
+          label: "Refresh on Focus",
+        },
+        {
+          desc: "Keep stale local review branches visually flagged across the app.",
+          id: "highlightStalePrs",
+          label: "Highlight Stale PRs",
+        },
+      ],
     },
     {
-      desc: "Check for updates whenever the DevDeck window becomes active again.",
-      id: "refreshOnWindowFocus",
-      label: "Refresh on Focus",
+      title: "Notifications",
+      items: [
+        {
+          desc: "Show native notifications when a PR is waiting for its first review.",
+          id: "notifyReviewRequired",
+          label: "Notify on Review Required",
+        },
+        {
+          desc: "Alert when a pull request receives changes requested.",
+          id: "notifyChangesRequested",
+          label: "Notify on Changes Requested",
+        },
+        {
+          desc: "Alert when a pull request gets approved.",
+          id: "notifyApproved",
+          label: "Notify on Approval",
+        },
+        {
+          desc: "Show native desktop notifications for default branch failures.",
+          id: "alertFailingBuilds",
+          label: "Alert on Failing Builds",
+        },
+      ],
     },
     {
-      desc: "Hide the window instead of quitting so background refresh and alerts can keep running.",
-      id: "keepRunningInBackground",
-      label: "Keep Running in Background",
-    },
-    {
-      desc: "Show a menu bar item with quick-open actions and pending review counts.",
-      id: "showMenuBarIcon",
-      label: "Show Menu Bar Icon",
-    },
-    {
-      desc: "Show native notifications when a PR is waiting for its first review.",
-      id: "notifyReviewRequired",
-      label: "Notify on Review Required",
-    },
-    {
-      desc: "Alert when a pull request receives changes requested.",
-      id: "notifyChangesRequested",
-      label: "Notify on Changes Requested",
-    },
-    {
-      desc: "Alert when a pull request gets approved.",
-      id: "notifyApproved",
-      label: "Notify on Approval",
-    },
-    {
-      desc: "Show native desktop notifications for default branch failures.",
-      id: "alertFailingBuilds",
-      label: "Alert on Failing Builds",
-    },
-    {
-      desc: "Start DevDeck automatically when you sign in to macOS.",
-      id: "launchAtLogin",
-      label: "Launch at Login",
+      title: "Desktop Behavior",
+      items: [
+        {
+          desc: "Hide the window instead of quitting so background refresh and alerts can keep running.",
+          id: "keepRunningInBackground",
+          label: "Keep Running in Background",
+        },
+        {
+          desc: "Show a menu bar item with quick-open actions and pending review counts.",
+          id: "showMenuBarIcon",
+          label: "Show Menu Bar Icon",
+        },
+        {
+          desc: "Start DevDeck automatically when you sign in to macOS.",
+          id: "launchAtLogin",
+          label: "Launch at Login",
+        },
+      ],
     },
   ];
 
@@ -825,24 +843,33 @@ export default function Settings() {
                   </div>
                 </div>
               </div>
-              {toggleSettings.map((setting) => (
-                <div key={setting.id} className="flex flex-col gap-3 p-3 rounded-md transition-colors hover:bg-secondary/30 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <label htmlFor={setting.id} className="font-medium text-sm text-foreground cursor-pointer">{setting.label}</label>
-                    <p className="text-xs text-muted-foreground">{setting.desc}</p>
+              {toggleGroups.map((group) => (
+                <div key={group.title} className="space-y-1">
+                  <div className="px-3 pt-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      {group.title}
+                    </p>
                   </div>
-                  <Switch
-                    id={setting.id}
-                    checked={preferences[setting.id]}
-                    onCheckedChange={(checked) => {
-                      if (setting.id === "launchAtLogin") {
-                        void handleToggleLaunchAtLogin(checked);
-                        return;
-                      }
+                  {group.items.map((setting) => (
+                    <div key={setting.id} className="flex flex-col gap-3 p-3 rounded-md transition-colors hover:bg-secondary/30 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <label htmlFor={setting.id} className="font-medium text-sm text-foreground cursor-pointer">{setting.label}</label>
+                        <p className="text-xs text-muted-foreground">{setting.desc}</p>
+                      </div>
+                      <Switch
+                        id={setting.id}
+                        checked={preferences[setting.id]}
+                        onCheckedChange={(checked) => {
+                          if (setting.id === "launchAtLogin") {
+                            void handleToggleLaunchAtLogin(checked);
+                            return;
+                          }
 
-                      setPreference(setting.id, checked);
-                    }}
-                  />
+                          setPreference(setting.id, checked);
+                        }}
+                      />
+                    </div>
+                  ))}
                 </div>
               ))}
               

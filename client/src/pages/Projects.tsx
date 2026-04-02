@@ -22,7 +22,6 @@ import {
   FolderGit2,
   TerminalSquare,
   Search,
-  MoreHorizontal,
   HardDrive,
   GitBranch,
   Calendar,
@@ -222,9 +221,6 @@ export default function Projects() {
                             <span className="whitespace-nowrap">
                               {formatDistanceToNow(new Date(project.lastUpdated), { addSuffix: true })}
                             </span>
-                            <div className="rounded p-1 text-muted-foreground/50 transition-colors hover:bg-black/5 hover:text-foreground" onClick={(event) => event.stopPropagation()}>
-                              <MoreHorizontal className="w-4 h-4" />
-                            </div>
                           </div>
                         </div>
                       );
@@ -338,15 +334,9 @@ export default function Projects() {
                 <div>
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Open Pull Requests</h3>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowDependabotPullRequests((current) => !current)
-                      }
-                      className="h-7 px-2.5 rounded-md text-[10px] font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
-                    >
-                      {showDependabotPullRequests ? "Hide Dependabot" : "Show Dependabot"}
-                    </button>
+                    <span className="rounded-sm border border-border/60 bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+                      {selectedProjectPullRequests.length}
+                    </span>
                   </div>
                   <div className="space-y-2">
                     {selectedProjectPullRequestsPagination.paginatedItems.map((pullRequest) => {

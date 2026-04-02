@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import {
   ChartContainer,
@@ -21,7 +21,7 @@ import {
   GitBranch,
   RefreshCw,
 } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, XAxis } from "recharts";
 
 const contributionChartConfig = {
   commits: {
@@ -38,17 +38,6 @@ const contributionChartConfig = {
   },
 } satisfies ChartConfig;
 
-const churnChartConfig = {
-  linesAdded: {
-    color: "hsl(var(--chart-1))",
-    label: "Lines Added",
-  },
-  linesDeleted: {
-    color: "hsl(var(--chart-3))",
-    label: "Lines Deleted",
-  },
-} satisfies ChartConfig;
-
 export default function Activity() {
   const formatCount = (value: number) => new Intl.NumberFormat().format(value);
   const [filter, setFilter] = usePersistentState<"all" | "commit" | "checkout" | "repo">(
@@ -60,6 +49,13 @@ export default function Activity() {
     "7d",
   );
   const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
+
+  useEffect(() => {
+    if (filter === "checkout") {
+      setFilter("repo");
+    }
+  }, [filter, setFilter]);
+
   const selectedUserActivity =
     period === "30d"
       ? snapshot?.userActivity.last30Days
@@ -74,7 +70,10 @@ export default function Activity() {
   const filteredActivities = useMemo(
     () =>
       (snapshot?.activities ?? []).filter(
-        (activity) => filter === "all" || activity.type === filter,
+        (activity) =>
+          filter === "all" ||
+          activity.type === filter ||
+          (filter === "repo" && activity.type === "checkout"),
       ),
     [filter, snapshot?.activities],
   );
@@ -184,10 +183,10 @@ export default function Activity() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                PRs Merged
+                Commits
               </h3>
               <p className="mt-2 text-3xl font-bold tracking-tight">
-                {formatCount(selectedUserActivity?.pullRequestsMerged ?? 0)}
+                {formatCount(selectedUserActivity?.commits ?? 0)}
               </p>
             </div>
             <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
@@ -200,26 +199,10 @@ export default function Activity() {
             </div>
             <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Commits
+                PRs Merged
               </h3>
               <p className="mt-2 text-3xl font-bold tracking-tight">
-                {formatCount(selectedUserActivity?.commits ?? 0)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Lines Added
-              </h3>
-              <p className="mt-2 text-3xl font-bold tracking-tight text-chart-1">
-                {formatCount(selectedUserActivity?.linesAdded ?? 0)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Lines Deleted
-              </h3>
-              <p className="mt-2 text-3xl font-bold tracking-tight text-chart-3">
-                {formatCount(selectedUserActivity?.linesDeleted ?? 0)}
+                {formatCount(selectedUserActivity?.pullRequestsMerged ?? 0)}
               </p>
             </div>
           </div>
@@ -230,137 +213,88 @@ export default function Activity() {
             </p>
           ) : null}
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <section className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
-              <div className="space-y-1">
-                <h3 className="text-sm font-semibold text-foreground">Contribution Trend</h3>
-                <p className="text-xs text-muted-foreground">
-                  Daily commits, PR reviews, and merges for the selected period.
-                </p>
-              </div>
-              <ChartContainer
-                config={contributionChartConfig}
-                className="mt-4 h-[260px] w-full aspect-auto"
+          <section className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-foreground">Contribution Trend</h3>
+              <p className="text-xs text-muted-foreground">
+                Daily commits, PR reviews, and merges for the selected period.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Lines changed in this window:{" "}
+                <span className="font-medium text-foreground">
+                  +{formatCount(selectedUserActivity?.linesAdded ?? 0)}
+                </span>{" "}
+                /{" "}
+                <span className="font-medium text-foreground">
+                  -{formatCount(selectedUserActivity?.linesDeleted ?? 0)}
+                </span>
+              </p>
+            </div>
+            <ChartContainer
+              config={contributionChartConfig}
+              className="mt-4 h-[260px] w-full aspect-auto"
+            >
+              <LineChart
+                accessibilityLayer
+                data={activityChartData}
+                margin={{ bottom: 0, left: 4, right: 4, top: 8 }}
               >
-                <LineChart
-                  accessibilityLayer
-                  data={activityChartData}
-                  margin={{ bottom: 0, left: 4, right: 4, top: 8 }}
-                >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    axisLine={false}
-                    dataKey="date"
-                    minTickGap={24}
-                    tickFormatter={formatChartTick}
-                    tickLine={false}
-                    tickMargin={10}
-                  />
-                  <ChartTooltip
-                    cursor={false}
-                    content={
-                      <ChartTooltipContent
-                        indicator="line"
-                        labelFormatter={(value) =>
-                          typeof value === "string"
-                            ? formatChartTooltipLabel(value)
-                            : value
-                        }
-                      />
-                    }
-                  />
-                  <ChartLegend
-                    verticalAlign="top"
-                    content={<ChartLegendContent className="justify-start" />}
-                  />
-                  <Line
-                    dataKey="commits"
-                    dot={false}
-                    stroke="var(--color-commits)"
-                    strokeWidth={2.25}
-                    type="monotone"
-                  />
-                  <Line
-                    dataKey="pullRequestsReviewed"
-                    dot={false}
-                    stroke="var(--color-pullRequestsReviewed)"
-                    strokeWidth={2}
-                    type="monotone"
-                  />
-                  <Line
-                    dataKey="pullRequestsMerged"
-                    dot={false}
-                    stroke="var(--color-pullRequestsMerged)"
-                    strokeWidth={2}
-                    type="monotone"
-                  />
-                </LineChart>
-              </ChartContainer>
-            </section>
-
-            <section className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
-              <div className="space-y-1">
-                <h3 className="text-sm font-semibold text-foreground">Code Churn</h3>
-                <p className="text-xs text-muted-foreground">
-                  Lines added and deleted per day across the monitored repos.
-                </p>
-              </div>
-              <ChartContainer
-                config={churnChartConfig}
-                className="mt-4 h-[260px] w-full aspect-auto"
-              >
-                <BarChart
-                  accessibilityLayer
-                  data={activityChartData}
-                  margin={{ bottom: 0, left: 4, right: 4, top: 8 }}
-                >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    axisLine={false}
-                    dataKey="date"
-                    minTickGap={24}
-                    tickFormatter={formatChartTick}
-                    tickLine={false}
-                    tickMargin={10}
-                  />
-                  <ChartTooltip
-                    cursor={false}
-                    content={
-                      <ChartTooltipContent
-                        indicator="line"
-                        labelFormatter={(value) =>
-                          typeof value === "string"
-                            ? formatChartTooltipLabel(value)
-                            : value
-                        }
-                      />
-                    }
-                  />
-                  <ChartLegend
-                    verticalAlign="top"
-                    content={<ChartLegendContent className="justify-start" />}
-                  />
-                  <Bar
-                    dataKey="linesAdded"
-                    fill="var(--color-linesAdded)"
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Bar
-                    dataKey="linesDeleted"
-                    fill="var(--color-linesDeleted)"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ChartContainer>
-            </section>
-          </div>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  axisLine={false}
+                  dataKey="date"
+                  minTickGap={24}
+                  tickFormatter={formatChartTick}
+                  tickLine={false}
+                  tickMargin={10}
+                />
+                <ChartTooltip
+                  cursor={false}
+                  content={
+                    <ChartTooltipContent
+                      indicator="line"
+                      labelFormatter={(value) =>
+                        typeof value === "string"
+                          ? formatChartTooltipLabel(value)
+                          : value
+                      }
+                    />
+                  }
+                />
+                <ChartLegend
+                  verticalAlign="top"
+                  content={<ChartLegendContent className="justify-start" />}
+                />
+                <Line
+                  dataKey="commits"
+                  dot={false}
+                  stroke="var(--color-commits)"
+                  strokeWidth={2.25}
+                  type="monotone"
+                />
+                <Line
+                  dataKey="pullRequestsReviewed"
+                  dot={false}
+                  stroke="var(--color-pullRequestsReviewed)"
+                  strokeWidth={2}
+                  type="monotone"
+                />
+                <Line
+                  dataKey="pullRequestsMerged"
+                  dot={false}
+                  stroke="var(--color-pullRequestsMerged)"
+                  strokeWidth={2}
+                  type="monotone"
+                />
+              </LineChart>
+            </ChartContainer>
+          </section>
         </section>
 
         <div className="flex gap-2 border-b border-border/40 pb-4 flex-wrap">
           {[
             { id: "all", label: "All Activity" },
             { id: "commit", label: "Commits" },
-            { id: "checkout", label: "Checkouts" },
             { id: "repo", label: "Repo Events" },
           ].map((item) => (
             <button
