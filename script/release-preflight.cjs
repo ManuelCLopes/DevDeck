@@ -188,9 +188,19 @@ function inspectArtifacts() {
   }
 }
 
-expectFile("build/icon.icns");
+const generatedIconPath = path.join(root, "build", "icon.icns");
+expectFile("build/icon.svg");
 expectFile("build/entitlements.mac.plist");
 expectFile("script/notarize.cjs");
+
+if (fs.existsSync(generatedIconPath)) {
+  addNotice("Found build/icon.icns");
+} else if (requireArtifacts || verifyCodesign || verifyNotarization) {
+  addError("Missing required file: build/icon.icns");
+} else {
+  addWarning("build/icon.icns has not been generated yet; packaging will create it from build/icon.svg.");
+}
+
 inspectPackageMetadata();
 inspectBuiltIndexHtml();
 inspectCredentials();
