@@ -29,7 +29,6 @@ import {
   Users,
   Link2Off,
   MessageSquare,
-  RefreshCw,
   X,
 } from "lucide-react";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -54,7 +53,7 @@ export default function Projects() {
     "devdeck:projects:selected-pr",
     null,
   );
-  const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
+  const { data: snapshot, isLoading } = useWorkspaceSnapshot();
   const pullRequestWatchlist = usePullRequestWatchlist();
   const desktopApi = getDesktopApi();
 
@@ -166,14 +165,6 @@ export default function Projects() {
                 className="w-full h-8 pl-8 pr-3 rounded-md bg-white/60 backdrop-blur-sm border border-border/60 shadow-sm focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none text-xs transition-all"
               />
             </div>
-            <button
-              type="button"
-              onClick={() => void refetch()}
-              className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
           </div>
         </div>
 

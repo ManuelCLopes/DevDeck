@@ -1,4 +1,4 @@
-import { Bookmark, CheckCheck, ChevronDown } from "lucide-react";
+import { Bookmark, CheckCheck, ChevronDown, Undo2 } from "lucide-react";
 import type { PullRequestWatchStatus } from "@/lib/pull-request-watchlist";
 import { getPullRequestWatchStatusMeta } from "@/lib/pull-request-utils";
 import {
@@ -10,6 +10,7 @@ import {
 
 interface PullRequestQueueControlProps {
   className?: string;
+  mode?: "open" | "queue";
   onStatusChange: (status: PullRequestWatchStatus | null) => void;
   status: PullRequestWatchStatus | null;
 }
@@ -31,6 +32,7 @@ function getQueueButtonLabel(status: PullRequestWatchStatus | null) {
 
 export default function PullRequestQueueControl({
   className,
+  mode = "open",
   onStatusChange,
   status,
 }: PullRequestQueueControlProps) {
@@ -54,14 +56,28 @@ export default function PullRequestQueueControl({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuItem onSelect={() => onStatusChange("marked")}>
-          <Bookmark className="h-4 w-4" />
-          Mark to Review
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onStatusChange("reviewed")}>
-          <CheckCheck className="h-4 w-4" />
-          Reviewed
-        </DropdownMenuItem>
+        {mode === "queue" ? (
+          <>
+            <DropdownMenuItem onSelect={() => onStatusChange("reviewed")}>
+              <CheckCheck className="h-4 w-4" />
+              Reviewed
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onStatusChange(null)}>
+              <Undo2 className="h-4 w-4" />
+              Unmark
+            </DropdownMenuItem>
+          </>
+        ) : status ? (
+          <DropdownMenuItem onSelect={() => onStatusChange(null)}>
+            <Undo2 className="h-4 w-4" />
+            Unmark
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onSelect={() => onStatusChange("marked")}>
+            <Bookmark className="h-4 w-4" />
+            Mark to Review
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

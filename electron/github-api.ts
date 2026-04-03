@@ -40,10 +40,37 @@ export interface GitHubApiPullRequestSearchItem {
   user: { login: string } | null;
 }
 
+export interface GitHubApiCommitSearchItem {
+  additions: number;
+  committedDate: string;
+  deletions: number;
+  oid: string;
+  repository: {
+    nameWithOwner: string;
+  } | null;
+}
+
+interface GitHubApiCommitSearchResponse {
+  items: GitHubApiCommitSearchItem[];
+  pageInfo: {
+    endCursor: string | null;
+    hasNextPage: boolean;
+  };
+}
+
 interface GitHubApiSearchResponse<TItem> {
   incomplete_results: boolean;
   items: TItem[];
   total_count: number;
+}
+
+interface GitHubGraphQLError {
+  message: string;
+}
+
+interface GitHubGraphQLResponse<TData> {
+  data?: TData;
+  errors?: GitHubGraphQLError[];
 }
 
 interface GitHubApiRequestOptions {
@@ -159,6 +186,70 @@ async function githubApiRequest<T>(
   }
 }
 
+async function githubGraphqlRequest<TData>(
+  query: string,
+  variables: Record<string, unknown>,
+  token: string,
+  options?: Pick<GitHubApiRequestOptions, "timeoutMs">,
+) {
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(
+    () => abortController.abort(),
+    options?.timeoutMs ?? 8000,
+  );
+
+  try {
+    const response = await fetch(`${GITHUB_API_BASE_URL}/graphql`, {
+      body: JSON.stringify({ query, variables }),
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
+      },
+      method: "POST",
+      signal: abortController.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = (await response.text()).trim();
+      throw new GitHubApiError(
+        errorText || `GitHub API request failed with status ${response.status}.`,
+        response.status,
+      );
+    }
+
+    const payload = (await response.json()) as GitHubGraphQLResponse<TData>;
+    if (payload.errors?.length) {
+      throw new GitHubApiError(
+        payload.errors.map((error) => error.message).join(" "),
+        400,
+      );
+    }
+
+    if (!payload.data) {
+      throw new GitHubApiError("GitHub GraphQL response did not include data.", 500);
+    }
+
+    return payload.data;
+  } catch (error) {
+    if (error instanceof GitHubApiError || error instanceof GitHubConnectivityError) {
+      throw error;
+    }
+
+    if (abortController.signal.aborted || isConnectivityFailure(error)) {
+      throw new GitHubConnectivityError(
+        "GitHub could not be reached. Check your connection and retry.",
+        { cause: error },
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export function fetchGitHubViewer(token: string) {
   return githubApiRequest<GitHubApiViewer>("/user", token, {
     timeoutMs: 5000,
@@ -197,6 +288,68 @@ export function fetchGitHubPullRequestSearchResults(
     token,
     { allowPublicFallback: true },
   );
+}
+
+export async function fetchGitHubCommitSearchResults(
+  query: string,
+  token: string,
+  options?: {
+    after?: string | null;
+    first?: number;
+  },
+) {
+  const data = await githubGraphqlRequest<{
+    search: {
+      nodes: Array<{
+        additions: number;
+        committedDate: string;
+        deletions: number;
+        oid: string;
+        repository: {
+          nameWithOwner: string;
+        } | null;
+      } | null>;
+      pageInfo: {
+        endCursor: string | null;
+        hasNextPage: boolean;
+      };
+    };
+  }>(
+    `
+      query SearchCommits($query: String!, $first: Int!, $after: String) {
+        search(query: $query, type: COMMIT, first: $first, after: $after) {
+          pageInfo {
+            endCursor
+            hasNextPage
+          }
+          nodes {
+            ... on Commit {
+              oid
+              committedDate
+              additions
+              deletions
+              repository {
+                nameWithOwner
+              }
+            }
+          }
+        }
+      }
+    `,
+    {
+      after: options?.after ?? null,
+      first: options?.first ?? 50,
+      query,
+    },
+    token,
+  );
+
+  return {
+    items: data.search.nodes.filter(
+      (node): node is GitHubApiCommitSearchItem => Boolean(node),
+    ),
+    pageInfo: data.search.pageInfo,
+  } satisfies GitHubApiCommitSearchResponse;
 }
 
 export function fetchGitHubPullRequestReviews(

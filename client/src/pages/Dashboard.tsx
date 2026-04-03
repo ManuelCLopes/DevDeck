@@ -46,7 +46,6 @@ import {
   Link2Off,
   List,
   MessageSquare,
-  RefreshCw,
   Users,
   X,
 } from "lucide-react";
@@ -71,7 +70,7 @@ export default function Dashboard() {
   const search = useSearch();
   const focusedProjectId = new URLSearchParams(search).get("project");
   const workspaceSelection = useWorkspaceSelection();
-  const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
+  const { data: snapshot, isLoading } = useWorkspaceSnapshot();
   const pullRequestWatchlist = usePullRequestWatchlist();
 
   const projects = snapshot?.projects ?? [];
@@ -111,13 +110,6 @@ export default function Dashboard() {
 
   const reposWithoutRemoteCount = visibleProjects.filter(
     (project) => !project.remoteUrl,
-  ).length;
-  const staleBranchCount = visibleProjects.reduce(
-    (total, project) => total + project.staleBranchCount,
-    0,
-  );
-  const staleProjectsCount = visibleProjects.filter(
-    (project) => project.staleBranchCount > 0,
   ).length;
   const focusedProjectActivities = focusedProject
     ? (snapshot?.activities ?? []).filter((activity) => activity.repo === focusedProject.name)
@@ -221,30 +213,6 @@ export default function Dashboard() {
                 </a>
               </Link>
             )}
-            <button
-              type="button"
-              onClick={() => void refetch()}
-              className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
-            <div className="bg-secondary/40 p-0.5 rounded-md flex items-center border border-border/40 backdrop-blur-sm">
-              <button
-                type="button"
-                onClick={() => setViewMode("grid")}
-                className={`p-1.5 rounded-[4px] transition-all shadow-sm ${viewMode === "grid" ? "bg-white/80 backdrop-blur-md text-foreground border border-black/5" : "text-muted-foreground hover:text-foreground bg-transparent border-transparent"}`}
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                className={`p-1.5 rounded-[4px] transition-all shadow-sm ${viewMode === "list" ? "bg-white/80 backdrop-blur-md text-foreground border border-black/5" : "text-muted-foreground hover:text-foreground bg-transparent border-transparent"}`}
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
           </div>
         </div>
 
@@ -508,6 +476,7 @@ export default function Dashboard() {
                               </button>
                               <div onClick={(event) => event.stopPropagation()}>
                                 <PullRequestQueueControl
+                                  mode="open"
                                   onStatusChange={(status) =>
                                     handleSetPullRequestQueueStatus(
                                       pullRequest.id,
@@ -566,7 +535,7 @@ export default function Dashboard() {
           </>
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <div className="relative overflow-hidden rounded-xl border border-border/50 bg-white/60 p-4 shadow-sm backdrop-blur-md">
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -584,21 +553,6 @@ export default function Dashboard() {
                 <div className="absolute -right-4 -bottom-4 opacity-5">
                   <FolderGit2 className="w-24 h-24" />
                 </div>
-              </div>
-              <div className="rounded-xl border border-border/50 bg-white/60 p-4 shadow-sm backdrop-blur-md">
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Stale Branches
-                  </h3>
-                  <span className="rounded-full border border-border/60 bg-secondary/50 px-2.5 py-1 text-sm font-semibold tabular-nums text-foreground/85">
-                    {formatCount(staleBranchCount)}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {staleProjectsCount > 0
-                    ? `${staleProjectsCount} repos affected`
-                    : "no stale local work"}
-                </p>
               </div>
               <div className="rounded-xl border border-border/50 bg-white/60 p-4 shadow-sm backdrop-blur-md">
                 <div className="flex items-start justify-between gap-3">
@@ -638,22 +592,29 @@ export default function Dashboard() {
             <section>
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold tracking-tight">Pull Request Radar</h2>
+                  <Link href="/reviews">
+                    <a className="inline-flex items-center gap-1.5 text-sm font-semibold tracking-tight text-foreground transition-colors hover:text-primary">
+                      Pull Request Radar
+                      <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    </a>
+                  </Link>
                   <span className="bg-secondary text-secondary-foreground text-[10px] px-1.5 py-0.5 rounded-full font-medium border border-border">
                     {visiblePullRequests.length}
                   </span>
                 </div>
-                <Link href="/reviews">
-                  <a className="text-xs font-medium text-primary hover:text-primary/80 inline-flex items-center gap-1.5">
-                    Open PR Inbox
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </a>
-                </Link>
               </div>
               <div className="mb-4 flex justify-end">
-                <p className="text-xs text-muted-foreground">
-                  Dependabot visibility is managed from the Pull Requests page.
-                </p>
+                <div className="inline-flex items-center text-xs text-muted-foreground">
+                  <button
+                    type="button"
+                    onClick={() => setShowDependabotPullRequests((current) => !current)}
+                    className="font-medium text-muted-foreground/80 transition-colors hover:text-foreground hover:underline"
+                  >
+                    {showDependabotPullRequests
+                      ? "Hide Dependabot PRs"
+                      : "Show Dependabot PRs"}
+                  </button>
+                </div>
               </div>
 
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
@@ -726,6 +687,7 @@ export default function Dashboard() {
                               </button>
                               <div onClick={(event) => event.stopPropagation()}>
                                 <PullRequestQueueControl
+                                  mode="open"
                                   onStatusChange={(status) =>
                                     handleSetPullRequestQueueStatus(
                                       pullRequest.id,
@@ -866,18 +828,41 @@ export default function Dashboard() {
                   </span>
                 </div>
 
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-2 sm:pb-0 hide-scrollbar">
-                  <Filter className="w-3.5 h-3.5 text-muted-foreground mr-1 flex-shrink-0" />
-                  {teams.map((team) => (
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <div className="bg-secondary/40 p-0.5 rounded-md flex items-center border border-border/40 backdrop-blur-sm">
                     <button
-                      key={team}
                       type="button"
-                      onClick={() => setFilterTeam(team)}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-full whitespace-nowrap transition-all border ${filterTeam === team ? "bg-foreground text-background border-foreground shadow-sm" : "bg-white text-muted-foreground hover:text-foreground border-border hover:border-black/20"}`}
+                      onClick={() => setViewMode("grid")}
+                      className={`p-1.5 rounded-[4px] transition-all shadow-sm ${viewMode === "grid" ? "bg-white/80 backdrop-blur-md text-foreground border border-black/5" : "text-muted-foreground hover:text-foreground bg-transparent border-transparent"}`}
+                      aria-label="Show projects as cards"
+                      title="Grid view"
                     >
-                      {team}
+                      <LayoutGrid className="w-4 h-4" />
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("list")}
+                      className={`p-1.5 rounded-[4px] transition-all shadow-sm ${viewMode === "list" ? "bg-white/80 backdrop-blur-md text-foreground border border-black/5" : "text-muted-foreground hover:text-foreground bg-transparent border-transparent"}`}
+                      aria-label="Show projects as rows"
+                      title="List view"
+                    >
+                      <List className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-2 sm:pb-0 hide-scrollbar">
+                    <Filter className="w-3.5 h-3.5 text-muted-foreground mr-1 flex-shrink-0" />
+                    {teams.map((team) => (
+                      <button
+                        key={team}
+                        type="button"
+                        onClick={() => setFilterTeam(team)}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-full whitespace-nowrap transition-all border ${filterTeam === team ? "bg-foreground text-background border-foreground shadow-sm" : "bg-white text-muted-foreground hover:text-foreground border-border hover:border-black/20"}`}
+                      >
+                        {team}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
-import { Copy, FolderOpen, Trash2 } from "lucide-react";
+import { FolderOpen, Trash2 } from "lucide-react";
 import { useProjectActions } from "@/hooks/use-project-actions";
 import vsCodeLogo from "@/assets/vscode.svg";
 
@@ -18,7 +18,7 @@ export default function ProjectQuickActions({
   projectName,
   projectPath,
 }: ProjectQuickActionsProps) {
-  const { copyPath, openInCode, removeProject, revealInFinder } = useProjectActions();
+  const { openInCode, removeProject, revealInFinder } = useProjectActions();
   const buttonClassName = compact
     ? "flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-white/90 text-muted-foreground shadow-sm transition-colors hover:bg-secondary hover:text-foreground"
     : "rounded-md border border-border/60 bg-white/90 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:bg-secondary hover:text-foreground";
@@ -69,15 +69,6 @@ export default function ProjectQuickActions({
         title="Reveal in Finder"
       >
         {compact ? <FolderOpen className="h-3.5 w-3.5" /> : "Finder"}
-      </button>
-      <button
-        type="button"
-        onClick={handleAction(() => copyPath(projectPath))}
-        className={buttonClassName}
-        aria-label={`Copy ${projectName} path`}
-        title="Copy path"
-      >
-        {compact ? <Copy className="h-3.5 w-3.5" /> : "Copy"}
       </button>
       <button
         type="button"

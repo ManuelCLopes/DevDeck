@@ -205,6 +205,7 @@ export default function PullRequestDetailDialog({
                   </Button>
                   <PullRequestQueueControl
                     className="h-9"
+                    mode="open"
                     onStatusChange={(status) => {
                       if (!pullRequest) {
                         return;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import {
   ChartContainer,
@@ -14,13 +14,7 @@ import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
-import {
-  Bell,
-  CheckCircle2,
-  FolderGit2,
-  GitBranch,
-  RefreshCw,
-} from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { CartesianGrid, Line, LineChart, XAxis } from "recharts";
 
 const contributionChartConfig = {
@@ -40,30 +34,13 @@ const contributionChartConfig = {
 
 export default function Activity() {
   const formatCount = (value: number) => new Intl.NumberFormat().format(value);
-  const [filter, setFilter] = usePersistentState<"all" | "commit" | "checkout" | "repo">(
-    "devdeck:activity:filter",
-    "all",
-  );
-  const [activityScope, setActivityScope] = usePersistentState<"workspace" | "github">(
-    "devdeck:activity:scope",
-    "workspace",
-  );
   const [period, setPeriod] = usePersistentState<"7d" | "30d" | "90d">(
     "devdeck:activity:period",
     "7d",
   );
-  const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
+  const { data: snapshot, isLoading } = useWorkspaceSnapshot();
 
-  useEffect(() => {
-    if (filter === "checkout") {
-      setFilter("repo");
-    }
-  }, [filter, setFilter]);
-
-  const selectedUserActivitySummary =
-    activityScope === "github"
-      ? snapshot?.userActivity.github
-      : snapshot?.userActivity.workspace;
+  const selectedUserActivitySummary = snapshot?.userActivity;
   const selectedUserActivity =
     period === "30d"
       ? selectedUserActivitySummary?.last30Days
@@ -75,33 +52,14 @@ export default function Activity() {
     [selectedUserActivity?.points],
   );
 
-  const filteredActivities = useMemo(
-    () =>
-      (snapshot?.activities ?? []).filter(
-        (activity) =>
-          filter === "all" ||
-          activity.type === filter ||
-          (filter === "repo" && activity.type === "checkout"),
-      ),
-    [filter, snapshot?.activities],
+  const commitActivities = useMemo(
+    () => (snapshot?.activities ?? []).filter((activity) => activity.type === "commit"),
+    [snapshot?.activities],
   );
-  const activitiesPagination = usePagination(filteredActivities, 10, {
-    resetKey: filter,
+  const activitiesPagination = usePagination(commitActivities, 10, {
+    resetKey: commitActivities.length,
     storageKey: "devdeck:activity:pagination",
   });
-
-  const getActivityTypeLabel = (type: string) => {
-    switch (type) {
-      case "commit":
-        return "Commit";
-      case "checkout":
-        return "Checkout";
-      case "repo":
-        return "Repository";
-      default:
-        return "Activity";
-    }
-  };
 
   const getActivityHeadline = (activity: {
     description: string;
@@ -118,19 +76,6 @@ export default function Activity() {
     return cleanedDescription || cleanedTitle;
   };
 
-  const ActivityIcon = ({ type }: { type: string }) => {
-    switch (type) {
-      case "commit":
-        return <CheckCircle2 className="w-4 h-4 text-chart-1" />;
-      case "checkout":
-        return <GitBranch className="w-4 h-4 text-primary" />;
-      case "repo":
-        return <FolderGit2 className="w-4 h-4 text-muted-foreground" />;
-      default:
-        return <Bell className="w-4 h-4 text-muted-foreground" />;
-    }
-  };
-
   const formatChartTick = (dateKey: string) =>
     format(parseISO(dateKey), period === "7d" ? "EEE" : "MMM d");
 
@@ -143,17 +88,10 @@ export default function Activity() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Activity Inbox</h1>
-            <p className="text-muted-foreground text-sm">Recent local Git activity across repositories tracked by DevDeck.</p>
+            <p className="text-muted-foreground text-sm">
+              GitHub-first personal activity across your connected account, with local repository events below.
+            </p>
           </div>
-
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
         </div>
 
         <section className="space-y-4">
@@ -163,32 +101,11 @@ export default function Activity() {
                 Your Activity
               </h2>
               <p className="text-sm text-muted-foreground">
-                {activityScope === "github"
-                  ? "Personal GitHub pull request activity across your account for the selected period."
-                  : "Personal output across the monitored workspace for the selected period."}
+                Personal GitHub activity for the selected period. Local repository events stay available in the feed below.
               </p>
             </div>
-            <div className="flex flex-col items-start gap-2 sm:items-end">
-              <div className="flex flex-wrap items-center gap-2">
-                {[
-                  { id: "workspace", label: "Workspace" },
-                  { id: "github", label: "GitHub" },
-                ].map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => setActivityScope(option.id as typeof activityScope)}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                      activityScope === option.id
-                        ? "border-foreground bg-foreground text-background"
-                        : "border-border/60 bg-white text-muted-foreground hover:border-black/15 hover:text-foreground"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center">
+              <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
               {[
                 { id: "7d", label: "7 Days" },
                 { id: "30d", label: "30 Days" },
@@ -211,17 +128,15 @@ export default function Activity() {
             </div>
           </div>
 
-          <div className={`grid grid-cols-1 gap-4 ${activityScope === "github" ? "sm:grid-cols-2 xl:grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
-            {activityScope === "workspace" ? (
-              <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Commits
-                </h3>
-                <p className="mt-2 text-3xl font-bold tracking-tight">
-                  {formatCount(selectedUserActivity?.commits ?? 0)}
-                </p>
-              </div>
-            ) : null}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Commits
+              </h3>
+              <p className="mt-2 text-3xl font-bold tracking-tight">
+                {formatCount(selectedUserActivity?.commits ?? 0)}
+              </p>
+            </div>
             <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 PRs Reviewed
@@ -238,11 +153,19 @@ export default function Activity() {
                 {formatCount(selectedUserActivity?.pullRequestsMerged ?? 0)}
               </p>
             </div>
+            <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Code Churn
+              </h3>
+              <p className="mt-2 text-lg font-semibold tracking-tight text-foreground">
+                +{formatCount(selectedUserActivity?.linesAdded ?? 0)} / -{formatCount(selectedUserActivity?.linesDeleted ?? 0)}
+              </p>
+            </div>
           </div>
 
-          {activityScope === "github" && snapshot?.githubStatus.state !== "connected" ? (
+          {snapshot?.githubStatus.state !== "connected" ? (
             <p className="text-xs text-muted-foreground">
-              GitHub must be connected in Preferences for PR merged/reviewed totals.
+              GitHub must be connected in Preferences for global PR, commit, and churn totals. When unavailable, DevDeck falls back to local activity only.
             </p>
           ) : null}
 
@@ -250,26 +173,18 @@ export default function Activity() {
             <div className="space-y-1">
               <h3 className="text-sm font-semibold text-foreground">Contribution Trend</h3>
               <p className="text-xs text-muted-foreground">
-                {activityScope === "github"
-                  ? "Daily GitHub PR reviews and merges for the selected period."
-                  : "Daily commits, PR reviews, and merges for the selected period."}
+                Daily GitHub commits, PR reviews, and merges for the selected period.
               </p>
-              {activityScope === "workspace" ? (
-                <p className="text-xs text-muted-foreground">
-                  Lines changed in this window:{" "}
-                  <span className="font-medium text-foreground">
-                    +{formatCount(selectedUserActivity?.linesAdded ?? 0)}
-                  </span>{" "}
-                  /{" "}
-                  <span className="font-medium text-foreground">
-                    -{formatCount(selectedUserActivity?.linesDeleted ?? 0)}
-                  </span>
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  This scope reflects your GitHub activity beyond the repos currently monitored in DevDeck.
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground">
+                Lines changed in this window:{" "}
+                <span className="font-medium text-foreground">
+                  +{formatCount(selectedUserActivity?.linesAdded ?? 0)}
+                </span>{" "}
+                /{" "}
+                <span className="font-medium text-foreground">
+                  -{formatCount(selectedUserActivity?.linesDeleted ?? 0)}
+                </span>
+              </p>
             </div>
             <ChartContainer
               config={contributionChartConfig}
@@ -306,15 +221,13 @@ export default function Activity() {
                   verticalAlign="top"
                   content={<ChartLegendContent className="justify-start" />}
                 />
-                {activityScope === "workspace" ? (
-                  <Line
-                    dataKey="commits"
-                    dot={false}
-                    stroke="var(--color-commits)"
-                    strokeWidth={2.25}
-                    type="monotone"
-                  />
-                ) : null}
+                <Line
+                  dataKey="commits"
+                  dot={false}
+                  stroke="var(--color-commits)"
+                  strokeWidth={2.25}
+                  type="monotone"
+                />
                 <Line
                   dataKey="pullRequestsReviewed"
                   dot={false}
@@ -340,36 +253,19 @@ export default function Activity() {
               Local Activity Feed
             </h2>
             <p className="text-xs text-muted-foreground">
-              Repository events from the projects currently monitored in DevDeck.
+              Recent local commits from the projects currently monitored in DevDeck.
             </p>
           </div>
         </div>
 
-        <div className="flex gap-2 border-b border-border/40 pb-4 flex-wrap">
-          {[
-            { id: "all", label: "All Activity" },
-            { id: "commit", label: "Commits" },
-            { id: "repo", label: "Repo Events" },
-          ].map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setFilter(item.id as typeof filter)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${filter === item.id ? "bg-foreground text-background border-foreground shadow-sm" : "bg-white text-muted-foreground hover:text-foreground border-border/60 hover:border-black/20"}`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
         <div className="bg-white border border-border/60 rounded-xl shadow-sm overflow-hidden">
           <div className="flex flex-col">
-            {filteredActivities.length === 0 ? (
+            {commitActivities.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground text-sm flex flex-col items-center gap-3">
                 <div className="p-3 bg-secondary/50 rounded-full">
                   <CheckCircle2 className="w-6 h-6 text-chart-1 opacity-80" />
                 </div>
-                <p>{isLoading ? "Scanning your workspace..." : "No local activity matched this filter."}</p>
+                <p>{isLoading ? "Scanning your workspace..." : "No local commits were found yet."}</p>
               </div>
             ) : (
               activitiesPagination.paginatedItems.map((activity) => (
@@ -378,15 +274,13 @@ export default function Activity() {
                   className="group flex items-start gap-4 p-4 border-b border-border/40 last:border-0 hover:bg-black/[0.02] transition-colors cursor-pointer relative"
                 >
                   <div className="mt-0.5 p-2 rounded-lg border shadow-sm bg-secondary/50 border-border/50">
-                    <ActivityIcon type={activity.type} />
+                    <CheckCircle2 className="w-4 h-4 text-chart-1" />
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="mb-1 flex flex-col gap-1">
                       <p className="min-w-0 text-[13px] text-foreground break-words">
-                        <span className="font-semibold">
-                          {getActivityTypeLabel(activity.type)}
-                        </span>{" "}
+                        <span className="font-semibold">Commit</span>{" "}
                         <span>{getActivityHeadline(activity)}</span>
                       </p>
                     </div>

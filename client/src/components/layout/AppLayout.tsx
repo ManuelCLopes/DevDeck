@@ -11,6 +11,7 @@ import {
 import { Link, useLocation, useSearch } from "wouter";
 import WindowControls from "@/components/layout/WindowControls";
 import ProjectQuickActions from "@/components/projects/ProjectQuickActions";
+import { usePersistentState } from "@/hooks/use-persistent-state";
 import {
   CommandDialog,
   CommandEmpty,
@@ -52,7 +53,10 @@ import {
   LayoutGrid,
   Plus,
   ShieldCheck,
+  PanelLeftClose,
+  PanelLeftOpen,
   ChevronLeft,
+  ChevronDown,
   ChevronRight,
   HardDrive,
   MessageSquare,
@@ -71,8 +75,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [isAddProjectsOpen, setIsAddProjectsOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = usePersistentState<boolean>(
+    "devdeck:sidebar:collapsed",
+    false,
+  );
+  const [collapsedCollectionIds, setCollapsedCollectionIds] = usePersistentState<string[]>(
+    "devdeck:sidebar:collapsed-collections",
+    [],
+  );
   const workspaceSelection = useWorkspaceSelection();
-  const managedCollections = getManagedProjectCollections(workspaceSelection);
+  const managedCollections = useMemo(
+    () => getManagedProjectCollections(workspaceSelection),
+    [workspaceSelection],
+  );
   const desktopApi = getDesktopApi();
   const hiddenProjectIds = useMemo(
     () =>
@@ -136,6 +151,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
   useWorkspaceAlerts(snapshot, preferences);
   useWorkspaceAutoRefresh();
   useDesktopWorkspaceMonitor(workspaceSelection, preferences);
+
+  const collapsedCollectionIdSet = useMemo(
+    () => new Set(collapsedCollectionIds),
+    [collapsedCollectionIds],
+  );
 
   const searchResults = useMemo(() => {
     if (!snapshot) {
@@ -224,6 +244,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "\\") {
+        event.preventDefault();
+        setIsSidebarCollapsed((current) => !current);
+        return;
+      }
+
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setIsSearchOpen(true);
@@ -232,7 +258,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [setIsSidebarCollapsed]);
+
+  useEffect(() => {
+    setCollapsedCollectionIds((currentIds) =>
+      currentIds.filter((collectionId) =>
+        managedCollections.some((collection) => collection.id === collectionId),
+      ),
+    );
+  }, [managedCollections, setCollapsedCollectionIds]);
 
   const handleNavigate = (targetPath: string) => {
     startTransition(() => {
@@ -261,54 +295,122 @@ export default function AppLayout({ children }: AppLayoutProps) {
     window.open(targetUrl, "_blank", "noopener,noreferrer");
   };
 
+  const toggleCollectionCollapsed = (collectionId: string) => {
+    setCollapsedCollectionIds((currentIds) =>
+      currentIds.includes(collectionId)
+        ? currentIds.filter((id) => id !== collectionId)
+        : [...currentIds, collectionId],
+    );
+  };
+
+  const sidebarWidthClass = isSidebarCollapsed ? "w-[76px]" : "w-[240px]";
+  const SidebarToggleIcon = isSidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
+
   return (
     <>
       <div className="flex h-screen overflow-hidden bg-[#f4f4f3] text-[13px] font-sans">
       <div className="flex h-full w-full overflow-hidden bg-[#f4f4f3]">
         
         {/* Sidebar - macOS visual style */}
-        <aside className="w-[240px] flex-shrink-0 border-r border-black/10 bg-[#f2f2f0] flex flex-col">
+        <aside
+          className={`${sidebarWidthClass} flex-shrink-0 border-r border-black/10 bg-[#f2f2f0] flex flex-col transition-[width] duration-200`}
+        >
           {/* Traffic Lights & Titlebar Drag Area */}
-          <div className="titlebar-drag-region flex h-[52px] items-start pl-[18px] pt-[16px]">
+          <div className="titlebar-drag-region relative flex h-[52px] items-start pl-[18px] pt-[16px]">
             <WindowControls />
+            {!isSidebarCollapsed ? (
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed(true)}
+                className="no-drag absolute right-3 top-3 rounded-md p-1 text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground"
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+              >
+                <SidebarToggleIcon className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
           
           <nav className="flex-1 px-3 pb-4 space-y-[2px] overflow-y-auto">
-            <div className="mb-2 mt-2 px-2">
-              <p className="text-[11px] font-semibold text-muted-foreground/80">WORKSPACE</p>
+            <div
+              className={`mb-2 mt-2 flex items-center ${
+                isSidebarCollapsed ? "justify-center px-0" : "justify-between px-2"
+              }`}
+            >
+              {!isSidebarCollapsed ? (
+                <p className="text-[11px] font-semibold text-muted-foreground/80">WORKSPACE</p>
+              ) : null}
+              {isSidebarCollapsed ? (
+                <button
+                  type="button"
+                  onClick={() => setIsSidebarCollapsed(false)}
+                  className="no-drag rounded-md p-1 text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground"
+                  aria-label="Expand sidebar"
+                  title="Expand sidebar"
+                >
+                  <SidebarToggleIcon className="h-4 w-4" />
+                </button>
+              ) : null}
             </div>
             {navItems.map((item) => {
               const active = location === item.href;
+              const badgeCount =
+                item.label === "Pull Requests"
+                  ? reviewCount
+                  : item.label === "Activity Inbox"
+                    ? activityCount
+                    : null;
+              const collapsedBadgeClassName = active
+                ? "bg-primary-foreground/20 text-primary-foreground"
+                : "bg-primary/10 text-primary";
               return (
                 <Link key={item.href} href={item.href}>
-                  <a className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-all ${
-                    active 
+                  <a
+                    className={`relative flex items-center rounded-md transition-all ${
+                      isSidebarCollapsed
+                        ? "flex-col justify-center gap-1 px-0 py-1.5"
+                        : "gap-2 px-2.5 py-1.5"
+                    } ${
+                    active
                       ? "bg-primary text-primary-foreground font-medium shadow-sm" 
                       : "text-foreground/80 hover:bg-black/5"
-                  }`}>
+                  }`}
+                    title={isSidebarCollapsed ? item.label : undefined}
+                  >
                     <item.icon className={`w-4 h-4 ${active ? "opacity-100" : "opacity-70 text-primary"}`} />
-                    {item.label}
-                    {item.label === "Pull Requests" && (
-                      <span className="ml-auto text-[10px] font-bold bg-primary-foreground/20 px-1.5 rounded-sm">
-                        {reviewCount}
+                    {!isSidebarCollapsed ? item.label : null}
+                    {badgeCount !== null ? (
+                      <span
+                        className={`text-[10px] font-bold ${
+                          isSidebarCollapsed
+                            ? `min-w-[18px] rounded-full px-1.5 py-0.5 text-center leading-none ${collapsedBadgeClassName}`
+                            : "ml-auto bg-primary-foreground/20 px-1.5"
+                        }`}
+                      >
+                        {badgeCount}
                       </span>
-                    )}
-                    {item.label === "Activity Inbox" && (
-                      <span className="ml-auto text-[10px] font-bold bg-primary-foreground/20 px-1.5 rounded-sm">
-                        {activityCount}
-                      </span>
-                    )}
+                    ) : null}
                   </a>
                 </Link>
               );
             })}
             
-            <div className="mt-6 mb-2 px-2 flex items-center justify-between">
-              <p className="text-[11px] font-semibold text-muted-foreground/80">PROJECTS</p>
+            <div
+              className={`mt-6 mb-2 flex items-center ${
+                isSidebarCollapsed ? "justify-center px-0" : "justify-between px-2"
+              }`}
+            >
+              {!isSidebarCollapsed ? (
+                <p className="text-[11px] font-semibold text-muted-foreground/80">PROJECTS</p>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setIsAddProjectsOpen(true)}
-                className="text-muted-foreground/50 hover:text-foreground/80 no-drag"
+                className={`text-muted-foreground/50 hover:text-foreground/80 no-drag ${
+                  isSidebarCollapsed ? "rounded-md p-1 hover:bg-black/5" : ""
+                }`}
+                aria-label="Add projects"
+                title="Add projects"
               >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               </button>
@@ -316,17 +418,32 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <div className="space-y-3">
               {managedCollections.map((collection) => (
                 <div key={collection.id} className="space-y-[2px]">
-                  {managedCollections.length > 1 && (
-                    <div className="px-2 pt-1">
-                      <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                        {collection.name}
-                      </p>
-                    </div>
-                  )}
-                  {collection.projects.map((project) => (
+                  {!isSidebarCollapsed ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleCollectionCollapsed(collection.id)}
+                      className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 transition-colors hover:bg-black/5 hover:text-foreground/80"
+                      aria-expanded={!collapsedCollectionIdSet.has(collection.id)}
+                      title={collection.workspacePath ?? collection.workspaceName}
+                    >
+                      {collapsedCollectionIdSet.has(collection.id) ? (
+                        <ChevronRight className="h-3 w-3 flex-shrink-0" />
+                      ) : (
+                        <ChevronDown className="h-3 w-3 flex-shrink-0" />
+                      )}
+                      <span className="truncate">{collection.name}</span>
+                      <span className="ml-auto text-[9px] normal-case tracking-normal text-muted-foreground/70">
+                        {collection.projects.length}
+                      </span>
+                    </button>
+                  ) : null}
+                  {(isSidebarCollapsed || !collapsedCollectionIdSet.has(collection.id)) &&
+                    collection.projects.map((project) => (
                     <div
                       key={project.localPath ?? project.id}
-                      className={`group flex items-center gap-2 rounded-md px-2 py-1 transition-colors ${
+                      className={`group flex items-center rounded-md transition-colors ${
+                        isSidebarCollapsed ? "justify-center px-0 py-1.5" : "gap-2 px-2 py-1"
+                      } ${
                         selectedProjectId === project.id && location === "/"
                           ? "bg-black/7 text-foreground font-medium"
                           : "text-foreground/80 hover:bg-black/5"
@@ -337,15 +454,25 @@ export default function AppLayout({ children }: AppLayoutProps) {
                         onClick={() =>
                           setLocation(`/?project=${encodeURIComponent(project.id)}`)
                         }
-                        className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden px-0.5 py-0.5 text-left"
+                        className={`flex min-w-0 flex-1 items-center overflow-hidden text-left ${
+                          isSidebarCollapsed ? "justify-center px-0 py-1" : "gap-2 px-0.5 py-0.5"
+                        }`}
                         title={project.localPath ?? project.name}
                       >
-                        <HardDrive className="w-3.5 h-3.5 opacity-60 text-primary group-hover:opacity-100 transition-opacity" />
-                        <span className="block min-w-0 truncate leading-tight">
-                          {project.name}
-                        </span>
+                        {isSidebarCollapsed ? (
+                          <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border/60 bg-white/70 text-[11px] font-semibold uppercase text-foreground/85 shadow-sm">
+                            {project.name.slice(0, 2)}
+                          </span>
+                        ) : (
+                          <>
+                            <HardDrive className="w-3.5 h-3.5 opacity-60 text-primary group-hover:opacity-100 transition-opacity" />
+                            <span className="block min-w-0 truncate leading-tight">
+                              {project.name}
+                            </span>
+                          </>
+                        )}
                       </button>
-                      {project.localPath ? (
+                      {!isSidebarCollapsed && project.localPath ? (
                         <ProjectQuickActions
                           compact
                           projectId={project.id}
@@ -363,22 +490,35 @@ export default function AppLayout({ children }: AppLayoutProps) {
           {/* Local Status Indicator */}
           <div className="p-3">
             <Link href="/settings">
-              <a className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-colors ${
+              <a className={`flex items-center rounded-md transition-colors ${
+                isSidebarCollapsed ? "justify-center px-0 py-2" : "gap-2 px-2.5 py-1.5"
+              } ${
                 location === '/settings' 
                   ? "bg-primary text-primary-foreground font-medium shadow-sm" 
                   : "text-foreground/80 hover:bg-black/5"
-              }`}>
+              }`}
+                title={isSidebarCollapsed ? "Preferences" : undefined}
+              >
                 <Settings className="w-4 h-4 opacity-70" />
-                Preferences
+                {!isSidebarCollapsed ? "Preferences" : null}
               </a>
             </Link>
             
-            <div className="mt-3 px-2 py-2 flex items-center gap-2 bg-black/5 rounded-md">
+            <div
+              className={`mt-3 rounded-md bg-black/5 ${
+                isSidebarCollapsed
+                  ? "flex justify-center px-0 py-2"
+                  : "flex items-center gap-2 px-2 py-2"
+              }`}
+              title={isSidebarCollapsed ? "Local Execution · Private, local-first by design" : undefined}
+            >
               <ShieldCheck className="w-3.5 h-3.5 text-chart-1" />
-              <div className="flex flex-col">
-                <span className="text-[10px] font-medium leading-tight">Local Execution</span>
-                <span className="text-[9px] text-muted-foreground leading-tight">Private, local-first by design</span>
-              </div>
+              {!isSidebarCollapsed ? (
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-medium leading-tight">Local Execution</span>
+                  <span className="text-[9px] text-muted-foreground leading-tight">Private, local-first by design</span>
+                </div>
+              ) : null}
             </div>
           </div>
         </aside>

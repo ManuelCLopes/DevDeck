@@ -199,11 +199,6 @@ export interface WorkspaceUserActivitySummary {
   last90Days: WorkspaceUserActivityPeriod;
 }
 
-export interface WorkspaceUserActivityScopes {
-  github: WorkspaceUserActivitySummary;
-  workspace: WorkspaceUserActivitySummary;
-}
-
 export interface WorkspaceSnapshot {
   activities: WorkspaceActivityItem[];
   authoredPullRequests: WorkspaceAuthoredPullRequestItem[];
@@ -224,5 +219,5 @@ export interface WorkspaceSnapshot {
     repositories: number;
     staleBranches: number;
   };
-  userActivity: WorkspaceUserActivityScopes;
+  userActivity: WorkspaceUserActivitySummary;
 }

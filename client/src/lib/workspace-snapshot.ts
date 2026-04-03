@@ -73,7 +73,7 @@ interface RepositoryScanResult {
   project: WorkspaceProject;
   pullRequests: WorkspacePullRequestItem[];
   reviews: WorkspaceReviewItem[];
-  userActivity: WorkspaceSnapshot["userActivity"]["workspace"];
+  userActivity: WorkspaceSnapshot["userActivity"];
 }
 
 const USER_ACTIVITY_WINDOWS = [
@@ -108,7 +108,7 @@ function createUserActivityPoints(days: number) {
   });
 }
 
-function createEmptyUserActivitySummary(): WorkspaceSnapshot["userActivity"]["workspace"] {
+function createEmptyUserActivitySummary(): WorkspaceSnapshot["userActivity"] {
   return {
     last7Days: {
       commits: 0,
@@ -138,11 +138,11 @@ function createEmptyUserActivitySummary(): WorkspaceSnapshot["userActivity"]["wo
 }
 
 function updateUserActivityPoint(
-  summary: WorkspaceSnapshot["userActivity"]["workspace"],
+  summary: WorkspaceSnapshot["userActivity"],
   key: (typeof USER_ACTIVITY_WINDOWS)[number]["key"],
   timestamp: string,
   updater: (
-    point: WorkspaceSnapshot["userActivity"]["workspace"][typeof key]["points"][number],
+    point: WorkspaceSnapshot["userActivity"][typeof key]["points"][number],
   ) => void,
 ) {
   const eventDate = new Date(timestamp);
@@ -183,7 +183,7 @@ function forEachMatchingUserActivityWindow(
 }
 
 function addUserActivityCommit(
-  summary: WorkspaceSnapshot["userActivity"]["workspace"],
+  summary: WorkspaceSnapshot["userActivity"],
   timestamp: string,
 ) {
   forEachMatchingUserActivityWindow(timestamp, (key) => {
@@ -195,9 +195,9 @@ function addUserActivityCommit(
 }
 
 function mergeUserActivitySummaries(
-  summaries: WorkspaceSnapshot["userActivity"]["workspace"][],
+  summaries: WorkspaceSnapshot["userActivity"][],
 ) {
-  return summaries.reduce<WorkspaceSnapshot["userActivity"]["workspace"]>((accumulator, summary) => {
+  return summaries.reduce<WorkspaceSnapshot["userActivity"]>((accumulator, summary) => {
     for (const window of USER_ACTIVITY_WINDOWS) {
       accumulator[window.key].commits += summary[window.key].commits;
       accumulator[window.key].linesAdded += summary[window.key].linesAdded;
@@ -760,10 +760,7 @@ function buildWorkspaceSnapshot(results: RepositoryScanResult[]) {
       repositories: projects.length,
       staleBranches: reviews.filter((review) => review.status === "stale").length,
     },
-    userActivity: {
-      github: createEmptyUserActivitySummary(),
-      workspace: workspaceUserActivity,
-    },
+    userActivity: workspaceUserActivity,
   } satisfies WorkspaceSnapshot;
 }
 

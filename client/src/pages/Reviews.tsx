@@ -34,7 +34,6 @@ import {
   Clock,
   Github,
   GitPullRequest,
-  RefreshCw,
   X,
 } from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo } from "react";
@@ -46,6 +45,7 @@ const PullRequestDetailDialog = lazy(
 
 const STALE_PULL_REQUEST_DAYS = 5;
 type ReviewQueueFocus = "all" | PullRequestWatchStatus;
+const OPEN_PULL_REQUEST_FILTERS: PullRequestFocus[] = ["all", "no_reviews"];
 
 export default function Reviews() {
   const [location, setLocation] = useLocation();
@@ -60,7 +60,7 @@ export default function Reviews() {
     "devdeck:reviews:queue-focus",
     "all",
   );
-  const { data: snapshot, isLoading, isFetching, refetch } = useWorkspaceSnapshot();
+  const { data: snapshot, isLoading } = useWorkspaceSnapshot();
   const pullRequestWatchlist = usePullRequestWatchlist();
   const allPullRequests = snapshot?.pullRequests ?? [];
   const pullRequests = useMemo(
@@ -149,33 +149,23 @@ export default function Reviews() {
   useEffect(() => {
     const nextFocus = new URLSearchParams(search).get("focus");
     if (nextFocus === "in_review" || nextFocus === "done") {
-      setFocusFilter("reviewed");
+      setFocusFilter("all");
       return;
     }
 
-    if (
-      nextFocus === "all" ||
-      nextFocus === "my_queue" ||
-      nextFocus === "marked_for_review" ||
-      nextFocus === "reviewed" ||
-      nextFocus === "no_reviews" ||
-      nextFocus === "checks_failing" ||
-      nextFocus === "checks_passing" ||
-      nextFocus === "needs_my_review" ||
-      nextFocus === "needs_my_follow_up" ||
-      nextFocus === "authored_by_me" ||
-      nextFocus === "changes_requested" ||
-      nextFocus === "reviewed_by_me" ||
-      nextFocus === "waiting_on_others"
-    ) {
+    if (nextFocus === "all" || nextFocus === "no_reviews") {
       setFocusFilter(nextFocus);
+      return;
+    }
+
+    if (nextFocus) {
+      setFocusFilter("all");
     }
   }, [search, setFocusFilter]);
 
   useEffect(() => {
-    const persistedFocus = String(focusFilter);
-    if (persistedFocus === "in_review" || persistedFocus === "done") {
-      setFocusFilter("reviewed");
+    if (!OPEN_PULL_REQUEST_FILTERS.includes(focusFilter)) {
+      setFocusFilter("all");
     }
   }, [focusFilter, setFocusFilter]);
 
@@ -214,34 +204,9 @@ export default function Reviews() {
   }> = [
     { count: pullRequests.length, id: "all", label: "All PRs" },
     {
-      count: markedPullRequestCount + reviewedPullRequestCount,
-      id: "my_queue",
-      label: "My Queue",
-    },
-    {
-      count: markedPullRequestCount,
-      id: "marked_for_review",
-      label: "Marked For Review",
-    },
-    {
-      count: reviewedPullRequestCount,
-      id: "reviewed",
-      label: "Reviewed",
-    },
-    {
       count: filterPullRequestsByFocus(pullRequests, "no_reviews").length,
       id: "no_reviews",
       label: "No Reviews",
-    },
-    {
-      count: filterPullRequestsByFocus(pullRequests, "checks_failing").length,
-      id: "checks_failing",
-      label: "Checks Failing",
-    },
-    {
-      count: filterPullRequestsByFocus(pullRequests, "checks_passing").length,
-      id: "checks_passing",
-      label: "Checks Passing",
     },
   ];
 
@@ -276,21 +241,17 @@ export default function Reviews() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowDependabotPullRequests((current) => !current)}
-              className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
-            >
-              {showDependabotPullRequests ? "Hide Dependabot" : "Show Dependabot"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void refetch()}
-              className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
+            <div className="inline-flex items-center text-xs text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => setShowDependabotPullRequests((current) => !current)}
+                className="font-medium text-primary transition-colors hover:text-primary/80 hover:underline"
+              >
+                {showDependabotPullRequests
+                  ? "Hide Dependabot PRs"
+                  : "Show Dependabot PRs"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -457,6 +418,7 @@ export default function Reviews() {
                                 View
                               </button>
                               <PullRequestQueueControl
+                                mode="queue"
                                 onStatusChange={(status) =>
                                   handleSetPullRequestQueueStatus(pullRequest.id, status)
                                 }
@@ -617,6 +579,7 @@ export default function Reviews() {
                               </button>
                               <div onClick={(event) => event.stopPropagation()}>
                                 <PullRequestQueueControl
+                                  mode="open"
                                   onStatusChange={(status) =>
                                     handleSetPullRequestQueueStatus(
                                       pullRequest.id,
@@ -725,9 +688,6 @@ export default function Reviews() {
                               className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${statusMeta.className}`}
                             >
                               {statusMeta.label}
-                            </span>
-                            <span className="rounded-full border border-border/60 bg-secondary/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                              {pullRequest.headBranch} to {pullRequest.baseBranch}
                             </span>
                           </div>
                           <div className="flex justify-end text-[11px] text-muted-foreground">

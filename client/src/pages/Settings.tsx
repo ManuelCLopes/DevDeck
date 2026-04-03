@@ -50,7 +50,7 @@ import type { WorkspaceSelection } from "@shared/workspace";
 
 export default function Settings() {
   const [, setLocation] = useLocation();
-  const { data: snapshot, isFetching, refetch } = useWorkspaceSnapshot();
+  const { data: snapshot, refetch } = useWorkspaceSnapshot();
   const { preferences, setPreference } = useAppPreferences();
   const [isGitHubConnectOpen, setIsGitHubConnectOpen] = useState(false);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
@@ -750,13 +750,6 @@ export default function Settings() {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void refetch()}
-                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-white text-foreground border border-border hover:bg-secondary/50 whitespace-nowrap shadow-sm transition-colors"
-                  >
-                    {isFetching ? "Refreshing..." : "Refresh Status"}
-                  </button>
                   {connected ? (
                     <button
                       type="button"

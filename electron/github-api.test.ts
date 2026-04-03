@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createGitHubPullRequestComment,
+  fetchGitHubCommitSearchResults,
   fetchGitHubPullRequestSearchResults,
   fetchGitHubPullRequests,
   GitHubApiError,
@@ -190,5 +191,63 @@ test("fetchGitHubPullRequestSearchResults encodes the search query and returns i
   assert.match(
     requestUrl,
     /https:\/\/api\.github\.com\/search\/issues\?q=is%3Apr%20author%3Amanuel%20merged%3A%3E%3D2026-01-01&per_page=100&page=1$/,
+  );
+});
+
+test("fetchGitHubCommitSearchResults returns commit nodes from GraphQL search", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl = "";
+  let requestInit: RequestInit | undefined;
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requestUrl = String(input);
+    requestInit = init;
+    return new Response(
+      JSON.stringify({
+        data: {
+          search: {
+            nodes: [
+              {
+                additions: 12,
+                committedDate: "2026-04-03T10:00:00Z",
+                deletions: 4,
+                oid: "abc123",
+                repository: {
+                  nameWithOwner: "acme/repo",
+                },
+              },
+            ],
+            pageInfo: {
+              endCursor: null,
+              hasNextPage: false,
+            },
+          },
+        },
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      },
+    );
+  }) as typeof fetch;
+
+  try {
+    const response = await fetchGitHubCommitSearchResults(
+      "author:manuel author-date:>=2026-01-01 sort:author-date-desc",
+      "test-token",
+    );
+    assert.equal(response.items.length, 1);
+    assert.equal(response.items[0]?.additions, 12);
+    assert.equal(response.items[0]?.deletions, 4);
+    assert.equal(response.items[0]?.oid, "abc123");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(requestUrl, "https://api.github.com/graphql");
+  assert.equal(requestInit?.method, "POST");
+  assert.equal(
+    (requestInit?.headers as Record<string, string>).Authorization,
+    "Bearer test-token",
   );
 });
