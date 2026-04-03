@@ -6,10 +6,12 @@ import {
   fetchGitHubCommitStatus,
   fetchGitHubPullRequestReviews,
   fetchGitHubPullRequests,
+  fetchGitHubPullRequestSearchResults,
   fetchGitHubViewer,
   GitHubApiError,
   GitHubConnectivityError,
   type GitHubApiPullRequest,
+  type GitHubApiPullRequestSearchItem,
   type GitHubApiPullRequestReview,
 } from "./github-api";
 import { readStoredGitHubToken } from "./github-auth";
@@ -114,6 +116,8 @@ const GITHUB_CONNECTIVITY_ERROR_TTL_MS = 1000 * 30;
 const PULL_REQUEST_CACHE_TTL_MS = 1000 * 60 * 2;
 const CI_STATUS_CACHE_TTL_MS = 1000 * 60 * 2;
 const USER_ACTIVITY_CACHE_TTL_MS = 1000 * 60 * 2;
+const GITHUB_SEARCH_MAX_PAGES = 10;
+const GITHUB_SEARCH_PAGE_SIZE = 100;
 const USER_ACTIVITY_WINDOWS = [
   { days: 7, key: "last7Days" },
   { days: 30, key: "last30Days" },
@@ -836,6 +840,24 @@ function parseGitHubRepository(remoteUrl: string | null) {
   return null;
 }
 
+function parseGitHubRepositorySlugFromApiUrl(repositoryUrl: string | null | undefined) {
+  const normalizedRepositoryUrl = repositoryUrl?.trim();
+  if (!normalizedRepositoryUrl) {
+    return null;
+  }
+
+  const match = normalizedRepositoryUrl.match(
+    /^https:\/\/api\.github\.com\/repos\/([^/]+)\/(.+)$/,
+  );
+  const owner = match?.[1];
+  const repo = match?.[2];
+  if (!owner || !repo) {
+    return null;
+  }
+
+  return `${owner}/${repo}`;
+}
+
 function normalizePullRequestRecord(
   pullRequest: GitHubApiPullRequest,
   reviews: GitHubApiPullRequestReview[],
@@ -1093,12 +1115,12 @@ async function getLocalUserActivitySummary(
 }
 
 async function getGitHubUserActivitySummary(
-  repositorySlug: string | null,
+  repositorySlugs: string[],
   githubAuthStatus: GitHubAuthStatus,
 ) {
   const summary = createEmptyUserActivitySummary();
   if (
-    !repositorySlug ||
+    repositorySlugs.length === 0 ||
     !githubAuthStatus.authenticated ||
     !githubAuthStatus.token ||
     !githubAuthStatus.viewerLogin
@@ -1106,52 +1128,102 @@ async function getGitHubUserActivitySummary(
     return summary;
   }
 
-  const cacheKey = `${repositorySlug}:${githubAuthStatus.viewerLogin}`;
+  const normalizedRepositorySlugs = Array.from(new Set(repositorySlugs)).sort();
+  const repositorySlugSet = new Set(normalizedRepositorySlugs);
+  const cacheKey = `global:${githubAuthStatus.viewerLogin}:${normalizedRepositorySlugs.join(",")}`;
   const cachedSummary = userActivityCache.get(cacheKey);
   if (cachedSummary && cachedSummary.expiresAt > Date.now()) {
     return cachedSummary.summary;
   }
 
   try {
-    const pullRequests = await fetchGitHubPullRequests(
-      repositorySlug,
-      githubAuthStatus.token,
-      {
-        perPage: 100,
-        state: "all",
-      },
-    );
-    const oldestWindowTime =
-      Date.now() - USER_ACTIVITY_WINDOWS[USER_ACTIVITY_WINDOWS.length - 1].days * 24 * 60 * 60 * 1000;
+    const oldestWindowStart = new Date(
+      Date.now() -
+        USER_ACTIVITY_WINDOWS[USER_ACTIVITY_WINDOWS.length - 1].days *
+          24 *
+          60 *
+          60 *
+          1000,
+    )
+      .toISOString()
+      .slice(0, 10);
 
-    for (const pullRequest of pullRequests) {
-      if (
-        pullRequest.user?.login === githubAuthStatus.viewerLogin &&
-        pullRequest.merged_at
-      ) {
-        forEachMatchingUserActivityWindow(pullRequest.merged_at, (key) => {
-          summary[key].pullRequestsMerged += 1;
-          updateUserActivityPoint(summary, key, pullRequest.merged_at!, (point) => {
-            point.pullRequestsMerged += 1;
-          });
-        });
+    const fetchSearchResults = async (query: string) => {
+      const items: GitHubApiPullRequestSearchItem[] = [];
+
+      for (let page = 1; page <= GITHUB_SEARCH_MAX_PAGES; page += 1) {
+        const response = await fetchGitHubPullRequestSearchResults(
+          query,
+          githubAuthStatus.token!,
+          {
+            page,
+            perPage: GITHUB_SEARCH_PAGE_SIZE,
+          },
+        );
+        items.push(...response.items);
+
+        if (
+          response.items.length < GITHUB_SEARCH_PAGE_SIZE ||
+          items.length >= response.total_count
+        ) {
+          break;
+        }
       }
+
+      return items.filter((item) => {
+        const repositorySlug = parseGitHubRepositorySlugFromApiUrl(
+          item.repository_url,
+        );
+        return repositorySlug ? repositorySlugSet.has(repositorySlug) : false;
+      });
+    };
+
+    const mergedPullRequests = await fetchSearchResults(
+      `is:pr author:${githubAuthStatus.viewerLogin} merged:>=${oldestWindowStart}`,
+    );
+
+    for (const pullRequest of mergedPullRequests) {
+      const mergedAt = pullRequest.closed_at ?? pullRequest.updated_at;
+      if (!mergedAt) {
+        continue;
+      }
+
+      forEachMatchingUserActivityWindow(mergedAt, (key) => {
+        summary[key].pullRequestsMerged += 1;
+        updateUserActivityPoint(summary, key, mergedAt, (point) => {
+          point.pullRequestsMerged += 1;
+        });
+      });
     }
 
-    const reviewCandidates = pullRequests.filter((pullRequest) => {
-      const updatedAt = new Date(pullRequest.updated_at).getTime();
-      const mergedAt = pullRequest.merged_at
-        ? new Date(pullRequest.merged_at).getTime()
-        : 0;
+    const reviewedPullRequests = await fetchSearchResults(
+      `is:pr reviewed-by:${githubAuthStatus.viewerLogin} updated:>=${oldestWindowStart}`,
+    );
+    const uniqueReviewCandidateMap = new Map<
+      string,
+      { number: number; repositorySlug: string }
+    >();
+    for (const pullRequest of reviewedPullRequests) {
+      const repositorySlug = parseGitHubRepositorySlugFromApiUrl(
+        pullRequest.repository_url,
+      );
+      if (!repositorySlug) {
+        continue;
+      }
 
-      return updatedAt >= oldestWindowTime || mergedAt >= oldestWindowTime;
-    });
+      uniqueReviewCandidateMap.set(`${repositorySlug}#${pullRequest.number}`, {
+        number: pullRequest.number,
+        repositorySlug,
+      });
+    }
+    const uniqueReviewCandidates = Array.from(uniqueReviewCandidateMap.values());
 
     const pullRequestReviews = await Promise.all(
-      reviewCandidates.map(async (pullRequest) => ({
+      uniqueReviewCandidates.map(async (pullRequest) => ({
         number: pullRequest.number,
+        repositorySlug: pullRequest.repositorySlug,
         reviews: await fetchGitHubPullRequestReviews(
-          repositorySlug,
+          pullRequest.repositorySlug,
           pullRequest.number,
           githubAuthStatus.token!,
         ),
@@ -1208,7 +1280,7 @@ async function getGitHubUserActivitySummary(
     }
 
     console.error(
-      `Failed to load user activity insights for ${repositorySlug}`,
+      `Failed to load user activity insights for ${normalizedRepositorySlugs.join(",")}`,
       error,
     );
     return summary;
@@ -1218,16 +1290,8 @@ async function getGitHubUserActivitySummary(
 async function getRepositoryUserActivitySummary(
   repositoryPath: string,
   headLogText: string | null,
-  remoteUrl: string | null,
-  githubAuthStatus: GitHubAuthStatus,
 ) {
-  const githubRepository = parseGitHubRepository(remoteUrl);
-  const [localSummary, githubSummary] = await Promise.all([
-    getLocalUserActivitySummary(repositoryPath, headLogText),
-    getGitHubUserActivitySummary(githubRepository?.slug ?? null, githubAuthStatus),
-  ]);
-
-  return mergeUserActivitySummaries([localSummary, githubSummary]);
+  return getLocalUserActivitySummary(repositoryPath, headLogText);
 }
 
 async function getGitHubAuthStatus(): Promise<GitHubAuthStatus> {
@@ -1852,8 +1916,6 @@ async function scanRepository(
       getRepositoryUserActivitySummary(
         repositoryPath,
         headLogText,
-        remoteUrl,
-        githubAuthStatus,
       ),
     ]);
     const project: WorkspaceProject = {
@@ -1976,6 +2038,7 @@ function createInsights(projects: WorkspaceProject[]) {
 function buildWorkspaceSnapshot(
   results: RepositoryScanResult[],
   githubStatus: WorkspaceGitHubStatus,
+  githubUserActivitySummary: WorkspaceUserActivitySummary = createEmptyUserActivitySummary(),
 ) {
   const projects = results.map((result) => result.project);
   const authoredPullRequests = results
@@ -2003,7 +2066,7 @@ function buildWorkspaceSnapshot(
         new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
     );
   const userActivity = mergeUserActivitySummaries(
-    results.map((result) => result.userActivity),
+    [...results.map((result) => result.userActivity), githubUserActivitySummary],
   );
 
   return {
@@ -2051,6 +2114,9 @@ export async function loadWorkspaceSnapshot(selection: {
       ),
     ),
   );
+  const scannedResults = repositoryResults.filter(
+    (result): result is RepositoryScanResult => result !== null,
+  );
   const connectedRepositoryCount = repositoryResults.reduce((count, result) => {
     if (!result || !parseGitHubRepository(result.project.remoteUrl)) {
       return count;
@@ -2058,6 +2124,17 @@ export async function loadWorkspaceSnapshot(selection: {
 
     return count + 1;
   }, 0);
+  const githubRepositorySlugs = Array.from(
+    new Set(
+      scannedResults
+        .map((result) => parseGitHubRepository(result.project.remoteUrl)?.slug ?? null)
+        .filter((slug): slug is string => Boolean(slug)),
+    ),
+  );
+  const githubUserActivitySummary = await getGitHubUserActivitySummary(
+    githubRepositorySlugs,
+    githubAuthStatus,
+  );
   const connectivityFailure = getRecentGitHubConnectivityFailure();
   const githubStatus: WorkspaceGitHubStatus = {
     authenticated: githubAuthStatus.authenticated,
@@ -2076,9 +2153,8 @@ export async function loadWorkspaceSnapshot(selection: {
   };
 
   return buildWorkspaceSnapshot(
-    repositoryResults.filter(
-      (result): result is RepositoryScanResult => result !== null,
-    ),
+    scannedResults,
     githubStatus,
+    githubUserActivitySummary,
   );
 }

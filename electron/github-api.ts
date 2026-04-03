@@ -30,6 +30,22 @@ export interface GitHubApiPullRequest {
   user: { login: string } | null;
 }
 
+export interface GitHubApiPullRequestSearchItem {
+  closed_at: string | null;
+  html_url: string;
+  number: number;
+  repository_url: string;
+  title: string;
+  updated_at: string;
+  user: { login: string } | null;
+}
+
+interface GitHubApiSearchResponse<TItem> {
+  incomplete_results: boolean;
+  items: TItem[];
+  total_count: number;
+}
+
 interface GitHubApiRequestOptions {
   allowPublicFallback?: boolean;
   body?: string;
@@ -161,6 +177,23 @@ export function fetchGitHubPullRequests(
   const perPage = options?.perPage ?? 20;
   return githubApiRequest<GitHubApiPullRequest[]>(
     `/repos/${repositorySlug}/pulls?state=${state}&sort=updated&direction=desc&per_page=${perPage}`,
+    token,
+    { allowPublicFallback: true },
+  );
+}
+
+export function fetchGitHubPullRequestSearchResults(
+  query: string,
+  token: string,
+  options?: {
+    page?: number;
+    perPage?: number;
+  },
+) {
+  const page = options?.page ?? 1;
+  const perPage = options?.perPage ?? 100;
+  return githubApiRequest<GitHubApiSearchResponse<GitHubApiPullRequestSearchItem>>(
+    `/search/issues?q=${encodeURIComponent(query)}&per_page=${perPage}&page=${page}`,
     token,
     { allowPublicFallback: true },
   );

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createGitHubPullRequestComment,
+  fetchGitHubPullRequestSearchResults,
   fetchGitHubPullRequests,
   GitHubApiError,
   GitHubConnectivityError,
@@ -144,4 +145,50 @@ test("fetchGitHubPullRequests surfaces connectivity failures as GitHubConnectivi
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("fetchGitHubPullRequestSearchResults encodes the search query and returns items", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl = "";
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    requestUrl = String(input);
+    return new Response(
+      JSON.stringify({
+        incomplete_results: false,
+        items: [
+          {
+            closed_at: "2026-04-01T10:00:00Z",
+            html_url: "https://github.com/acme/repo/pull/42",
+            number: 42,
+            repository_url: "https://api.github.com/repos/acme/repo",
+            title: "Improve queue",
+            updated_at: "2026-04-01T10:00:00Z",
+            user: { login: "manuel" },
+          },
+        ],
+        total_count: 1,
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      },
+    );
+  }) as typeof fetch;
+
+  try {
+    const response = await fetchGitHubPullRequestSearchResults(
+      "is:pr author:manuel merged:>=2026-01-01",
+      "test-token",
+    );
+    assert.equal(response.items.length, 1);
+    assert.equal(response.items[0]?.number, 42);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.match(
+    requestUrl,
+    /https:\/\/api\.github\.com\/search\/issues\?q=is%3Apr%20author%3Amanuel%20merged%3A%3E%3D2026-01-01&per_page=100&page=1$/,
+  );
 });

@@ -4,7 +4,11 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { discoverWorkspace, loadWorkspaceSnapshot } from "./workspace";
+import {
+  clearWorkspaceSnapshotCaches,
+  discoverWorkspace,
+  loadWorkspaceSnapshot,
+} from "./workspace";
 
 function createCommittedRepository(repositoryPath: string) {
   mkdirSync(repositoryPath, { recursive: true });
@@ -394,4 +398,145 @@ test("loadWorkspaceSnapshot counts only the configured contributor's local commi
   delete process.env.DEVDECK_GITHUB_STORAGE;
   delete process.env.DEVDECK_GITHUB_TOKEN_PATH;
   rmSync(tempDirectory, { force: true, recursive: true });
+});
+
+test("loadWorkspaceSnapshot aggregates merged and reviewed PRs from GitHub across monitored repos", async () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), "devdeck-user-activity-github-"));
+  const workspaceRoot = join(tempDirectory, "workspace");
+  const repositoryPath = join(workspaceRoot, "alpha");
+  const tokenPath = join(tempDirectory, "github-token.json");
+  const originalFetch = globalThis.fetch;
+  process.env.DEVDECK_GITHUB_STORAGE = "file";
+  process.env.DEVDECK_GITHUB_TOKEN_PATH = tokenPath;
+
+  createCommittedRepository(repositoryPath);
+  execFileSync(
+    "git",
+    ["remote", "add", "origin", "https://github.com/acme/alpha.git"],
+    { cwd: repositoryPath, stdio: "ignore" },
+  );
+  writeFileSync(tokenPath, JSON.stringify({ token: "test-token" }), "utf8");
+  clearWorkspaceSnapshotCaches();
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const requestUrl = new URL(String(input));
+    const pathname = requestUrl.pathname;
+    const query = requestUrl.searchParams.get("q") ?? "";
+
+    if (pathname === "/user") {
+      return new Response(JSON.stringify({ login: "manuel" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    if (pathname === "/repos/acme/alpha/pulls") {
+      return new Response(JSON.stringify([]), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    if (pathname === "/repos/acme/alpha/commits/main/status") {
+      return new Response(JSON.stringify({ state: null }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    if (pathname === "/search/issues" && query.includes("author:manuel")) {
+      return new Response(
+        JSON.stringify({
+          incomplete_results: false,
+          items: [
+            {
+              closed_at: new Date().toISOString(),
+              html_url: "https://github.com/acme/alpha/pull/12",
+              number: 12,
+              repository_url: "https://api.github.com/repos/acme/alpha",
+              title: "Ship feature",
+              updated_at: new Date().toISOString(),
+              user: { login: "manuel" },
+            },
+            {
+              closed_at: new Date().toISOString(),
+              html_url: "https://github.com/acme/other/pull/13",
+              number: 13,
+              repository_url: "https://api.github.com/repos/acme/other",
+              title: "Ignore me",
+              updated_at: new Date().toISOString(),
+              user: { login: "manuel" },
+            },
+          ],
+          total_count: 2,
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
+
+    if (pathname === "/search/issues" && query.includes("reviewed-by:manuel")) {
+      return new Response(
+        JSON.stringify({
+          incomplete_results: false,
+          items: [
+            {
+              closed_at: null,
+              html_url: "https://github.com/acme/alpha/pull/99",
+              number: 99,
+              repository_url: "https://api.github.com/repos/acme/alpha",
+              title: "Review me",
+              updated_at: new Date().toISOString(),
+              user: { login: "teammate" },
+            },
+          ],
+          total_count: 1,
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
+
+    if (pathname === "/repos/acme/alpha/pulls/99/reviews") {
+      return new Response(
+        JSON.stringify([
+          {
+            id: 1,
+            state: "APPROVED",
+            submitted_at: new Date().toISOString(),
+            user: { login: "manuel" },
+          },
+        ]),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
+
+    throw new Error(`Unexpected fetch: ${requestUrl.toString()}`);
+  }) as typeof fetch;
+
+  try {
+    const discovery = await discoverWorkspace(workspaceRoot);
+    const snapshot = await loadWorkspaceSnapshot({
+      projects: discovery.candidates,
+      rootName: discovery.rootName,
+      rootPath: discovery.rootPath,
+    });
+
+    assert.equal(snapshot.githubStatus.state, "connected");
+    assert.equal(snapshot.userActivity.last7Days.pullRequestsMerged, 1);
+    assert.equal(snapshot.userActivity.last7Days.pullRequestsReviewed, 1);
+  } finally {
+    clearWorkspaceSnapshotCaches();
+    globalThis.fetch = originalFetch;
+    delete process.env.DEVDECK_GITHUB_STORAGE;
+    delete process.env.DEVDECK_GITHUB_TOKEN_PATH;
+    rmSync(tempDirectory, { force: true, recursive: true });
+  }
 });
