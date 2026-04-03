@@ -1115,12 +1115,10 @@ async function getLocalUserActivitySummary(
 }
 
 async function getGitHubUserActivitySummary(
-  repositorySlugs: string[],
   githubAuthStatus: GitHubAuthStatus,
 ) {
   const summary = createEmptyUserActivitySummary();
   if (
-    repositorySlugs.length === 0 ||
     !githubAuthStatus.authenticated ||
     !githubAuthStatus.token ||
     !githubAuthStatus.viewerLogin
@@ -1128,9 +1126,7 @@ async function getGitHubUserActivitySummary(
     return summary;
   }
 
-  const normalizedRepositorySlugs = Array.from(new Set(repositorySlugs)).sort();
-  const repositorySlugSet = new Set(normalizedRepositorySlugs);
-  const cacheKey = `global:${githubAuthStatus.viewerLogin}:${normalizedRepositorySlugs.join(",")}`;
+  const cacheKey = `global:${githubAuthStatus.viewerLogin}`;
   const cachedSummary = userActivityCache.get(cacheKey);
   if (cachedSummary && cachedSummary.expiresAt > Date.now()) {
     return cachedSummary.summary;
@@ -1170,12 +1166,7 @@ async function getGitHubUserActivitySummary(
         }
       }
 
-      return items.filter((item) => {
-        const repositorySlug = parseGitHubRepositorySlugFromApiUrl(
-          item.repository_url,
-        );
-        return repositorySlug ? repositorySlugSet.has(repositorySlug) : false;
-      });
+      return items;
     };
 
     const mergedPullRequests = await fetchSearchResults(
@@ -1199,10 +1190,7 @@ async function getGitHubUserActivitySummary(
     const reviewedPullRequests = await fetchSearchResults(
       `is:pr reviewed-by:${githubAuthStatus.viewerLogin} updated:>=${oldestWindowStart}`,
     );
-    const uniqueReviewCandidateMap = new Map<
-      string,
-      { number: number; repositorySlug: string }
-    >();
+    const uniqueReviewCandidateMap = new Map<string, { number: number; repositorySlug: string }>();
     for (const pullRequest of reviewedPullRequests) {
       const repositorySlug = parseGitHubRepositorySlugFromApiUrl(
         pullRequest.repository_url,
@@ -1280,7 +1268,7 @@ async function getGitHubUserActivitySummary(
     }
 
     console.error(
-      `Failed to load user activity insights for ${normalizedRepositorySlugs.join(",")}`,
+      `Failed to load user activity insights for ${githubAuthStatus.viewerLogin}`,
       error,
     );
     return summary;
@@ -2065,8 +2053,8 @@ function buildWorkspaceSnapshot(
       (left, right) =>
         new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
     );
-  const userActivity = mergeUserActivitySummaries(
-    [...results.map((result) => result.userActivity), githubUserActivitySummary],
+  const workspaceUserActivity = mergeUserActivitySummaries(
+    results.map((result) => result.userActivity),
   );
 
   return {
@@ -2095,7 +2083,10 @@ function buildWorkspaceSnapshot(
       repositories: projects.length,
       staleBranches: reviews.filter((review) => review.status === "stale").length,
     },
-    userActivity,
+    userActivity: {
+      github: githubUserActivitySummary,
+      workspace: workspaceUserActivity,
+    },
   } satisfies WorkspaceSnapshot;
 }
 
@@ -2124,15 +2115,7 @@ export async function loadWorkspaceSnapshot(selection: {
 
     return count + 1;
   }, 0);
-  const githubRepositorySlugs = Array.from(
-    new Set(
-      scannedResults
-        .map((result) => parseGitHubRepository(result.project.remoteUrl)?.slug ?? null)
-        .filter((slug): slug is string => Boolean(slug)),
-    ),
-  );
   const githubUserActivitySummary = await getGitHubUserActivitySummary(
-    githubRepositorySlugs,
     githubAuthStatus,
   );
   const connectivityFailure = getRecentGitHubConnectivityFailure();

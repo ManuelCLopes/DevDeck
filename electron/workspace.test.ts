@@ -340,34 +340,34 @@ test("loadWorkspaceSnapshot aggregates user activity insights from local git his
     rootPath: discovery.rootPath,
   });
 
-  assert.equal(snapshot.userActivity.last7Days.commits, 2);
-  assert.equal(snapshot.userActivity.last7Days.linesAdded, 3);
-  assert.equal(snapshot.userActivity.last7Days.linesDeleted, 1);
-  assert.equal(snapshot.userActivity.last7Days.pullRequestsMerged, 0);
-  assert.equal(snapshot.userActivity.last7Days.pullRequestsReviewed, 0);
-  assert.equal(snapshot.userActivity.last7Days.points.length, 7);
-  assert.equal(snapshot.userActivity.last30Days.points.length, 30);
-  assert.equal(snapshot.userActivity.last90Days.points.length, 90);
+  assert.equal(snapshot.userActivity.workspace.last7Days.commits, 2);
+  assert.equal(snapshot.userActivity.workspace.last7Days.linesAdded, 3);
+  assert.equal(snapshot.userActivity.workspace.last7Days.linesDeleted, 1);
+  assert.equal(snapshot.userActivity.workspace.last7Days.pullRequestsMerged, 0);
+  assert.equal(snapshot.userActivity.workspace.last7Days.pullRequestsReviewed, 0);
+  assert.equal(snapshot.userActivity.workspace.last7Days.points.length, 7);
+  assert.equal(snapshot.userActivity.workspace.last30Days.points.length, 30);
+  assert.equal(snapshot.userActivity.workspace.last90Days.points.length, 90);
   assert.equal(
-    snapshot.userActivity.last7Days.points.reduce(
+    snapshot.userActivity.workspace.last7Days.points.reduce(
       (total, point) => total + point.commits,
       0,
     ),
-    snapshot.userActivity.last7Days.commits,
+    snapshot.userActivity.workspace.last7Days.commits,
   );
   assert.equal(
-    snapshot.userActivity.last7Days.points.reduce(
+    snapshot.userActivity.workspace.last7Days.points.reduce(
       (total, point) => total + point.linesAdded,
       0,
     ),
-    snapshot.userActivity.last7Days.linesAdded,
+    snapshot.userActivity.workspace.last7Days.linesAdded,
   );
   assert.equal(
-    snapshot.userActivity.last7Days.points.reduce(
+    snapshot.userActivity.workspace.last7Days.points.reduce(
       (total, point) => total + point.linesDeleted,
       0,
     ),
-    snapshot.userActivity.last7Days.linesDeleted,
+    snapshot.userActivity.workspace.last7Days.linesDeleted,
   );
 
   delete process.env.DEVDECK_GITHUB_STORAGE;
@@ -391,16 +391,16 @@ test("loadWorkspaceSnapshot counts only the configured contributor's local commi
     rootPath: discovery.rootPath,
   });
 
-  assert.equal(snapshot.userActivity.last7Days.commits, 1);
-  assert.equal(snapshot.userActivity.last7Days.linesAdded, 1);
-  assert.equal(snapshot.userActivity.last7Days.linesDeleted, 0);
+  assert.equal(snapshot.userActivity.workspace.last7Days.commits, 1);
+  assert.equal(snapshot.userActivity.workspace.last7Days.linesAdded, 1);
+  assert.equal(snapshot.userActivity.workspace.last7Days.linesDeleted, 0);
 
   delete process.env.DEVDECK_GITHUB_STORAGE;
   delete process.env.DEVDECK_GITHUB_TOKEN_PATH;
   rmSync(tempDirectory, { force: true, recursive: true });
 });
 
-test("loadWorkspaceSnapshot aggregates merged and reviewed PRs from GitHub across monitored repos", async () => {
+test("loadWorkspaceSnapshot aggregates merged and reviewed PRs from GitHub across the connected account", async () => {
   const tempDirectory = mkdtempSync(join(tmpdir(), "devdeck-user-activity-github-"));
   const workspaceRoot = join(tempDirectory, "workspace");
   const repositoryPath = join(workspaceRoot, "alpha");
@@ -530,8 +530,8 @@ test("loadWorkspaceSnapshot aggregates merged and reviewed PRs from GitHub acros
     });
 
     assert.equal(snapshot.githubStatus.state, "connected");
-    assert.equal(snapshot.userActivity.last7Days.pullRequestsMerged, 1);
-    assert.equal(snapshot.userActivity.last7Days.pullRequestsReviewed, 1);
+    assert.equal(snapshot.userActivity.github.last7Days.pullRequestsMerged, 2);
+    assert.equal(snapshot.userActivity.github.last7Days.pullRequestsReviewed, 1);
   } finally {
     clearWorkspaceSnapshotCaches();
     globalThis.fetch = originalFetch;

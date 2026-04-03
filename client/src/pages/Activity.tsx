@@ -44,6 +44,10 @@ export default function Activity() {
     "devdeck:activity:filter",
     "all",
   );
+  const [activityScope, setActivityScope] = usePersistentState<"workspace" | "github">(
+    "devdeck:activity:scope",
+    "workspace",
+  );
   const [period, setPeriod] = usePersistentState<"7d" | "30d" | "90d">(
     "devdeck:activity:period",
     "7d",
@@ -56,12 +60,16 @@ export default function Activity() {
     }
   }, [filter, setFilter]);
 
+  const selectedUserActivitySummary =
+    activityScope === "github"
+      ? snapshot?.userActivity.github
+      : snapshot?.userActivity.workspace;
   const selectedUserActivity =
     period === "30d"
-      ? snapshot?.userActivity.last30Days
+      ? selectedUserActivitySummary?.last30Days
       : period === "90d"
-        ? snapshot?.userActivity.last90Days
-        : snapshot?.userActivity.last7Days;
+        ? selectedUserActivitySummary?.last90Days
+        : selectedUserActivitySummary?.last7Days;
   const activityChartData = useMemo(
     () => (selectedUserActivity?.points ?? []).map((point) => ({ ...point })),
     [selectedUserActivity?.points],
@@ -155,10 +163,32 @@ export default function Activity() {
                 Your Activity
               </h2>
               <p className="text-sm text-muted-foreground">
-                Personal output across the monitored workspace for the selected period.
+                {activityScope === "github"
+                  ? "Personal GitHub pull request activity across your account for the selected period."
+                  : "Personal output across the monitored workspace for the selected period."}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { id: "workspace", label: "Workspace" },
+                  { id: "github", label: "GitHub" },
+                ].map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setActivityScope(option.id as typeof activityScope)}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      activityScope === option.id
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border/60 bg-white text-muted-foreground hover:border-black/15 hover:text-foreground"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
               {[
                 { id: "7d", label: "7 Days" },
                 { id: "30d", label: "30 Days" },
@@ -177,18 +207,21 @@ export default function Activity() {
                   {option.label}
                 </button>
               ))}
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Commits
-              </h3>
-              <p className="mt-2 text-3xl font-bold tracking-tight">
-                {formatCount(selectedUserActivity?.commits ?? 0)}
-              </p>
-            </div>
+          <div className={`grid grid-cols-1 gap-4 ${activityScope === "github" ? "sm:grid-cols-2 xl:grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
+            {activityScope === "workspace" ? (
+              <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Commits
+                </h3>
+                <p className="mt-2 text-3xl font-bold tracking-tight">
+                  {formatCount(selectedUserActivity?.commits ?? 0)}
+                </p>
+              </div>
+            ) : null}
             <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 PRs Reviewed
@@ -207,7 +240,7 @@ export default function Activity() {
             </div>
           </div>
 
-          {snapshot?.githubStatus.state !== "connected" ? (
+          {activityScope === "github" && snapshot?.githubStatus.state !== "connected" ? (
             <p className="text-xs text-muted-foreground">
               GitHub must be connected in Preferences for PR merged/reviewed totals.
             </p>
@@ -217,18 +250,26 @@ export default function Activity() {
             <div className="space-y-1">
               <h3 className="text-sm font-semibold text-foreground">Contribution Trend</h3>
               <p className="text-xs text-muted-foreground">
-                Daily commits, PR reviews, and merges for the selected period.
+                {activityScope === "github"
+                  ? "Daily GitHub PR reviews and merges for the selected period."
+                  : "Daily commits, PR reviews, and merges for the selected period."}
               </p>
-              <p className="text-xs text-muted-foreground">
-                Lines changed in this window:{" "}
-                <span className="font-medium text-foreground">
-                  +{formatCount(selectedUserActivity?.linesAdded ?? 0)}
-                </span>{" "}
-                /{" "}
-                <span className="font-medium text-foreground">
-                  -{formatCount(selectedUserActivity?.linesDeleted ?? 0)}
-                </span>
-              </p>
+              {activityScope === "workspace" ? (
+                <p className="text-xs text-muted-foreground">
+                  Lines changed in this window:{" "}
+                  <span className="font-medium text-foreground">
+                    +{formatCount(selectedUserActivity?.linesAdded ?? 0)}
+                  </span>{" "}
+                  /{" "}
+                  <span className="font-medium text-foreground">
+                    -{formatCount(selectedUserActivity?.linesDeleted ?? 0)}
+                  </span>
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  This scope reflects your GitHub activity beyond the repos currently monitored in DevDeck.
+                </p>
+              )}
             </div>
             <ChartContainer
               config={contributionChartConfig}
@@ -265,13 +306,15 @@ export default function Activity() {
                   verticalAlign="top"
                   content={<ChartLegendContent className="justify-start" />}
                 />
-                <Line
-                  dataKey="commits"
-                  dot={false}
-                  stroke="var(--color-commits)"
-                  strokeWidth={2.25}
-                  type="monotone"
-                />
+                {activityScope === "workspace" ? (
+                  <Line
+                    dataKey="commits"
+                    dot={false}
+                    stroke="var(--color-commits)"
+                    strokeWidth={2.25}
+                    type="monotone"
+                  />
+                ) : null}
                 <Line
                   dataKey="pullRequestsReviewed"
                   dot={false}
@@ -290,6 +333,17 @@ export default function Activity() {
             </ChartContainer>
           </section>
         </section>
+
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">
+              Local Activity Feed
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Repository events from the projects currently monitored in DevDeck.
+            </p>
+          </div>
+        </div>
 
         <div className="flex gap-2 border-b border-border/40 pb-4 flex-wrap">
           {[
