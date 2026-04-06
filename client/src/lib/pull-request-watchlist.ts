@@ -208,3 +208,37 @@ export function setPullRequestMarkedForReview(
 ) {
   setPullRequestWatchStatus(pullRequestId, marked ? "marked" : null);
 }
+
+export function syncPullRequestWatchlistStatuses(
+  reviewStates: Array<{ id: string; reviewedByViewer: boolean }>,
+) {
+  if (typeof window === "undefined" || reviewStates.length === 0) {
+    return;
+  }
+
+  const currentWatchlist = getPullRequestWatchlist();
+  let nextWatchlist: PullRequestWatchlist | null = null;
+
+  for (const reviewState of reviewStates) {
+    const currentEntry = currentWatchlist[reviewState.id];
+    if (!currentEntry) {
+      continue;
+    }
+
+    if (currentEntry.status === "marked" && reviewState.reviewedByViewer) {
+      if (!nextWatchlist) {
+        nextWatchlist = { ...currentWatchlist };
+      }
+
+      nextWatchlist[reviewState.id] = {
+        ...currentEntry,
+        status: "reviewed",
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  }
+
+  if (nextWatchlist) {
+    persistPullRequestWatchlist(nextWatchlist);
+  }
+}

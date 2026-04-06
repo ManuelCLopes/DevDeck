@@ -355,7 +355,8 @@ export default function Projects() {
                       const visibleBadges = signalBadges.filter(
                         (badge) =>
                           badge.label === "marked" ||
-                          badge.label === "reviewed",
+                          badge.label === "reviewed" ||
+                          badge.label === "awaiting follow-up",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =

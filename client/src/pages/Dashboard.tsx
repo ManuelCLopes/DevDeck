@@ -425,7 +425,8 @@ export default function Dashboard() {
                       const visibleBadges = signalBadges.filter(
                         (badge) =>
                           badge.label === "marked" ||
-                          badge.label === "reviewed",
+                          badge.label === "reviewed" ||
+                          badge.label === "awaiting follow-up",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =
@@ -476,6 +477,7 @@ export default function Dashboard() {
                               </button>
                               <div onClick={(event) => event.stopPropagation()}>
                                 <PullRequestQueueControl
+                                  awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
                                   mode="open"
                                   onStatusChange={(status) =>
                                     handleSetPullRequestQueueStatus(
@@ -631,7 +633,8 @@ export default function Dashboard() {
                       const visibleBadges = signalBadges.filter(
                         (badge) =>
                           badge.label === "marked" ||
-                          badge.label === "reviewed",
+                          badge.label === "reviewed" ||
+                          badge.label === "awaiting follow-up",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =
@@ -687,6 +690,7 @@ export default function Dashboard() {
                               </button>
                               <div onClick={(event) => event.stopPropagation()}>
                                 <PullRequestQueueControl
+                                  awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
                                   mode="open"
                                   onStatusChange={(status) =>
                                     handleSetPullRequestQueueStatus(

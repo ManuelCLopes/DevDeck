@@ -5,6 +5,7 @@ import {
   getPullRequestWatchlist,
   setPullRequestMarkedForReview,
   setPullRequestWatchStatus,
+  syncPullRequestWatchlistStatuses,
 } from "./pull-request-watchlist";
 
 class MemoryStorage {
@@ -133,6 +134,47 @@ test("setPullRequestWatchStatus persists the reviewed stage", () => {
 
     setPullRequestWatchStatus("repo#99", null);
     assert.equal(getPullRequestWatchStatus("repo#99"), null);
+  } finally {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: previousWindow,
+    });
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: previousLocalStorage,
+    });
+  }
+});
+
+test("syncPullRequestWatchlistStatuses upgrades marked pull requests after you review them", () => {
+  const previousWindow = globalThis.window;
+  const previousLocalStorage = globalThis.localStorage;
+  const localStorage = new MemoryStorage() as unknown as Storage;
+  const fakeWindow = {
+    addEventListener() {},
+    dispatchEvent() {
+      return true;
+    },
+    removeEventListener() {},
+  } as unknown as Window & typeof globalThis;
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: fakeWindow,
+  });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: localStorage,
+  });
+
+  try {
+    setPullRequestWatchStatus("repo#77", "marked");
+    syncPullRequestWatchlistStatuses([
+      { id: "repo#77", reviewedByViewer: true },
+      { id: "repo#99", reviewedByViewer: false },
+    ]);
+
+    assert.equal(getPullRequestWatchStatus("repo#77"), "reviewed");
   } finally {
     Object.defineProperty(globalThis, "window", {
       configurable: true,

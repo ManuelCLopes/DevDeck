@@ -38,6 +38,7 @@ import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { getDesktopApi } from "@/lib/desktop";
 import { getOpenAddProjectsDialogEvent } from "@/lib/project-import-events";
 import { setPullRequestWatchStatus } from "@/lib/pull-request-watchlist";
+import { syncPullRequestWatchlistStatuses } from "@/lib/pull-request-watchlist";
 import {
   getManagedProjectCollections,
 } from "@/lib/workspace-selection";
@@ -153,6 +154,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
   useWorkspaceAlerts(snapshot, preferences);
   useWorkspaceAutoRefresh();
   useDesktopWorkspaceMonitor(workspaceSelection, preferences);
+
+  useEffect(() => {
+    if (!snapshot?.pullRequests?.length) {
+      return;
+    }
+
+    syncPullRequestWatchlistStatuses(
+      snapshot.pullRequests.map((pullRequest) => ({
+        id: pullRequest.id,
+        reviewedByViewer: pullRequest.reviewedByViewer,
+      })),
+    );
+  }, [snapshot?.pullRequests]);
 
   const collapsedCollectionIdSet = useMemo(
     () => new Set(collapsedCollectionIds),

@@ -5,6 +5,7 @@ import {
   filterPullRequestsByFocus,
   getAuthoredPullRequestStatusMeta,
   getPullRequestCiStatusMeta,
+  getPullRequestDerivedQueueState,
   getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
   getPullRequestSignalBadges,
@@ -79,6 +80,43 @@ test("getPullRequestSignalBadges keeps only key PR signals", () => {
       {
         className: "bg-primary/10 text-primary border-primary/20",
         label: "marked",
+      },
+    ],
+  );
+});
+
+test("getPullRequestDerivedQueueState marks reviewed pull requests awaiting follow-up", () => {
+  assert.equal(
+    getPullRequestDerivedQueueState(
+      {
+        authoredByViewer: false,
+        hasUpdatesSinceViewerReview: true,
+        reviewedByViewer: true,
+      },
+      "reviewed",
+    ),
+    "awaiting_follow_up",
+  );
+});
+
+test("getPullRequestSignalBadges surfaces awaiting follow-up for reviewed queue items", () => {
+  assert.deepEqual(
+    getPullRequestSignalBadges(
+      {
+        authoredByViewer: false,
+        ciStatus: "pending",
+        hasUpdatesSinceViewerReview: true,
+        reviewCount: 1,
+        reviewState: "reviewed_by_you",
+        reviewedByOthersCount: 0,
+        reviewedByViewer: true,
+      },
+      "reviewed",
+    ),
+    [
+      {
+        className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
+        label: "awaiting follow-up",
       },
     ],
   );

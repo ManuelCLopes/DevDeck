@@ -32,6 +32,10 @@ interface PullRequestBadgeMeta {
   label: string;
 }
 
+export type PullRequestDerivedQueueState =
+  | PullRequestWatchStatus
+  | "awaiting_follow_up";
+
 function normalizePullRequestWatchlist(value?: PullRequestWatchlist | null) {
   return value ?? {};
 }
@@ -215,7 +219,16 @@ export function getPullRequestReviewEventMeta(state: string) {
   }
 }
 
-export function getPullRequestWatchStatusMeta(status: PullRequestWatchStatus) {
+export function getPullRequestWatchStatusMeta(
+  status: PullRequestDerivedQueueState,
+) {
+  if (status === "awaiting_follow_up") {
+    return {
+      className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
+      label: "awaiting follow-up",
+    };
+  }
+
   return status === "reviewed"
     ? {
         className: "bg-chart-1/10 text-chart-1 border-chart-1/20",
@@ -225,6 +238,24 @@ export function getPullRequestWatchStatusMeta(status: PullRequestWatchStatus) {
         className: "bg-primary/10 text-primary border-primary/20",
         label: "marked",
       };
+}
+
+export function getPullRequestDerivedQueueState(
+  pullRequest: Pick<
+    WorkspacePullRequestItem,
+    "authoredByViewer" | "hasUpdatesSinceViewerReview" | "reviewedByViewer"
+  >,
+  watchStatus: PullRequestWatchStatus | null,
+): PullRequestDerivedQueueState | null {
+  if (!watchStatus) {
+    return null;
+  }
+
+  if (watchStatus === "reviewed" && pullRequestNeedsFollowUp(pullRequest)) {
+    return "awaiting_follow_up";
+  }
+
+  return watchStatus;
 }
 
 export function getAuthoredPullRequestStatusMeta(
@@ -443,6 +474,8 @@ export function getPullRequestSignalBadges(
   pullRequest: Pick<
     WorkspacePullRequestItem,
     | "ciStatus"
+    | "authoredByViewer"
+    | "hasUpdatesSinceViewerReview"
     | "reviewCount"
     | "reviewState"
     | "reviewedByOthersCount"
@@ -464,7 +497,11 @@ export function getPullRequestSignalBadges(
   }
 
   if (watchStatus) {
-    badges.push(getPullRequestWatchStatusMeta(watchStatus));
+    badges.push(
+      getPullRequestWatchStatusMeta(
+        getPullRequestDerivedQueueState(pullRequest, watchStatus) ?? watchStatus,
+      ),
+    );
   }
 
   return badges;

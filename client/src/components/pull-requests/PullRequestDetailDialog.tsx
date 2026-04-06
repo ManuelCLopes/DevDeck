@@ -30,6 +30,7 @@ import {
   getPullRequestCiStatusMeta,
   getPullRequestReviewEventMeta,
   getPullRequestSignalBadges,
+  pullRequestNeedsFollowUp,
 } from "@/lib/pull-request-utils";
 import { parseReviewerLogins } from "@/lib/pull-request-actions";
 import { toast } from "@/hooks/use-toast";
@@ -204,6 +205,7 @@ export default function PullRequestDetailDialog({
                     View
                   </Button>
                   <PullRequestQueueControl
+                    awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
                     className="h-9"
                     mode="open"
                     onStatusChange={(status) => {

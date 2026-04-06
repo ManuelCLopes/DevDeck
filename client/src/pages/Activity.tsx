@@ -15,12 +15,27 @@ import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { CheckCircle2 } from "lucide-react";
-import { CartesianGrid, Line, LineChart, XAxis } from "recharts";
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 const contributionChartConfig = {
   commits: {
     color: "hsl(var(--chart-4))",
     label: "Commits",
+  },
+  linesAdded: {
+    color: "hsla(var(--chart-1), 0.35)",
+    label: "Lines Added",
+  },
+  linesDeleted: {
+    color: "hsla(var(--chart-3), 0.28)",
+    label: "Lines Deleted",
   },
   pullRequestsMerged: {
     color: "hsl(var(--chart-5))",
@@ -31,6 +46,36 @@ const contributionChartConfig = {
     label: "PRs Reviewed",
   },
 } satisfies ChartConfig;
+
+function renderNonZeroDot(colorVariable: string) {
+  return function NonZeroDot(props: any) {
+    const { cx, cy, payload, dataKey } = props;
+    if (
+      typeof cx !== "number" ||
+      typeof cy !== "number" ||
+      !payload ||
+      typeof dataKey !== "string"
+    ) {
+      return <></>;
+    }
+
+    const value = payload[dataKey];
+    if (typeof value !== "number" || value <= 0) {
+      return <></>;
+    }
+
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        fill={`var(${colorVariable})`}
+        r={3}
+        stroke="white"
+        strokeWidth={1.5}
+      />
+    );
+  };
+}
 
 export default function Activity() {
   const formatCount = (value: number) => new Intl.NumberFormat().format(value);
@@ -173,7 +218,7 @@ export default function Activity() {
             <div className="space-y-1">
               <h3 className="text-sm font-semibold text-foreground">Contribution Trend</h3>
               <p className="text-xs text-muted-foreground">
-                Daily GitHub commits, PR reviews, and merges for the selected period.
+                Daily GitHub commits, reviews, merges, and code churn for the selected period.
               </p>
               <p className="text-xs text-muted-foreground">
                 Lines changed in this window:{" "}
@@ -190,7 +235,7 @@ export default function Activity() {
               config={contributionChartConfig}
               className="mt-4 h-[260px] w-full aspect-auto"
             >
-              <LineChart
+              <ComposedChart
                 accessibilityLayer
                 data={activityChartData}
                 margin={{ bottom: 0, left: 4, right: 4, top: 8 }}
@@ -204,6 +249,8 @@ export default function Activity() {
                   tickLine={false}
                   tickMargin={10}
                 />
+                <YAxis hide yAxisId="activity" />
+                <YAxis hide yAxisId="churn" orientation="right" />
                 <ChartTooltip
                   cursor={false}
                   content={
@@ -221,28 +268,45 @@ export default function Activity() {
                   verticalAlign="top"
                   content={<ChartLegendContent className="justify-start" />}
                 />
+                <Bar
+                  barSize={10}
+                  dataKey="linesAdded"
+                  fill="var(--color-linesAdded)"
+                  radius={[4, 4, 0, 0]}
+                  yAxisId="churn"
+                />
+                <Bar
+                  barSize={10}
+                  dataKey="linesDeleted"
+                  fill="var(--color-linesDeleted)"
+                  radius={[4, 4, 0, 0]}
+                  yAxisId="churn"
+                />
                 <Line
                   dataKey="commits"
-                  dot={false}
+                  dot={renderNonZeroDot("--color-commits")}
+                  yAxisId="activity"
                   stroke="var(--color-commits)"
                   strokeWidth={2.25}
                   type="monotone"
                 />
                 <Line
                   dataKey="pullRequestsReviewed"
-                  dot={false}
+                  dot={renderNonZeroDot("--color-pullRequestsReviewed")}
+                  yAxisId="activity"
                   stroke="var(--color-pullRequestsReviewed)"
                   strokeWidth={2}
                   type="monotone"
                 />
                 <Line
                   dataKey="pullRequestsMerged"
-                  dot={false}
+                  dot={renderNonZeroDot("--color-pullRequestsMerged")}
+                  yAxisId="activity"
                   stroke="var(--color-pullRequestsMerged)"
                   strokeWidth={2}
                   type="monotone"
                 />
-              </LineChart>
+              </ComposedChart>
             </ChartContainer>
           </section>
         </section>
