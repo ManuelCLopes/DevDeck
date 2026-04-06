@@ -128,7 +128,7 @@ test("desktop app loads overview for a prepared local workspace", async () => {
   );
 
   try {
-    await expect(page.getByText("Project Overview")).toBeVisible();
+    await expect(page.getByText("Repository Overview")).toBeVisible();
     await expect(page.locator("aside")).toContainText("alpha");
     await expect(page.locator("aside")).toContainText("beta");
     await expect(
@@ -149,7 +149,7 @@ test("preferences supports drag reordering and hide/restore curation", async () 
   );
 
   try {
-    await page.locator('a[href="#/settings"]').click();
+    await page.getByRole("button", { name: "Preferences", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Preferences", exact: true }),
     ).toBeVisible();
@@ -176,7 +176,7 @@ test("preferences supports drag reordering and hide/restore curation", async () 
 
     await page.getByRole("button", { name: "Hide alpha", exact: true }).click();
     await expect(
-      page.getByText("Hidden Projects", { exact: true }),
+      page.getByText("Hidden Repositories", { exact: true }),
     ).toBeVisible();
     await expect(page.locator("aside")).not.toContainText("alpha");
 
@@ -197,7 +197,7 @@ test("preferences exposes the production token fallback when device flow is unav
   );
 
   try {
-    await page.locator('a[href="#/settings"]').click();
+    await page.getByRole("button", { name: "Preferences", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Preferences", exact: true }),
     ).toBeVisible();
