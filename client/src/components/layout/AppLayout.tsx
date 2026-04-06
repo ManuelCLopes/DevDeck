@@ -574,10 +574,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </div>
 
             <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3 no-drag">
-              <div className="hidden xl:flex items-center gap-2 rounded-md border border-black/5 bg-secondary/60 px-2.5 py-1 text-[11px] text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="inline-flex max-w-[220px] items-center gap-2 rounded-md border border-black/5 bg-secondary/60 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-secondary"
+                aria-label="Refresh workspace snapshot"
+                title={snapshot?.sync?.message ?? "Refresh workspace snapshot"}
+              >
                 <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-                <span title={snapshot?.sync?.message ?? undefined}>{syncStatusLabel}</span>
-              </div>
+                <span className="truncate">{syncStatusLabel}</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setIsSearchOpen(true)}
@@ -590,28 +596,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     ? "⌘K"
                     : "Ctrl K"}
                 </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => void refetch()}
-                className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-secondary"
-                aria-label="Refresh workspace snapshot"
-                title="Refresh workspace snapshot"
-              >
-                <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
-              </button>
-              
-              <button
-                type="button"
-                onClick={() => handleNavigate("/activity")}
-                className="relative rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                aria-label="Open activity inbox"
-                title="Open activity inbox"
-              >
-                <Bell className="w-4 h-4" />
-                {activityCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-primary border-2 border-background"></span>
-                )}
               </button>
             </div>
           </header>
