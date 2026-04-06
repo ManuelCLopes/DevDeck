@@ -196,6 +196,7 @@ export interface WorkspaceUserActivityStats {
   linesDeleted: number;
   pullRequestsMerged: number;
   pullRequestsReviewed: number;
+  reviewEvents: number;
 }
 
 export interface WorkspaceUserActivityPoint extends WorkspaceUserActivityStats {

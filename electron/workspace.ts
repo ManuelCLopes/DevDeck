@@ -201,6 +201,7 @@ function createUserActivityPoints(days: number) {
       linesDeleted: 0,
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
+      reviewEvents: 0,
     };
   });
 }
@@ -214,6 +215,7 @@ function createEmptyUserActivitySummary(): WorkspaceUserActivitySummary {
       points: createUserActivityPoints(7),
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
+      reviewEvents: 0,
     },
     last30Days: {
       commits: 0,
@@ -222,6 +224,7 @@ function createEmptyUserActivitySummary(): WorkspaceUserActivitySummary {
       points: createUserActivityPoints(30),
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
+      reviewEvents: 0,
     },
     last90Days: {
       commits: 0,
@@ -230,6 +233,7 @@ function createEmptyUserActivitySummary(): WorkspaceUserActivitySummary {
       points: createUserActivityPoints(90),
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
+      reviewEvents: 0,
     },
   };
 }
@@ -290,11 +294,13 @@ function mergeUserActivitySummaries(
         accumulatorPoint.linesDeleted += point.linesDeleted;
         accumulatorPoint.pullRequestsMerged += point.pullRequestsMerged;
         accumulatorPoint.pullRequestsReviewed += point.pullRequestsReviewed;
+        accumulatorPoint.reviewEvents += point.reviewEvents;
       }
       accumulator[window.key].pullRequestsMerged +=
         summary[window.key].pullRequestsMerged;
       accumulator[window.key].pullRequestsReviewed +=
         summary[window.key].pullRequestsReviewed;
+      accumulator[window.key].reviewEvents += summary[window.key].reviewEvents;
     }
 
     return accumulator;
@@ -1249,14 +1255,26 @@ async function getGitHubUserActivitySummary(
     );
 
     for (const pullRequestReview of pullRequestReviews) {
-      const latestViewerReviewTimestamp = pullRequestReview.reviews
+      const viewerReviewTimestamps = pullRequestReview.reviews
         .filter(
           (review) =>
             review.user?.login === githubAuthStatus.viewerLogin &&
             Boolean(review.submitted_at),
         )
-        .map((review) => review.submitted_at as string)
-        .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0];
+        .map((review) => review.submitted_at as string);
+
+      for (const viewerReviewTimestamp of viewerReviewTimestamps) {
+        forEachMatchingUserActivityWindow(viewerReviewTimestamp, (key) => {
+          summary[key].reviewEvents += 1;
+          updateUserActivityPoint(summary, key, viewerReviewTimestamp, (point) => {
+            point.reviewEvents += 1;
+          });
+        });
+      }
+
+      const latestViewerReviewTimestamp = viewerReviewTimestamps.sort(
+        (left, right) => new Date(right).getTime() - new Date(left).getTime(),
+      )[0];
 
       if (!latestViewerReviewTimestamp) {
         continue;

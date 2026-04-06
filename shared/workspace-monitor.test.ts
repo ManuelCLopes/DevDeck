@@ -46,6 +46,7 @@ function createSnapshot(overrides?: Partial<WorkspaceSnapshot>): WorkspaceSnapsh
         points: [],
         pullRequestsMerged: 0,
         pullRequestsReviewed: 0,
+        reviewEvents: 0,
       },
       last30Days: {
         commits: 0,
@@ -54,6 +55,7 @@ function createSnapshot(overrides?: Partial<WorkspaceSnapshot>): WorkspaceSnapsh
         points: [],
         pullRequestsMerged: 0,
         pullRequestsReviewed: 0,
+        reviewEvents: 0,
       },
       last90Days: {
         commits: 0,
@@ -62,6 +64,7 @@ function createSnapshot(overrides?: Partial<WorkspaceSnapshot>): WorkspaceSnapsh
         points: [],
         pullRequestsMerged: 0,
         pullRequestsReviewed: 0,
+        reviewEvents: 0,
       },
     },
     ...overrides,

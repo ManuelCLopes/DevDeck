@@ -345,6 +345,7 @@ test("loadWorkspaceSnapshot aggregates user activity insights from local git his
   assert.equal(snapshot.userActivity.last7Days.linesDeleted, 1);
   assert.equal(snapshot.userActivity.last7Days.pullRequestsMerged, 0);
   assert.equal(snapshot.userActivity.last7Days.pullRequestsReviewed, 0);
+  assert.equal(snapshot.userActivity.last7Days.reviewEvents, 0);
   assert.equal(snapshot.userActivity.last7Days.points.length, 7);
   assert.equal(snapshot.userActivity.last30Days.points.length, 30);
   assert.equal(snapshot.userActivity.last90Days.points.length, 90);
@@ -510,6 +511,12 @@ test("loadWorkspaceSnapshot aggregates merged and reviewed PRs from GitHub acros
             submitted_at: new Date().toISOString(),
             user: { login: "manuel" },
           },
+          {
+            id: 2,
+            state: "COMMENTED",
+            submitted_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+            user: { login: "manuel" },
+          },
         ]),
         {
           headers: { "Content-Type": "application/json" },
@@ -610,6 +617,7 @@ test("loadWorkspaceSnapshot aggregates merged and reviewed PRs from GitHub acros
     assert.equal(snapshot.githubStatus.state, "connected");
     assert.equal(snapshot.userActivity.last7Days.pullRequestsMerged, 2);
     assert.equal(snapshot.userActivity.last7Days.pullRequestsReviewed, 1);
+    assert.equal(snapshot.userActivity.last7Days.reviewEvents, 2);
     assert.equal(snapshot.userActivity.last7Days.commits, 1);
     assert.equal(snapshot.userActivity.last7Days.linesAdded, 8);
     assert.equal(snapshot.userActivity.last7Days.linesDeleted, 3);

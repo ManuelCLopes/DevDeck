@@ -104,6 +104,7 @@ function createUserActivityPoints(days: number) {
       linesDeleted: 0,
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
+      reviewEvents: 0,
     };
   });
 }
@@ -117,6 +118,7 @@ function createEmptyUserActivitySummary(): WorkspaceSnapshot["userActivity"] {
       points: createUserActivityPoints(7),
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
+      reviewEvents: 0,
     },
     last30Days: {
       commits: 0,
@@ -125,6 +127,7 @@ function createEmptyUserActivitySummary(): WorkspaceSnapshot["userActivity"] {
       points: createUserActivityPoints(30),
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
+      reviewEvents: 0,
     },
     last90Days: {
       commits: 0,
@@ -133,6 +136,7 @@ function createEmptyUserActivitySummary(): WorkspaceSnapshot["userActivity"] {
       points: createUserActivityPoints(90),
       pullRequestsMerged: 0,
       pullRequestsReviewed: 0,
+      reviewEvents: 0,
     },
   };
 }
@@ -206,6 +210,7 @@ function mergeUserActivitySummaries(
         summary[window.key].pullRequestsMerged;
       accumulator[window.key].pullRequestsReviewed +=
         summary[window.key].pullRequestsReviewed;
+      accumulator[window.key].reviewEvents += summary[window.key].reviewEvents;
 
       const pointsByDate = new Map(
         accumulator[window.key].points.map((point) => [point.date, point]),
@@ -221,6 +226,7 @@ function mergeUserActivitySummaries(
         accumulatorPoint.linesDeleted += point.linesDeleted;
         accumulatorPoint.pullRequestsMerged += point.pullRequestsMerged;
         accumulatorPoint.pullRequestsReviewed += point.pullRequestsReviewed;
+        accumulatorPoint.reviewEvents += point.reviewEvents;
       }
     }
 

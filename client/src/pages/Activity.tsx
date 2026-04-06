@@ -44,6 +44,10 @@ const contributionChartConfig = {
     color: "hsl(var(--chart-2))",
     label: "PRs Reviewed",
   },
+  reviewEvents: {
+    color: "hsl(var(--chart-6))",
+    label: "Total Reviews",
+  },
 } satisfies ChartConfig;
 
 function renderNonZeroDot(colorVariable: string) {
@@ -172,7 +176,7 @@ export default function Activity() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Commits
@@ -187,6 +191,20 @@ export default function Activity() {
               </h3>
               <p className="mt-2 text-3xl font-bold tracking-tight">
                 {formatCount(selectedUserActivity?.pullRequestsReviewed ?? 0)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Unique PRs you reviewed
+              </p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Total Reviews
+              </h3>
+              <p className="mt-2 text-3xl font-bold tracking-tight">
+                {formatCount(selectedUserActivity?.reviewEvents ?? 0)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Review submissions across PRs
               </p>
             </div>
             <div className="rounded-xl border border-border/60 bg-white/60 p-4 shadow-sm backdrop-blur-md">
@@ -286,6 +304,14 @@ export default function Activity() {
                   dot={renderNonZeroDot("--color-pullRequestsReviewed")}
                   yAxisId="activity"
                   stroke="var(--color-pullRequestsReviewed)"
+                  strokeWidth={2}
+                  type="monotone"
+                />
+                <Line
+                  dataKey="reviewEvents"
+                  dot={renderNonZeroDot("--color-reviewEvents")}
+                  yAxisId="activity"
+                  stroke="var(--color-reviewEvents)"
                   strokeWidth={2}
                   type="monotone"
                 />
