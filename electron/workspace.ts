@@ -255,6 +255,19 @@ function getRecentGitHubConnectivityFailure() {
   return null;
 }
 
+function isGitHubRateLimitError(error: unknown) {
+  if (!(error instanceof GitHubApiError)) {
+    return false;
+  }
+
+  const normalizedMessage = error.message.toLowerCase();
+  return (
+    error.status === 429 ||
+    normalizedMessage.includes("abuse detection mechanism") ||
+    normalizedMessage.includes("rate limit")
+  );
+}
+
 function mergeUserActivitySummaries(
   summaries: WorkspaceUserActivitySummary[],
 ): WorkspaceUserActivitySummary {
@@ -1320,6 +1333,13 @@ async function getGitHubUserActivitySummary(
 
     return summary;
   } catch (error) {
+    if (isGitHubRateLimitError(error)) {
+      markGitHubConnectivityFailure(
+        "GitHub rate limited DevDeck temporarily. Using the last successful activity snapshot.",
+      );
+      return cachedSummary?.summary ?? summary;
+    }
+
     if (
       error instanceof GitHubApiError &&
       (error.status === 403 || error.status === 404)
@@ -1543,6 +1563,13 @@ async function fetchPullRequests(
 
     return workspacePullRequests;
   } catch (error) {
+    if (isGitHubRateLimitError(error)) {
+      markGitHubConnectivityFailure(
+        "GitHub rate limited DevDeck temporarily. Using cached pull request data.",
+      );
+      return cachedPullRequests?.pullRequests ?? ([] as WorkspacePullRequestItem[]);
+    }
+
     if (
       error instanceof GitHubApiError &&
       (error.status === 403 || error.status === 404)
@@ -1649,6 +1676,16 @@ async function fetchAuthoredPullRequests(
 
     return authoredPullRequests;
   } catch (error) {
+    if (isGitHubRateLimitError(error)) {
+      markGitHubConnectivityFailure(
+        "GitHub rate limited DevDeck temporarily. Using cached authored pull request data.",
+      );
+      return (
+        cachedAuthoredPullRequests?.authoredPullRequests ??
+        ([] as WorkspaceAuthoredPullRequestItem[])
+      );
+    }
+
     if (
       error instanceof GitHubApiError &&
       (error.status === 403 || error.status === 404)
@@ -1754,7 +1791,7 @@ async function fetchDefaultBranchCiStatus(
 
     return ciStatus;
   } catch {
-    return "unknown" satisfies WorkspaceCiStatus;
+    return cachedStatus?.status ?? ("unknown" satisfies WorkspaceCiStatus);
   }
 }
 
