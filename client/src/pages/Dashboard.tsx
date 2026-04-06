@@ -82,6 +82,8 @@ export default function Dashboard() {
   const [selectedPullRequestId, setSelectedPullRequestId] = useState<string | null>(null);
   const [activeIndicatorDialog, setActiveIndicatorDialog] =
     useState<DashboardIndicatorDialogId | null>(null);
+  const [selectedOverviewRepoFilters, setSelectedOverviewRepoFilters] =
+    usePersistentState<string[]>("devdeck:dashboard:overview-repo-filters", []);
   const search = useSearch();
   const focusedProjectId = new URLSearchParams(search).get("project");
   const workspaceSelection = useWorkspaceSelection();
@@ -155,11 +157,20 @@ export default function Dashboard() {
   const needsFollowUpCount = needsFollowUpPullRequests.length;
   const markedPullRequestCount = markedPullRequests.length;
   const workspaceLabel = workspaceSelection?.rootPath ?? workspaceSelection?.rootName ?? "~/Developer";
+  const overviewRepoFilteredPullRequests = useMemo(
+    () =>
+      selectedOverviewRepoFilters.length === 0
+        ? visiblePullRequests
+        : visiblePullRequests.filter((pullRequest) =>
+            selectedOverviewRepoFilters.includes(pullRequest.repo),
+          ),
+    [selectedOverviewRepoFilters, visiblePullRequests],
+  );
   const overviewPullRequestsPagination = usePagination(
-    visiblePullRequests,
+    overviewRepoFilteredPullRequests,
     6,
     {
-      resetKey: focusedProjectId ?? "workspace",
+      resetKey: `${focusedProjectId ?? "workspace"}:${selectedOverviewRepoFilters.join("|")}`,
       storageKey: `devdeck:dashboard:overview-prs:${focusedProjectId ?? "workspace"}`,
     },
   );
@@ -211,6 +222,18 @@ export default function Dashboard() {
     status: PullRequestWatchStatus | null,
   ) => {
     setPullRequestWatchStatus(pullRequestId, status);
+  };
+
+  const addOverviewRepoFilter = (repo: string) => {
+    setSelectedOverviewRepoFilters((current) =>
+      current.includes(repo) ? current : [...current, repo],
+    );
+  };
+
+  const removeOverviewRepoFilter = (repo: string) => {
+    setSelectedOverviewRepoFilters((current) =>
+      current.filter((item) => item !== repo),
+    );
   };
 
   const activeIndicatorDialogConfig = useMemo(() => {
@@ -684,7 +707,7 @@ export default function Dashboard() {
                     </a>
                   </Link>
                   <span className="bg-secondary text-secondary-foreground text-[10px] px-1.5 py-0.5 rounded-full font-medium border border-border">
-                    {visiblePullRequests.length}
+                    {overviewRepoFilteredPullRequests.length}
                   </span>
                 </div>
               </div>
@@ -701,6 +724,21 @@ export default function Dashboard() {
                   </button>
                 </div>
               </div>
+              {selectedOverviewRepoFilters.length > 0 ? (
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  {selectedOverviewRepoFilters.map((repo) => (
+                    <button
+                      key={repo}
+                      type="button"
+                      onClick={() => removeOverviewRepoFilter(repo)}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${getProjectTagClassName(repo)}`}
+                    >
+                      <span>{repo}</span>
+                      <X className="h-3 w-3" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
 
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                 <div className="space-y-3">
@@ -753,9 +791,16 @@ export default function Dashboard() {
                                 ) : null}
                               </p>
                               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                <span className={getProjectTagClassName(pullRequest.repo)}>
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    addOverviewRepoFilter(pullRequest.repo);
+                                  }}
+                                  className={getProjectTagClassName(pullRequest.repo)}
+                                >
                                   {pullRequest.repo}
-                                </span>
+                                </button>
                                 <span className="break-words">
                                   {pullRequest.headBranch} into {pullRequest.baseBranch}
                                 </span>
@@ -814,9 +859,11 @@ export default function Dashboard() {
                       </div>
                     );
                   })}
-                  {visiblePullRequests.length === 0 && (
+                  {overviewRepoFilteredPullRequests.length === 0 && (
                     <div className="rounded-lg border border-border/60 border-dashed p-4 text-sm text-muted-foreground">
-                      No open GitHub pull requests were found for the monitored repositories.
+                      {selectedOverviewRepoFilters.length > 0
+                        ? "No pull requests match the selected repository filters."
+                        : "No open GitHub pull requests were found for the monitored repositories."}
                     </div>
                   )}
                 </div>

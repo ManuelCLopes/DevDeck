@@ -78,6 +78,10 @@ export default function Reviews() {
     "devdeck:reviews:queue-focus",
     "all",
   );
+  const [selectedRepoFilters, setSelectedRepoFilters] = usePersistentState<string[]>(
+    "devdeck:reviews:repo-filters",
+    [],
+  );
   const [activeIndicatorDialog, setActiveIndicatorDialog] =
     useState<ReviewIndicatorDialogId | null>(null);
   const { data: snapshot, isLoading } = useWorkspaceSnapshot();
@@ -94,6 +98,15 @@ export default function Reviews() {
   const filteredPullRequests = useMemo(
     () => filterPullRequestsByFocus(pullRequests, focusFilter, pullRequestWatchlist),
     [focusFilter, pullRequestWatchlist, pullRequests],
+  );
+  const repoFilteredPullRequests = useMemo(
+    () =>
+      selectedRepoFilters.length === 0
+        ? filteredPullRequests
+        : filteredPullRequests.filter((pullRequest) =>
+            selectedRepoFilters.includes(pullRequest.repo),
+          ),
+    [filteredPullRequests, selectedRepoFilters],
   );
   const markedPullRequestIds = useMemo(
     () => getPullRequestQueueIds(pullRequestWatchlist, "marked"),
@@ -177,8 +190,8 @@ export default function Reviews() {
     resetKey: queueFocus,
     storageKey: "devdeck:reviews:my-queue",
   });
-  const openPullRequestsPagination = usePagination(filteredPullRequests, 8, {
-    resetKey: focusFilter,
+  const openPullRequestsPagination = usePagination(repoFilteredPullRequests, 8, {
+    resetKey: `${focusFilter}:${selectedRepoFilters.join("|")}`,
     storageKey: "devdeck:reviews:open-prs",
   });
   const authoredPullRequestsPagination = usePagination(authoredPullRequests, 5, {
@@ -325,6 +338,16 @@ export default function Reviews() {
     status: PullRequestWatchStatus | null,
   ) => {
     setPullRequestWatchStatus(pullRequestId, status);
+  };
+
+  const addRepoFilter = (repo: string) => {
+    setSelectedRepoFilters((current) =>
+      current.includes(repo) ? current : [...current, repo],
+    );
+  };
+
+  const removeRepoFilter = (repo: string) => {
+    setSelectedRepoFilters((current) => current.filter((item) => item !== repo));
   };
 
   const pullRequestFilters: Array<{
@@ -622,7 +645,7 @@ export default function Reviews() {
                     Open Pull Requests
                   </h2>
                   <span className="bg-secondary text-secondary-foreground text-[10px] px-1.5 py-0.5 rounded-sm font-bold border border-border/60">
-                    {filteredPullRequests.length}
+                    {repoFilteredPullRequests.length}
                   </span>
                 </div>
               </div>
@@ -645,6 +668,21 @@ export default function Reviews() {
                   </button>
                 ))}
               </div>
+              {selectedRepoFilters.length > 0 ? (
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  {selectedRepoFilters.map((repo) => (
+                    <button
+                      key={repo}
+                      type="button"
+                      onClick={() => removeRepoFilter(repo)}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${getProjectTagClassName(repo)}`}
+                    >
+                      <span>{repo}</span>
+                      <X className="h-3 w-3" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <div className="overflow-hidden rounded-xl border border-border/60 bg-white/60 px-4 py-1 shadow-sm backdrop-blur-md">
                 <div className="flex flex-col">
                   {openPullRequestsPagination.paginatedItems.map((pullRequest) => (
@@ -750,9 +788,16 @@ export default function Reviews() {
 
                         <div className="col-span-2 mt-1 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <span className={getProjectTagClassName(pullRequest.repo)}>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                addRepoFilter(pullRequest.repo);
+                              }}
+                              className={getProjectTagClassName(pullRequest.repo)}
+                            >
                               {pullRequest.repo}
-                            </span>
+                            </button>
                             {pullRequest.author && <span className="break-words">{pullRequest.author}</span>}
                             {pullRequest.isViewerRequestedReviewer && (
                               <span className="rounded-full border border-chart-2/20 bg-chart-2/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-chart-2">
@@ -771,13 +816,15 @@ export default function Reviews() {
                       );
                     })()
                   ))}
-                  {filteredPullRequests.length === 0 && (
+                  {repoFilteredPullRequests.length === 0 && (
                     <div className="py-6 text-center text-muted-foreground text-sm">
                       {isLoading
                         ? "Loading pull requests..."
                         : githubStatus?.state === "connected"
                           ? githubStatus.connectedRepositoryCount > 0
-                            ? emptyPullRequestMessageByFilter[focusFilter]
+                            ? selectedRepoFilters.length > 0
+                              ? "No pull requests match the selected repository filters."
+                              : emptyPullRequestMessageByFilter[focusFilter]
                             : "No GitHub remotes were detected in the current workspace."
                           : githubStatus?.state === "unsupported"
                             ? "GitHub pull request sync requires the desktop app."
