@@ -361,11 +361,11 @@ export default function Projects() {
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =
                         pullRequest.ciStatus === "passing" ? (
-                          <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
+                          <Check className="h-3.5 w-3.5 text-chart-1" />
                         ) : pullRequest.ciStatus === "failing" ? (
-                          <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                          <X className="h-3.5 w-3.5 text-chart-3" />
                         ) : pullRequest.ciStatus === "pending" ? (
-                          <Circle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 fill-current text-chart-2" />
+                          <Circle className="h-3.5 w-3.5 fill-current text-chart-2" />
                         ) : null;
 
                       return (
@@ -381,12 +381,14 @@ export default function Projects() {
                               className="absolute inset-y-0 left-0 w-1.5 bg-muted-foreground/30"
                             />
                           ) : null}
-                          <div className="flex min-w-0 items-start gap-2">
-                            <p className="text-[12px] font-semibold text-foreground line-clamp-2">
-                              #{pullRequest.number} {pullRequest.title}
-                            </p>
-                            {ciStatusIcon}
-                          </div>
+                          <p className="text-[12px] font-semibold leading-5 text-foreground line-clamp-2">
+                            #{pullRequest.number} {pullRequest.title}
+                            {ciStatusIcon ? (
+                              <span className="ml-1 inline-flex align-[-0.125em]">
+                                {ciStatusIcon}
+                              </span>
+                            ) : null}
+                          </p>
                           {visibleBadges.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-2">
                               {visibleBadges.map((badge) => (

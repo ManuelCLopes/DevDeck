@@ -500,11 +500,11 @@ export default function Dashboard() {
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =
                         pullRequest.ciStatus === "passing" ? (
-                          <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
+                          <Check className="h-3.5 w-3.5 text-chart-1" />
                         ) : pullRequest.ciStatus === "failing" ? (
-                          <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                          <X className="h-3.5 w-3.5 text-chart-3" />
                         ) : pullRequest.ciStatus === "pending" ? (
-                          <Circle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 fill-current text-chart-2" />
+                          <Circle className="h-3.5 w-3.5 fill-current text-chart-2" />
                         ) : null;
 
                       return (
@@ -522,12 +522,14 @@ export default function Dashboard() {
                         <div className="flex flex-col gap-3">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
-                              <div className="flex min-w-0 items-start gap-2">
-                                <p className="text-sm font-medium text-foreground break-words">
-                                  #{pullRequest.number} {pullRequest.title}
-                                </p>
-                                {ciStatusIcon}
-                              </div>
+                              <p className="text-sm font-medium leading-5 text-foreground break-words">
+                                #{pullRequest.number} {pullRequest.title}
+                                {ciStatusIcon ? (
+                                  <span className="ml-1 inline-flex align-[-0.125em]">
+                                    {ciStatusIcon}
+                                  </span>
+                                ) : null}
+                              </p>
                               <p className="text-xs text-muted-foreground mt-1">
                                 {pullRequest.headBranch} into {pullRequest.baseBranch}
                               </p>
@@ -720,11 +722,11 @@ export default function Dashboard() {
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =
                         pullRequest.ciStatus === "passing" ? (
-                          <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
+                          <Check className="h-3.5 w-3.5 text-chart-1" />
                         ) : pullRequest.ciStatus === "failing" ? (
-                          <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                          <X className="h-3.5 w-3.5 text-chart-3" />
                         ) : pullRequest.ciStatus === "pending" ? (
-                          <Circle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 fill-current text-chart-2" />
+                          <Circle className="h-3.5 w-3.5 fill-current text-chart-2" />
                         ) : null;
 
                       return (
@@ -742,12 +744,14 @@ export default function Dashboard() {
                         <div className="flex flex-col gap-3">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
-                              <div className="flex min-w-0 items-start gap-2">
-                                <p className="text-sm font-medium text-foreground break-words">
-                                  #{pullRequest.number} {pullRequest.title}
-                                </p>
-                                {ciStatusIcon}
-                              </div>
+                              <p className="text-sm font-medium leading-5 text-foreground break-words">
+                                #{pullRequest.number} {pullRequest.title}
+                                {ciStatusIcon ? (
+                                  <span className="ml-1 inline-flex align-[-0.125em]">
+                                    {ciStatusIcon}
+                                  </span>
+                                ) : null}
+                              </p>
                               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                 <span className={getProjectTagClassName(pullRequest.repo)}>
                                   {pullRequest.repo}
@@ -1045,11 +1049,11 @@ export default function Dashboard() {
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       const ciStatusIcon =
                         pullRequest.ciStatus === "passing" ? (
-                          <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
+                          <Check className="h-3.5 w-3.5 text-chart-1" />
                         ) : pullRequest.ciStatus === "failing" ? (
-                          <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                          <X className="h-3.5 w-3.5 text-chart-3" />
                         ) : pullRequest.ciStatus === "pending" ? (
-                          <Circle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 fill-current text-chart-2" />
+                          <Circle className="h-3.5 w-3.5 fill-current text-chart-2" />
                         ) : null;
 
                       return (
@@ -1067,12 +1071,14 @@ export default function Dashboard() {
                           <div className="flex flex-col gap-3">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                               <div className="min-w-0 space-y-2">
-                                <div className="flex min-w-0 items-start gap-2">
-                                  <p className="text-sm font-medium text-foreground break-words">
-                                    #{pullRequest.number} {pullRequest.title}
-                                  </p>
-                                  {ciStatusIcon}
-                                </div>
+                                <p className="text-sm font-medium leading-5 text-foreground break-words">
+                                  #{pullRequest.number} {pullRequest.title}
+                                  {ciStatusIcon ? (
+                                    <span className="ml-1 inline-flex align-[-0.125em]">
+                                      {ciStatusIcon}
+                                    </span>
+                                  ) : null}
+                                </p>
                                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                   <span className={getProjectTagClassName(pullRequest.repo)}>
                                     {pullRequest.repo}
