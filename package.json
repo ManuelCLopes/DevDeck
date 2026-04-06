@@ -3,6 +3,24 @@
   "version": "1.0.0",
   "description": "Native macOS workspace dashboard for local repositories and pull request follow-up.",
   "author": "Manuel Lopes",
+  "homepage": "https://github.com/ManuelCLopes/DevDeck",
+  "bugs": {
+    "url": "https://github.com/ManuelCLopes/DevDeck/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ManuelCLopes/DevDeck.git"
+  },
+  "keywords": [
+    "electron",
+    "github",
+    "git",
+    "macos",
+    "pull-requests",
+    "repositories",
+    "review",
+    "workspace"
+  ],
   "type": "module",
   "main": "dist-electron/main.cjs",
   "license": "MIT",
