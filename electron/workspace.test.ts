@@ -558,6 +558,12 @@ test("loadWorkspaceSnapshot aggregates merged and reviewed PRs from GitHub acros
                       nodes: [
                         {
                           additions: 8,
+                          author: {
+                            email: "manuel@example.com",
+                            user: {
+                              login: "manuel",
+                            },
+                          },
                           committedDate: new Date().toISOString(),
                           deletions: 3,
                           oid: "abc123",
@@ -570,6 +576,7 @@ test("loadWorkspaceSnapshot aggregates merged and reviewed PRs from GitHub acros
                     },
                   },
                 },
+                viewerPossibleCommitEmails: ["manuel@example.com"],
               },
             },
           }),

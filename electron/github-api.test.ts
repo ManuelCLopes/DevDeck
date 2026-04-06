@@ -195,7 +195,7 @@ test("fetchGitHubPullRequestSearchResults encodes the search query and returns i
   );
 });
 
-test("fetchGitHubViewerCommitRepositories returns contributed repositories and viewer id", async () => {
+test("fetchGitHubViewerCommitRepositories returns contributed repositories", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody = "";
 
@@ -239,7 +239,6 @@ test("fetchGitHubViewerCommitRepositories returns contributed repositories and v
       },
     );
     assert.deepEqual(response.repositorySlugs, ["acme/repo", "acme/second-repo"]);
-    assert.equal(response.viewerId, "viewer-node-id");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -261,24 +260,31 @@ test("fetchGitHubRepositoryCommitHistory returns default-branch history for the 
             defaultBranchRef: {
               target: {
                 history: {
-                  nodes: [
-                    {
-                      additions: 12,
-                      committedDate: "2026-04-03T10:00:00Z",
-                      deletions: 4,
-                      oid: "abc123",
-                    },
-                  ],
+                      nodes: [
+                        {
+                          additions: 12,
+                          author: {
+                            email: "manuel@example.com",
+                            user: {
+                              login: "manuel",
+                            },
+                          },
+                          committedDate: "2026-04-03T10:00:00Z",
+                          deletions: 4,
+                          oid: "abc123",
+                        },
+                      ],
                   pageInfo: {
                     endCursor: null,
                     hasNextPage: false,
                   },
                 },
               },
+              },
+              viewerPossibleCommitEmails: ["manuel@example.com"],
             },
           },
-        },
-      }),
+        }),
       {
         headers: { "Content-Type": "application/json" },
         status: 200,
@@ -289,7 +295,6 @@ test("fetchGitHubRepositoryCommitHistory returns default-branch history for the 
   try {
     const response = await fetchGitHubRepositoryCommitHistory(
       "acme/repo",
-      "viewer-node-id",
       "test-token",
       {
         since: "2026-01-01T00:00:00.000Z",
@@ -299,6 +304,8 @@ test("fetchGitHubRepositoryCommitHistory returns default-branch history for the 
     assert.equal(response.items[0]?.additions, 12);
     assert.equal(response.items[0]?.deletions, 4);
     assert.equal(response.items[0]?.oid, "abc123");
+    assert.equal(response.items[0]?.author?.user?.login, "manuel");
+    assert.deepEqual(response.viewerPossibleCommitEmails, ["manuel@example.com"]);
   } finally {
     globalThis.fetch = originalFetch;
   }

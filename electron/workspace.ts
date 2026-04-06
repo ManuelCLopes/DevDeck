@@ -1249,6 +1249,7 @@ async function getGitHubUserActivitySummary(
         from: oldestWindowStartTimestamp,
       },
     );
+    const viewerLogin = githubAuthStatus.viewerLogin.toLowerCase();
 
     for (const repositorySlug of commitRepositories.repositorySlugs) {
       let after: string | null = null;
@@ -1259,7 +1260,6 @@ async function getGitHubUserActivitySummary(
         try {
           response = await fetchGitHubRepositoryCommitHistory(
             repositorySlug,
-            commitRepositories.viewerId,
             githubAuthStatus.token!,
             {
               after,
@@ -1278,7 +1278,21 @@ async function getGitHubUserActivitySummary(
           throw error;
         }
 
+        const viewerPossibleCommitEmails = new Set(
+          response.viewerPossibleCommitEmails.map((email: string) => email.toLowerCase()),
+        );
+
         for (const commit of response.items) {
+          const commitAuthorLogin = commit.author?.user?.login?.toLowerCase() ?? null;
+          const commitAuthorEmail = commit.author?.email?.toLowerCase() ?? null;
+
+          if (
+            commitAuthorLogin !== viewerLogin &&
+            (!commitAuthorEmail || !viewerPossibleCommitEmails.has(commitAuthorEmail))
+          ) {
+            continue;
+          }
+
           forEachMatchingUserActivityWindow(commit.committedDate, (key) => {
             summary[key].commits += 1;
             summary[key].linesAdded += commit.additions;

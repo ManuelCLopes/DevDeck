@@ -42,6 +42,12 @@ export interface GitHubApiPullRequestSearchItem {
 
 export interface GitHubApiRepositoryCommitHistoryItem {
   additions: number;
+  author: {
+    email: string | null;
+    user: {
+      login: string;
+    } | null;
+  } | null;
   committedDate: string;
   deletions: number;
   oid: string;
@@ -53,6 +59,7 @@ interface GitHubApiRepositoryCommitHistoryResponse {
     endCursor: string | null;
     hasNextPage: boolean;
   };
+  viewerPossibleCommitEmails: string[];
 }
 
 interface GitHubApiSearchResponse<TItem> {
@@ -340,7 +347,6 @@ export async function fetchGitHubViewerCommitRepositories(
           ),
       ),
     ),
-    viewerId: data.viewer.id,
   };
 }
 
@@ -356,7 +362,6 @@ function parseRepositorySlug(repositorySlug: string) {
 
 export async function fetchGitHubRepositoryCommitHistory(
   repositorySlug: string,
-  viewerId: string,
   token: string,
   options: {
     after?: string | null;
@@ -367,11 +372,18 @@ export async function fetchGitHubRepositoryCommitHistory(
   const { owner, repo } = parseRepositorySlug(repositorySlug);
   const data = await githubGraphqlRequest<{
     repository: {
+      viewerPossibleCommitEmails: string[];
       defaultBranchRef: {
         target: {
           history: {
             nodes: Array<{
               additions: number;
+              author: {
+                email: string | null;
+                user: {
+                  login: string;
+                } | null;
+              } | null;
               committedDate: string;
               deletions: number;
               oid: string;
@@ -392,9 +404,9 @@ export async function fetchGitHubRepositoryCommitHistory(
         $name: String!
         $owner: String!
         $since: GitTimestamp!
-        $viewerId: ID!
       ) {
         repository(owner: $owner, name: $name) {
+          viewerPossibleCommitEmails
           defaultBranchRef {
             target {
               ... on Commit {
@@ -402,7 +414,6 @@ export async function fetchGitHubRepositoryCommitHistory(
                   after: $after
                   first: $first
                   since: $since
-                  author: { id: $viewerId }
                 ) {
                   pageInfo {
                     endCursor
@@ -410,6 +421,12 @@ export async function fetchGitHubRepositoryCommitHistory(
                   }
                   nodes {
                     additions
+                    author {
+                      email
+                      user {
+                        login
+                      }
+                    }
                     committedDate
                     deletions
                     oid
@@ -427,7 +444,6 @@ export async function fetchGitHubRepositoryCommitHistory(
       name: repo,
       owner,
       since: options.since,
-      viewerId,
     },
     token,
   );
@@ -441,6 +457,7 @@ export async function fetchGitHubRepositoryCommitHistory(
       endCursor: null,
       hasNextPage: false,
     },
+    viewerPossibleCommitEmails: data.repository?.viewerPossibleCommitEmails ?? [],
   } satisfies GitHubApiRepositoryCommitHistoryResponse;
 }
 
