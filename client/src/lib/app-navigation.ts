@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isDesktopApp } from "@/lib/desktop";
 
 type NavigateFn = (targetPath: string) => void;
 
@@ -21,6 +22,49 @@ function pushRoute(routeKey: string) {
   historyEntries.splice(currentIndex + 1);
   historyEntries.push(routeKey);
   currentIndex = historyEntries.length - 1;
+}
+
+export function buildAppRoute(location: string, search: string) {
+  const [pathname, inlineSearch = ""] = location.split("?");
+  const normalizedPath = pathname || "/";
+  const normalizedSearch = inlineSearch
+    ? `?${inlineSearch}`
+    : search
+      ? search.startsWith("?")
+        ? search
+        : `?${search}`
+      : "";
+
+  return `${normalizedPath}${normalizedSearch}`;
+}
+
+export function buildDesktopNavigationUrl(currentHref: string, targetPath: string) {
+  const normalizedTarget = targetPath.startsWith("/") ? targetPath : `/${targetPath}`;
+  const [pathnamePart, searchPart = ""] = normalizedTarget
+    .replace(/^#?\/?/, "")
+    .split("?");
+  const url = new URL(currentHref);
+  url.hash = `/${pathnamePart}`;
+  url.search = searchPart ? `?${searchPart}` : "";
+  return url.href;
+}
+
+export function navigateInApp(targetPath: string, navigate: NavigateFn) {
+  if (!isDesktopApp()) {
+    navigate(targetPath);
+    return;
+  }
+
+  const oldURL = window.location.href;
+  const newURL = buildDesktopNavigationUrl(oldURL, targetPath);
+  window.history.pushState(null, "", newURL);
+
+  const event =
+    typeof HashChangeEvent !== "undefined"
+      ? new HashChangeEvent("hashchange", { oldURL, newURL })
+      : new Event("hashchange");
+
+  window.dispatchEvent(event);
 }
 
 export function syncAppRoute(routeKey: string) {
@@ -61,7 +105,7 @@ export function goBackInApp(navigate: NavigateFn) {
 
   currentIndex -= 1;
   notifyListeners();
-  navigate(historyEntries[currentIndex]);
+  navigateInApp(historyEntries[currentIndex], navigate);
 }
 
 export function goForwardInApp(navigate: NavigateFn) {
@@ -71,7 +115,7 @@ export function goForwardInApp(navigate: NavigateFn) {
 
   currentIndex += 1;
   notifyListeners();
-  navigate(historyEntries[currentIndex]);
+  navigateInApp(historyEntries[currentIndex], navigate);
 }
 
 export function useAppNavigation(routeKey: string) {

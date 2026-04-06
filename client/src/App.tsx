@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { hasCompletedOnboarding } from "@/lib/onboarding-state";
 import { getDesktopApi } from "@/lib/desktop";
+import { navigateInApp } from "@/lib/app-navigation";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import {
   hasValidWorkspaceSelection,
@@ -45,7 +46,7 @@ function AppRouter() {
     }
 
     return desktopApi.onNavigate((targetPath) => {
-      setLocation(targetPath);
+      navigateInApp(targetPath, setLocation);
     });
   }, [setLocation]);
 
@@ -56,7 +57,7 @@ function AppRouter() {
 
     // Only redirect to onboarding if they haven't completed it AND they aren't already there
     if ((!hasCompletedOnboarding() || !hasValidDesktopWorkspace) && location !== '/onboarding') {
-      setLocation('/onboarding');
+      navigateInApp('/onboarding', setLocation);
     }
     
     setIsInitializing(false);

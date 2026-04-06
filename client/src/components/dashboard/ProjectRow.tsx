@@ -1,5 +1,6 @@
 import type { WorkspaceProject } from "@shared/workspace";
 import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
+import { navigateInApp } from "@/lib/app-navigation";
 import { formatDistanceToNow } from "date-fns";
 import { GitBranch, Globe, HardDrive, Link2Off, MessageSquare, Users } from "lucide-react";
 import { useLocation } from "wouter";
@@ -18,11 +19,11 @@ export default function ProjectRow({ project }: ProjectRowProps) {
     <div
       role="button"
       tabIndex={0}
-      onClick={() => setLocation(projectHref)}
+      onClick={() => navigateInApp(projectHref, setLocation)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          setLocation(projectHref);
+          navigateInApp(projectHref, setLocation);
         }
       }}
       className="flex cursor-pointer items-start gap-4 rounded-md border-b border-border/40 px-4 py-2.5 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:items-center"

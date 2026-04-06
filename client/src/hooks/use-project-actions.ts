@@ -1,4 +1,5 @@
 import { useLocation } from "wouter";
+import { navigateInApp } from "@/lib/app-navigation";
 import { getDesktopApi } from "@/lib/desktop";
 import { queryClient } from "@/lib/queryClient";
 import { clearWorkspaceHandle } from "@/lib/workspace-handle";
@@ -37,7 +38,7 @@ export function useProjectActions() {
       clearWorkspaceSelection();
       await clearWorkspaceHandle();
       void queryClient.removeQueries({ queryKey: ["workspace", "snapshot"] });
-      setLocation("/onboarding");
+      navigateInApp("/onboarding", setLocation);
       return;
     }
 
@@ -46,7 +47,7 @@ export function useProjectActions() {
     const currentSearch =
       typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     if (window.location.pathname === "/" && currentSearch?.get("project") === projectId) {
-      setLocation("/");
+      navigateInApp("/", setLocation);
     }
   };
 

@@ -3,6 +3,7 @@ import AppLayout from "@/components/layout/AppLayout";
 import GitHubConnectDialog from "@/components/settings/GitHubConnectDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
+import { navigateInApp } from "@/lib/app-navigation";
 import {
   Select,
   SelectContent,
@@ -83,7 +84,7 @@ export default function Settings() {
       clearWorkspaceSelection();
       await clearWorkspaceHandle();
       void queryClient.removeQueries({ queryKey: ["workspace", "snapshot"] });
-      setLocation("/onboarding");
+      navigateInApp("/onboarding", setLocation);
       return;
     }
 
@@ -104,7 +105,7 @@ export default function Settings() {
     clearWorkspaceSelection();
     void clearWorkspaceHandle();
     void queryClient.removeQueries({ queryKey: ["workspace", "snapshot"] });
-    setLocation('/onboarding');
+    navigateInApp("/onboarding", setLocation);
   };
 
   const handleToggleLaunchAtLogin = async (checked: boolean) => {

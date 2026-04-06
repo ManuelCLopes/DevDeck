@@ -3,11 +3,12 @@ import { access, readFile, readdir } from "fs/promises";
 import path from "path";
 import { promisify } from "util";
 import {
-  fetchGitHubCommitSearchResults,
+  fetchGitHubRepositoryCommitHistory,
   fetchGitHubCommitStatus,
   fetchGitHubPullRequestReviews,
   fetchGitHubPullRequests,
   fetchGitHubPullRequestSearchResults,
+  fetchGitHubViewerCommitRepositories,
   fetchGitHubViewer,
   GitHubApiError,
   GitHubConnectivityError,
@@ -119,7 +120,7 @@ const CI_STATUS_CACHE_TTL_MS = 1000 * 60 * 2;
 const USER_ACTIVITY_CACHE_TTL_MS = 1000 * 60 * 2;
 const GITHUB_SEARCH_MAX_PAGES = 10;
 const GITHUB_SEARCH_PAGE_SIZE = 100;
-const GITHUB_COMMIT_SEARCH_PAGE_SIZE = 50;
+const GITHUB_COMMIT_HISTORY_PAGE_SIZE = 100;
 const USER_ACTIVITY_WINDOWS = [
   { days: 7, key: "last7Days" },
   { days: 30, key: "last30Days" },
@@ -1135,16 +1136,16 @@ async function getGitHubUserActivitySummary(
   }
 
   try {
-    const oldestWindowStart = new Date(
+    const oldestWindowStartDate = new Date(
       Date.now() -
         USER_ACTIVITY_WINDOWS[USER_ACTIVITY_WINDOWS.length - 1].days *
           24 *
           60 *
           60 *
           1000,
-    )
-      .toISOString()
-      .slice(0, 10);
+    );
+    const oldestWindowStart = oldestWindowStartDate.toISOString().slice(0, 10);
+    const oldestWindowStartTimestamp = oldestWindowStartDate.toISOString();
 
     const fetchSearchResults = async (query: string) => {
       const items: GitHubApiPullRequestSearchItem[] = [];
@@ -1166,41 +1167,6 @@ async function getGitHubUserActivitySummary(
         ) {
           break;
         }
-      }
-
-      return items;
-    };
-
-    const fetchCommitSearchResults = async (query: string) => {
-      const items: CommitActivityEntry[] = [];
-      let after: string | null = null;
-
-      for (let page = 1; page <= GITHUB_SEARCH_MAX_PAGES; page += 1) {
-        const response = await fetchGitHubCommitSearchResults(
-          query,
-          githubAuthStatus.token!,
-          {
-            after,
-            first: GITHUB_COMMIT_SEARCH_PAGE_SIZE,
-          },
-        );
-
-        for (const item of response.items) {
-          items.push({
-            authorEmail: null,
-            authorName: null,
-            commitSha: item.oid,
-            linesAdded: item.additions,
-            linesDeleted: item.deletions,
-            timestamp: item.committedDate,
-          });
-        }
-
-        if (!response.pageInfo.hasNextPage || !response.pageInfo.endCursor) {
-          break;
-        }
-
-        after = response.pageInfo.endCursor;
       }
 
       return items;
@@ -1277,21 +1243,60 @@ async function getGitHubUserActivitySummary(
       });
     }
 
-    const commits = await fetchCommitSearchResults(
-      `author:${githubAuthStatus.viewerLogin} author-date:>=${oldestWindowStart} sort:author-date-desc`,
+    const commitRepositories = await fetchGitHubViewerCommitRepositories(
+      githubAuthStatus.token!,
+      {
+        from: oldestWindowStartTimestamp,
+      },
     );
 
-    for (const commit of commits) {
-      forEachMatchingUserActivityWindow(commit.timestamp, (key) => {
-        summary[key].commits += 1;
-        summary[key].linesAdded += commit.linesAdded;
-        summary[key].linesDeleted += commit.linesDeleted;
-        updateUserActivityPoint(summary, key, commit.timestamp, (point) => {
-          point.commits += 1;
-          point.linesAdded += commit.linesAdded;
-          point.linesDeleted += commit.linesDeleted;
-        });
-      });
+    for (const repositorySlug of commitRepositories.repositorySlugs) {
+      let after: string | null = null;
+
+      for (let page = 1; page <= GITHUB_SEARCH_MAX_PAGES; page += 1) {
+        let response;
+
+        try {
+          response = await fetchGitHubRepositoryCommitHistory(
+            repositorySlug,
+            commitRepositories.viewerId,
+            githubAuthStatus.token!,
+            {
+              after,
+              first: GITHUB_COMMIT_HISTORY_PAGE_SIZE,
+              since: oldestWindowStartTimestamp,
+            },
+          );
+        } catch (error) {
+          if (
+            error instanceof GitHubApiError &&
+            (error.status === 403 || error.status === 404)
+          ) {
+            break;
+          }
+
+          throw error;
+        }
+
+        for (const commit of response.items) {
+          forEachMatchingUserActivityWindow(commit.committedDate, (key) => {
+            summary[key].commits += 1;
+            summary[key].linesAdded += commit.additions;
+            summary[key].linesDeleted += commit.deletions;
+            updateUserActivityPoint(summary, key, commit.committedDate, (point) => {
+              point.commits += 1;
+              point.linesAdded += commit.additions;
+              point.linesDeleted += commit.deletions;
+            });
+          });
+        }
+
+        if (!response.pageInfo.hasNextPage || !response.pageInfo.endCursor) {
+          break;
+        }
+
+        after = response.pageInfo.endCursor;
+      }
     }
 
     userActivityCache.set(cacheKey, {

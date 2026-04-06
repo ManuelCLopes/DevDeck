@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo } from "react";
+import { Suspense, lazy, useMemo } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
@@ -78,9 +78,7 @@ export default function Projects() {
   });
 
   const selectedProject =
-    filteredProjects.find((project) => project.id === selectedProjectId) ??
-    filteredProjects[0] ??
-    null;
+    filteredProjects.find((project) => project.id === selectedProjectId) ?? null;
   const selectedProjectPullRequests = useMemo(
     () =>
       selectedProject
@@ -105,15 +103,6 @@ export default function Projects() {
     selectedProjectPullRequests.find(
       (pullRequest) => pullRequest.id === selectedPullRequestId,
     ) ?? null;
-
-  useEffect(() => {
-    if (selectedProject) {
-      setSelectedProjectId(selectedProject.id);
-      return;
-    }
-
-    setSelectedProjectId(null);
-  }, [selectedProject, setSelectedProjectId]);
 
   const openInTerminal = async (project: WorkspaceProject) => {
     await desktopApi?.openInTerminal(project.localPath);
@@ -142,6 +131,11 @@ export default function Projects() {
     }
 
     await navigator.clipboard.writeText(project.localPath);
+  };
+
+  const closeSelectedProject = () => {
+    setSelectedProjectId(null);
+    setSelectedPullRequestId(null);
   };
 
   return (
@@ -244,6 +238,25 @@ export default function Projects() {
                     <FolderGit2 className="w-6 h-6 text-primary" />
                   </div>
                   <div className="flex gap-1.5">
+                    <Tooltip.Provider>
+                      <Tooltip.Root>
+                        <Tooltip.Trigger asChild>
+                          <button
+                            type="button"
+                            onClick={closeSelectedProject}
+                            className="p-1.5 bg-white/80 backdrop-blur-sm border border-border shadow-sm rounded-md text-foreground hover:bg-black/5 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </Tooltip.Trigger>
+                        <Tooltip.Portal>
+                          <Tooltip.Content className="bg-foreground text-background text-[11px] px-2 py-1 rounded shadow-md" sideOffset={5}>
+                            Close project
+                            <Tooltip.Arrow className="fill-foreground" />
+                          </Tooltip.Content>
+                        </Tooltip.Portal>
+                      </Tooltip.Root>
+                    </Tooltip.Provider>
                     <Tooltip.Provider>
                       <Tooltip.Root>
                         <Tooltip.Trigger asChild>

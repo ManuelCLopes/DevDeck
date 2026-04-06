@@ -40,18 +40,15 @@ export interface GitHubApiPullRequestSearchItem {
   user: { login: string } | null;
 }
 
-export interface GitHubApiCommitSearchItem {
+export interface GitHubApiRepositoryCommitHistoryItem {
   additions: number;
   committedDate: string;
   deletions: number;
   oid: string;
-  repository: {
-    nameWithOwner: string;
-  } | null;
 }
 
-interface GitHubApiCommitSearchResponse {
-  items: GitHubApiCommitSearchItem[];
+interface GitHubApiRepositoryCommitHistoryResponse {
+  items: GitHubApiRepositoryCommitHistoryItem[];
   pageInfo: {
     endCursor: string | null;
     hasNextPage: boolean;
@@ -77,6 +74,7 @@ interface GitHubApiRequestOptions {
   allowPublicFallback?: boolean;
   body?: string;
   method?: string;
+  overrideAccept?: string;
   timeoutMs?: number;
 }
 
@@ -133,7 +131,7 @@ async function githubApiRequest<T>(
     const requestUrl = `${GITHUB_API_BASE_URL}${pathname}`;
     const method = options?.method ?? "GET";
     const createHeaders = (includeAuthorization: boolean) => ({
-      Accept: "application/vnd.github+json",
+      Accept: options?.overrideAccept ?? "application/vnd.github+json",
       ...(includeAuthorization && token
         ? { Authorization: `Bearer ${token}` }
         : {}),
@@ -290,44 +288,32 @@ export function fetchGitHubPullRequestSearchResults(
   );
 }
 
-export async function fetchGitHubCommitSearchResults(
-  query: string,
+export async function fetchGitHubViewerCommitRepositories(
   token: string,
-  options?: {
-    after?: string | null;
-    first?: number;
+  options: {
+    from: string;
+    maxRepositories?: number;
+    to?: string;
   },
 ) {
   const data = await githubGraphqlRequest<{
-    search: {
-      nodes: Array<{
-        additions: number;
-        committedDate: string;
-        deletions: number;
-        oid: string;
-        repository: {
-          nameWithOwner: string;
-        } | null;
-      } | null>;
-      pageInfo: {
-        endCursor: string | null;
-        hasNextPage: boolean;
+    viewer: {
+      contributionsCollection: {
+        commitContributionsByRepository: Array<{
+          repository: {
+            nameWithOwner: string;
+          } | null;
+        }>;
       };
+      id: string;
     };
   }>(
     `
-      query SearchCommits($query: String!, $first: Int!, $after: String) {
-        search(query: $query, type: COMMIT, first: $first, after: $after) {
-          pageInfo {
-            endCursor
-            hasNextPage
-          }
-          nodes {
-            ... on Commit {
-              oid
-              committedDate
-              additions
-              deletions
+      query ViewerCommitRepositories($from: DateTime!, $to: DateTime!, $maxRepositories: Int!) {
+        viewer {
+          id
+          contributionsCollection(from: $from, to: $to) {
+            commitContributionsByRepository(maxRepositories: $maxRepositories) {
               repository {
                 nameWithOwner
               }
@@ -337,19 +323,125 @@ export async function fetchGitHubCommitSearchResults(
       }
     `,
     {
-      after: options?.after ?? null,
-      first: options?.first ?? 50,
-      query,
+      from: options.from,
+      maxRepositories: options.maxRepositories ?? 100,
+      to: options.to ?? new Date().toISOString(),
     },
     token,
   );
 
   return {
-    items: data.search.nodes.filter(
-      (node): node is GitHubApiCommitSearchItem => Boolean(node),
+    repositorySlugs: Array.from(
+      new Set(
+        data.viewer.contributionsCollection.commitContributionsByRepository
+          .map((item) => item.repository?.nameWithOwner ?? null)
+          .filter((repositorySlug): repositorySlug is string =>
+            Boolean(repositorySlug),
+          ),
+      ),
     ),
-    pageInfo: data.search.pageInfo,
-  } satisfies GitHubApiCommitSearchResponse;
+    viewerId: data.viewer.id,
+  };
+}
+
+function parseRepositorySlug(repositorySlug: string) {
+  const [owner, ...repoParts] = repositorySlug.split("/");
+  const repo = repoParts.join("/");
+  if (!owner || !repo) {
+    throw new GitHubApiError(`Invalid repository slug: ${repositorySlug}`, 400);
+  }
+
+  return { owner, repo };
+}
+
+export async function fetchGitHubRepositoryCommitHistory(
+  repositorySlug: string,
+  viewerId: string,
+  token: string,
+  options: {
+    after?: string | null;
+    first?: number;
+    since: string;
+  },
+) {
+  const { owner, repo } = parseRepositorySlug(repositorySlug);
+  const data = await githubGraphqlRequest<{
+    repository: {
+      defaultBranchRef: {
+        target: {
+          history: {
+            nodes: Array<{
+              additions: number;
+              committedDate: string;
+              deletions: number;
+              oid: string;
+            } | null>;
+            pageInfo: {
+              endCursor: string | null;
+              hasNextPage: boolean;
+            };
+          };
+        } | null;
+      } | null;
+    } | null;
+  }>(
+    `
+      query RepositoryCommitHistory(
+        $after: String
+        $first: Int!
+        $name: String!
+        $owner: String!
+        $since: GitTimestamp!
+        $viewerId: ID!
+      ) {
+        repository(owner: $owner, name: $name) {
+          defaultBranchRef {
+            target {
+              ... on Commit {
+                history(
+                  after: $after
+                  first: $first
+                  since: $since
+                  author: { id: $viewerId }
+                ) {
+                  pageInfo {
+                    endCursor
+                    hasNextPage
+                  }
+                  nodes {
+                    additions
+                    committedDate
+                    deletions
+                    oid
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    {
+      after: options.after ?? null,
+      first: options.first ?? 100,
+      name: repo,
+      owner,
+      since: options.since,
+      viewerId,
+    },
+    token,
+  );
+
+  return {
+    items:
+      data.repository?.defaultBranchRef?.target?.history.nodes.filter(
+        (node): node is GitHubApiRepositoryCommitHistoryItem => Boolean(node),
+      ) ?? [],
+    pageInfo: data.repository?.defaultBranchRef?.target?.history.pageInfo ?? {
+      endCursor: null,
+      hasNextPage: false,
+    },
+  } satisfies GitHubApiRepositoryCommitHistoryResponse;
 }
 
 export function fetchGitHubPullRequestReviews(

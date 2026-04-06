@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
+import { navigateInApp } from "@/lib/app-navigation";
 import { setCompletedOnboarding } from "@/lib/onboarding-state";
 import { queryClient } from "@/lib/queryClient";
 import { getDesktopApi } from "@/lib/desktop";
@@ -247,7 +248,7 @@ export default function Onboarding() {
     );
     void queryClient.invalidateQueries({ queryKey: ["workspace", "snapshot"] });
     setCompletedOnboarding();
-    setLocation(returnTo);
+    navigateInApp(returnTo, setLocation);
   };
 
   const handleDirectoryFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {

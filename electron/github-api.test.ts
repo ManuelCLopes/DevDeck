@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createGitHubPullRequestComment,
-  fetchGitHubCommitSearchResults,
   fetchGitHubPullRequestSearchResults,
   fetchGitHubPullRequests,
+  fetchGitHubRepositoryCommitHistory,
+  fetchGitHubViewerCommitRepositories,
   GitHubApiError,
   GitHubConnectivityError,
   requestGitHubPullRequestReviewers,
@@ -194,32 +195,86 @@ test("fetchGitHubPullRequestSearchResults encodes the search query and returns i
   );
 });
 
-test("fetchGitHubCommitSearchResults returns commit nodes from GraphQL search", async () => {
+test("fetchGitHubViewerCommitRepositories returns contributed repositories and viewer id", async () => {
   const originalFetch = globalThis.fetch;
-  let requestUrl = "";
-  let requestInit: RequestInit | undefined;
+  let requestBody = "";
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    requestUrl = String(input);
-    requestInit = init;
+    assert.equal(String(input), "https://api.github.com/graphql");
+    requestBody = String(init?.body ?? "");
     return new Response(
       JSON.stringify({
         data: {
-          search: {
-            nodes: [
-              {
-                additions: 12,
-                committedDate: "2026-04-03T10:00:00Z",
-                deletions: 4,
-                oid: "abc123",
-                repository: {
-                  nameWithOwner: "acme/repo",
+          viewer: {
+            contributionsCollection: {
+              commitContributionsByRepository: [
+                {
+                  repository: {
+                    nameWithOwner: "acme/repo",
+                  },
+                },
+                {
+                  repository: {
+                    nameWithOwner: "acme/second-repo",
+                  },
+                },
+              ],
+            },
+            id: "viewer-node-id",
+          },
+        },
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      },
+    );
+  }) as typeof fetch;
+
+  try {
+    const response = await fetchGitHubViewerCommitRepositories(
+      "test-token",
+      {
+        from: "2026-01-01T00:00:00.000Z",
+      },
+    );
+    assert.deepEqual(response.repositorySlugs, ["acme/repo", "acme/second-repo"]);
+    assert.equal(response.viewerId, "viewer-node-id");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.match(requestBody, /ViewerCommitRepositories/);
+});
+
+test("fetchGitHubRepositoryCommitHistory returns default-branch history for the viewer", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody = "";
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    assert.equal(String(input), "https://api.github.com/graphql");
+    requestBody = String(init?.body ?? "");
+    return new Response(
+      JSON.stringify({
+        data: {
+          repository: {
+            defaultBranchRef: {
+              target: {
+                history: {
+                  nodes: [
+                    {
+                      additions: 12,
+                      committedDate: "2026-04-03T10:00:00Z",
+                      deletions: 4,
+                      oid: "abc123",
+                    },
+                  ],
+                  pageInfo: {
+                    endCursor: null,
+                    hasNextPage: false,
+                  },
                 },
               },
-            ],
-            pageInfo: {
-              endCursor: null,
-              hasNextPage: false,
             },
           },
         },
@@ -232,9 +287,13 @@ test("fetchGitHubCommitSearchResults returns commit nodes from GraphQL search", 
   }) as typeof fetch;
 
   try {
-    const response = await fetchGitHubCommitSearchResults(
-      "author:manuel author-date:>=2026-01-01 sort:author-date-desc",
+    const response = await fetchGitHubRepositoryCommitHistory(
+      "acme/repo",
+      "viewer-node-id",
       "test-token",
+      {
+        since: "2026-01-01T00:00:00.000Z",
+      },
     );
     assert.equal(response.items.length, 1);
     assert.equal(response.items[0]?.additions, 12);
@@ -244,10 +303,7 @@ test("fetchGitHubCommitSearchResults returns commit nodes from GraphQL search", 
     globalThis.fetch = originalFetch;
   }
 
-  assert.equal(requestUrl, "https://api.github.com/graphql");
-  assert.equal(requestInit?.method, "POST");
-  assert.equal(
-    (requestInit?.headers as Record<string, string>).Authorization,
-    "Bearer test-token",
-  );
+  assert.match(requestBody, /RepositoryCommitHistory/);
+  assert.match(requestBody, /"owner":"acme"/);
+  assert.match(requestBody, /"name":"repo"/);
 });

@@ -1,5 +1,6 @@
 import type { WorkspaceProject } from "@shared/workspace";
 import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
+import { navigateInApp } from "@/lib/app-navigation";
 import {
   GitBranch,
   Globe,
@@ -24,11 +25,11 @@ export default function ProjectCard({ project }: ProjectCardProps) {
     <div
       role="button"
       tabIndex={0}
-      onClick={() => setLocation(projectHref)}
+      onClick={() => navigateInApp(projectHref, setLocation)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          setLocation(projectHref);
+          navigateInApp(projectHref, setLocation);
         }
       }}
       className="block cursor-pointer overflow-hidden rounded-xl border border-border/60 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"

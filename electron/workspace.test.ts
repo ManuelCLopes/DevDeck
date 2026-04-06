@@ -418,7 +418,7 @@ test("loadWorkspaceSnapshot aggregates merged and reviewed PRs from GitHub acros
   writeFileSync(tokenPath, JSON.stringify({ token: "test-token" }), "utf8");
   clearWorkspaceSnapshotCaches();
 
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const requestUrl = new URL(String(input));
     const pathname = requestUrl.pathname;
     const query = requestUrl.searchParams.get("q") ?? "";
@@ -519,31 +519,72 @@ test("loadWorkspaceSnapshot aggregates merged and reviewed PRs from GitHub acros
     }
 
     if (pathname === "/graphql") {
-      return new Response(
-        JSON.stringify({
-          data: {
-            search: {
-              nodes: [
-                {
-                  additions: 8,
-                  committedDate: new Date().toISOString(),
-                  deletions: 3,
-                  oid: "abc123",
-                  repository: {
-                    nameWithOwner: "acme/alpha",
-                  },
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      const queryText = String(body.query ?? "");
+
+      if (queryText.includes("ViewerCommitRepositories")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              viewer: {
+                contributionsCollection: {
+                  commitContributionsByRepository: [
+                    {
+                      repository: {
+                        nameWithOwner: "acme/alpha",
+                      },
+                    },
+                  ],
                 },
-              ],
-              pageInfo: {
-                endCursor: null,
-                hasNextPage: false,
+                id: "viewer-node-id",
               },
             },
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
           },
-        }),
+        );
+      }
+
+      if (queryText.includes("RepositoryCommitHistory")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              repository: {
+                defaultBranchRef: {
+                  target: {
+                    history: {
+                      nodes: [
+                        {
+                          additions: 8,
+                          committedDate: new Date().toISOString(),
+                          deletions: 3,
+                          oid: "abc123",
+                        },
+                      ],
+                      pageInfo: {
+                        endCursor: null,
+                        hasNextPage: false,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ errors: [{ message: "Unexpected GraphQL query" }] }),
         {
           headers: { "Content-Type": "application/json" },
-          status: 200,
+          status: 400,
         },
       );
     }

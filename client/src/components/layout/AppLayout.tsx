@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Link, useLocation, useSearch } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import WindowControls from "@/components/layout/WindowControls";
 import ProjectQuickActions from "@/components/projects/ProjectQuickActions";
 import { usePersistentState } from "@/hooks/use-persistent-state";
@@ -27,8 +27,10 @@ import { useDesktopWorkspaceMonitor } from "@/hooks/use-desktop-workspace-monito
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { useAppPreferences } from "@/lib/app-preferences";
 import {
+  buildAppRoute,
   goBackInApp,
   goForwardInApp,
+  navigateInApp,
   useAppNavigation,
 } from "@/lib/app-navigation";
 import { useWorkspaceAlerts } from "@/hooks/use-workspace-alerts";
@@ -112,7 +114,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const { preferences } = useAppPreferences();
   const reviewCount = snapshot?.pullRequests.length ?? 0;
   const activityCount = snapshot?.activities.length ?? 0;
-  const routeKey = `${location}${search}`;
+  const routeKey = buildAppRoute(location, search);
   const { canGoBack, canGoForward } = useAppNavigation(routeKey);
   const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLowerCase());
   const syncStatusLabel = useMemo(() => {
@@ -270,7 +272,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   const handleNavigate = (targetPath: string) => {
     startTransition(() => {
-      setLocation(targetPath);
+      navigateInApp(targetPath, setLocation);
       setIsSearchOpen(false);
       setSearchQuery("");
     });
@@ -364,34 +366,35 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 ? "bg-primary-foreground/20 text-primary-foreground"
                 : "bg-primary/10 text-primary";
               return (
-                <Link key={item.href} href={item.href}>
-                  <a
-                    className={`relative flex items-center rounded-md transition-all ${
-                      isSidebarCollapsed
-                        ? "flex-col justify-center gap-1 px-0 py-1.5"
-                        : "gap-2 px-2.5 py-1.5"
-                    } ${
+                <button
+                  key={item.href}
+                  type="button"
+                  onClick={() => handleNavigate(item.href)}
+                  className={`relative flex w-full items-center rounded-md text-left transition-all ${
+                    isSidebarCollapsed
+                      ? "flex-col justify-center gap-1 px-0 py-1.5"
+                      : "gap-2 px-2.5 py-1.5"
+                  } ${
                     active
-                      ? "bg-primary text-primary-foreground font-medium shadow-sm" 
+                      ? "bg-primary text-primary-foreground font-medium shadow-sm"
                       : "text-foreground/80 hover:bg-black/5"
                   }`}
-                    title={isSidebarCollapsed ? item.label : undefined}
-                  >
-                    <item.icon className={`w-4 h-4 ${active ? "opacity-100" : "opacity-70 text-primary"}`} />
-                    {!isSidebarCollapsed ? item.label : null}
-                    {badgeCount !== null ? (
-                      <span
-                        className={`text-[10px] font-bold ${
-                          isSidebarCollapsed
-                            ? `min-w-[18px] rounded-full px-1.5 py-0.5 text-center leading-none ${collapsedBadgeClassName}`
-                            : "ml-auto bg-primary-foreground/20 px-1.5"
-                        }`}
-                      >
-                        {badgeCount}
-                      </span>
-                    ) : null}
-                  </a>
-                </Link>
+                  title={isSidebarCollapsed ? item.label : undefined}
+                >
+                  <item.icon className={`w-4 h-4 ${active ? "opacity-100" : "opacity-70 text-primary"}`} />
+                  {!isSidebarCollapsed ? item.label : null}
+                  {badgeCount !== null ? (
+                    <span
+                      className={`text-[10px] font-bold ${
+                        isSidebarCollapsed
+                          ? `min-w-[18px] rounded-full px-1.5 py-0.5 text-center leading-none ${collapsedBadgeClassName}`
+                          : "ml-auto bg-primary-foreground/20 px-1.5"
+                      }`}
+                    >
+                      {badgeCount}
+                    </span>
+                  ) : null}
+                </button>
               );
             })}
             
@@ -452,7 +455,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       <button
                         type="button"
                         onClick={() =>
-                          setLocation(`/?project=${encodeURIComponent(project.id)}`)
+                          navigateInApp(
+                            `/?project=${encodeURIComponent(project.id)}`,
+                            setLocation,
+                          )
                         }
                         className={`flex min-w-0 flex-1 items-center overflow-hidden text-left ${
                           isSidebarCollapsed ? "justify-center px-0 py-1" : "gap-2 px-0.5 py-0.5"
@@ -489,20 +495,21 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
           {/* Local Status Indicator */}
           <div className="p-3">
-            <Link href="/settings">
-              <a className={`flex items-center rounded-md transition-colors ${
+            <button
+              type="button"
+              onClick={() => handleNavigate("/settings")}
+              className={`flex w-full items-center rounded-md text-left transition-colors ${
                 isSidebarCollapsed ? "justify-center px-0 py-2" : "gap-2 px-2.5 py-1.5"
               } ${
-                location === '/settings' 
-                  ? "bg-primary text-primary-foreground font-medium shadow-sm" 
+                location === "/settings"
+                  ? "bg-primary text-primary-foreground font-medium shadow-sm"
                   : "text-foreground/80 hover:bg-black/5"
               }`}
-                title={isSidebarCollapsed ? "Preferences" : undefined}
-              >
-                <Settings className="w-4 h-4 opacity-70" />
-                {!isSidebarCollapsed ? "Preferences" : null}
-              </a>
-            </Link>
+              title={isSidebarCollapsed ? "Preferences" : undefined}
+            >
+              <Settings className="w-4 h-4 opacity-70" />
+              {!isSidebarCollapsed ? "Preferences" : null}
+            </button>
             
             <div
               className={`mt-3 rounded-md bg-black/5 ${
@@ -580,14 +587,18 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin" : ""}`} />
               </button>
               
-              <Link href="/activity">
-                <a className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-secondary relative">
-                  <Bell className="w-4 h-4" />
-                  {activityCount > 0 && (
-                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary border-2 border-background"></span>
-                  )}
-                </a>
-              </Link>
+              <button
+                type="button"
+                onClick={() => handleNavigate("/activity")}
+                className="relative rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                aria-label="Open activity inbox"
+                title="Open activity inbox"
+              >
+                <Bell className="w-4 h-4" />
+                {activityCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-primary border-2 border-background"></span>
+                )}
+              </button>
             </div>
           </header>
 

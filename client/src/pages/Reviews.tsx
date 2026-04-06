@@ -5,6 +5,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
+import { navigateInApp } from "@/lib/app-navigation";
 import { getDesktopApi } from "@/lib/desktop";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import {
@@ -187,7 +188,7 @@ export default function Reviews() {
   };
 
   const handleInspectPullRequest = (pullRequestId: string) => {
-    setLocation(`/reviews?pr=${encodeURIComponent(pullRequestId)}`);
+    navigateInApp(`/reviews?pr=${encodeURIComponent(pullRequestId)}`, setLocation);
   };
 
   const handleSetPullRequestQueueStatus = (
@@ -683,14 +684,12 @@ export default function Reviews() {
                               View
                             </button>
                           </div>
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
                             <span
                               className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${statusMeta.className}`}
                             >
                               {statusMeta.label}
                             </span>
-                          </div>
-                          <div className="flex justify-end text-[11px] text-muted-foreground">
                             <span className="whitespace-nowrap">
                               {formatDistanceToNow(new Date(pullRequest.updatedAt), {
                                 addSuffix: true,
@@ -726,7 +725,7 @@ export default function Reviews() {
               open={Boolean(selectedPullRequest)}
               onOpenChange={(open) => {
                 if (!open) {
-                  setLocation(location);
+                  navigateInApp(location, setLocation);
                 }
               }}
               pullRequest={selectedPullRequest}
