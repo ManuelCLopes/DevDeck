@@ -230,7 +230,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const navItems = [
     { href: "/", icon: LayoutGrid, label: "Overview" },
     { href: "/reviews", icon: MessageSquare, label: "Pull Requests" },
-    { href: "/projects", icon: FolderGit2, label: "Local Projects" },
+    { href: "/projects", icon: FolderGit2, label: "Repositories" },
     { href: "/activity", icon: Activity, label: "Activity Inbox" },
   ];
 
@@ -412,8 +412,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 className={`text-muted-foreground/50 hover:text-foreground/80 no-drag ${
                   isSidebarCollapsed ? "rounded-md p-1 hover:bg-black/5" : ""
                 }`}
-                aria-label="Add projects"
-                title="Add projects"
+                aria-label="Add repositories"
+                title="Add repositories"
               >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               </button>
@@ -570,7 +570,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 className="relative hidden lg:block h-7 w-full max-w-64 min-w-0 pl-8 pr-12 rounded-md bg-secondary/70 border border-black/5 hover:bg-background text-left focus:bg-background focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none text-xs transition-all text-muted-foreground"
               >
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <span className="block truncate">Search projects, PRs, activity...</span>
+                <span className="block truncate">Search repositories, PRs, activity...</span>
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground/80">
                   {typeof navigator !== "undefined" && navigator.platform.includes("Mac")
                     ? "⌘K"
@@ -634,17 +634,17 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <CommandInput
           value={searchQuery}
           onValueChange={setSearchQuery}
-          placeholder="Search projects, pull requests, and activity..."
+          placeholder="Search repositories, pull requests, and activity..."
         />
         <CommandList>
           <CommandEmpty>No matching results.</CommandEmpty>
           <CommandGroup heading="Quick Actions">
             <CommandItem
-              value="add projects import workspace"
+              value="add repositories import workspace"
               onSelect={() => handleCommandAction(() => setIsAddProjectsOpen(true))}
             >
               <Plus className="w-4 h-4 text-primary" />
-              <span className="font-medium">Add Projects</span>
+              <span className="font-medium">Add Repositories</span>
             </CommandItem>
             <CommandItem
               value="refresh workspace snapshot"
@@ -671,7 +671,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </CommandItem>
           </CommandGroup>
           <CommandSeparator />
-          <CommandGroup heading="Projects">
+          <CommandGroup heading="Repositories">
             {searchResults.projects.map((project) => (
               <CommandItem
                 key={project.id}
@@ -694,7 +694,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           {deferredSearchQuery.length > 0 && desktopApi ? (
             <>
               <CommandSeparator />
-              <CommandGroup heading="Project Actions">
+              <CommandGroup heading="Repository Actions">
                 {searchResults.projects
                   .filter((project) => Boolean(project.localPath))
                   .slice(0, 3)

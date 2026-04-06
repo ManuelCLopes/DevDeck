@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  GitHubRepositoryCandidate,
   WorkspaceDiscoveryResult,
   WorkspaceSelection,
   WorkspaceSnapshot,
@@ -90,6 +91,9 @@ const devdeck = {
   },
   getGitHubAuthCapabilities() {
     return ipcRenderer.invoke("devdeck:get-github-auth-capabilities");
+  },
+  listGitHubRepositories(): Promise<GitHubRepositoryCandidate[]> {
+    return ipcRenderer.invoke("devdeck:list-github-repositories");
   },
   pollGitHubDeviceAuth(deviceCode: string) {
     return ipcRenderer.invoke("devdeck:poll-github-device-auth", deviceCode);

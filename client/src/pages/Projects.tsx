@@ -144,8 +144,8 @@ export default function Projects() {
         <div className="mx-auto flex h-full w-full min-w-0 max-w-[1200px] flex-col animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Local Projects</h1>
-            <p className="text-muted-foreground text-sm">Browse repositories and local workspaces tracked by DevDeck.</p>
+            <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Repositories</h1>
+            <p className="text-muted-foreground text-sm">Browse the repositories DevDeck tracks, with linked local clone context when available.</p>
           </div>
 
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">

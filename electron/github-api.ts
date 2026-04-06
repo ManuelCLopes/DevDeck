@@ -5,6 +5,20 @@ export interface GitHubApiViewer {
   login: string;
 }
 
+export interface GitHubApiRepository {
+  default_branch: string | null;
+  description: string | null;
+  full_name: string;
+  html_url: string;
+  name: string;
+  private: boolean;
+  pushed_at: string | null;
+  updated_at: string;
+  viewer_permission?: {
+    permission: string | null;
+  } | null;
+}
+
 export interface GitHubApiPullRequestReview {
   id: number;
   state: string;
@@ -259,6 +273,22 @@ export function fetchGitHubViewer(token: string) {
   return githubApiRequest<GitHubApiViewer>("/user", token, {
     timeoutMs: 5000,
   });
+}
+
+export async function fetchGitHubViewerRepositories(
+  token: string,
+  options?: {
+    page?: number;
+    perPage?: number;
+  },
+) {
+  const page = options?.page ?? 1;
+  const perPage = options?.perPage ?? 100;
+  return githubApiRequest<GitHubApiRepository[]>(
+    `/user/repos?sort=updated&affiliation=owner,collaborator,organization_member&per_page=${perPage}&page=${page}`,
+    token,
+    { timeoutMs: 8000 },
+  );
 }
 
 export function fetchGitHubPullRequests(

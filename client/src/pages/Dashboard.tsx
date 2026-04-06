@@ -194,7 +194,7 @@ export default function Dashboard() {
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">
-              {focusedProject ? `${focusedProject.name} Overview` : "Project Overview"}
+              {focusedProject ? `${focusedProject.name} Overview` : "Repository Overview"}
             </h1>
             <p className="text-muted-foreground text-sm flex items-center gap-1.5">
               <HardDrive className="w-3.5 h-3.5" />
@@ -209,7 +209,7 @@ export default function Dashboard() {
               <Link href="/">
                 <a className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5">
                   <ChevronLeft className="w-3.5 h-3.5" />
-                  All Projects
+                  All Repositories
                 </a>
               </Link>
             )}
@@ -822,7 +822,7 @@ export default function Dashboard() {
             <section>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold tracking-tight">Active Projects</h2>
+                  <h2 className="text-sm font-semibold tracking-tight">Active Repositories</h2>
                   <span className="bg-secondary text-secondary-foreground text-[10px] px-1.5 py-0.5 rounded-full font-medium border border-border">
                     {filteredProjects.length}
                   </span>
@@ -834,7 +834,7 @@ export default function Dashboard() {
                       type="button"
                       onClick={() => setViewMode("grid")}
                       className={`p-1.5 rounded-[4px] transition-all shadow-sm ${viewMode === "grid" ? "bg-white/80 backdrop-blur-md text-foreground border border-black/5" : "text-muted-foreground hover:text-foreground bg-transparent border-transparent"}`}
-                      aria-label="Show projects as cards"
+                      aria-label="Show repositories as cards"
                       title="Grid view"
                     >
                       <LayoutGrid className="w-4 h-4" />
@@ -843,7 +843,7 @@ export default function Dashboard() {
                       type="button"
                       onClick={() => setViewMode("list")}
                       className={`p-1.5 rounded-[4px] transition-all shadow-sm ${viewMode === "list" ? "bg-white/80 backdrop-blur-md text-foreground border border-black/5" : "text-muted-foreground hover:text-foreground bg-transparent border-transparent"}`}
-                      aria-label="Show projects as rows"
+                      aria-label="Show repositories as rows"
                       title="List view"
                     >
                       <List className="w-4 h-4" />
@@ -902,7 +902,7 @@ export default function Dashboard() {
                 onPageChange={activeProjectsPagination.setCurrentPage}
                 pageSize={activeProjectsPagination.pageSize}
                 totalItems={activeProjectsPagination.totalItems}
-                label="projects"
+                label="repositories"
               />
 
               {filteredProjects.length === 0 && !isLoading && (
@@ -910,7 +910,7 @@ export default function Dashboard() {
                   <p className="text-muted-foreground text-sm">
                     {projects.length === 0
                       ? "No repositories have been indexed yet. Pick a workspace in onboarding or settings."
-                      : `No projects found for ${filterTeam}.`}
+                      : `No repositories found for ${filterTeam}.`}
                   </p>
                 </div>
               )}

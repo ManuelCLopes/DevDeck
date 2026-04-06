@@ -1,4 +1,5 @@
 import type {
+  GitHubRepositoryCandidate,
   WorkspaceDiscoveryResult,
   WorkspaceSelection,
   WorkspaceSnapshot,
@@ -29,6 +30,7 @@ interface DevDeckDesktopApi {
     deviceFlowReason: string | null;
     storageBackend: "file" | "keychain";
   }>;
+  listGitHubRepositories(): Promise<GitHubRepositoryCandidate[]>;
   loadWorkspaceSnapshot(selection: WorkspaceSelection): Promise<WorkspaceSnapshot>;
   onNavigate(listener: (targetPath: string) => void): () => void;
   onWorkspaceSnapshotUpdated(

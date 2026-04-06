@@ -372,21 +372,21 @@ export default function Settings() {
           <div className="p-6 space-y-6">
             {/* Local Directory */}
             <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Local Repositories</h3>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Repositories</h3>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg border border-border/60 bg-white shadow-sm hover:border-black/20 transition-colors">
                 <div className="flex items-start gap-3">
                   <div className="bg-secondary/50 p-2 rounded-md border border-border">
                     <HardDrive className="w-5 h-5 text-foreground/70" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-sm">Managed Projects</h3>
+                    <h3 className="font-semibold text-sm">Managed Repositories</h3>
                     <p className="text-xs text-muted-foreground mt-1">
                       {workspaceSelection
-                        ? `${visibleProjectCount} visible ${visibleProjectCount === 1 ? "project" : "projects"} across ${managedCollections.length} ${managedCollections.length === 1 ? "collection" : "collections"}${hiddenProjectCount > 0 ? ` · ${hiddenProjectCount} hidden` : ""}.`
-                        : "Select folders where your git repositories live."}
+                        ? `${visibleProjectCount} visible ${visibleProjectCount === 1 ? "repository" : "repositories"} across ${managedCollections.length} ${managedCollections.length === 1 ? "collection" : "collections"}${hiddenProjectCount > 0 ? ` · ${hiddenProjectCount} hidden` : ""}.`
+                        : "Link the local clone folders where your repositories live."}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Hidden projects stay monitored but disappear from the sidebar until restored.
+                      Hidden repositories stay monitored but disappear from the sidebar until restored.
                     </p>
                   </div>
                 </div>
@@ -395,7 +395,7 @@ export default function Settings() {
                   onClick={openAddProjectsDialog}
                   className="px-3 py-1.5 rounded-md text-xs font-medium bg-secondary text-secondary-foreground border border-border hover:bg-black/5 whitespace-nowrap shadow-sm transition-colors"
                 >
-                  Add Projects...
+                  Add Repositories...
                 </button>
               </div>
 
@@ -409,7 +409,7 @@ export default function Settings() {
                           : "Bulk curation"}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Select visible projects across collections to hide or remove them in one step.
+                        Select visible repositories across collections to hide or remove them in one step.
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -542,7 +542,7 @@ export default function Settings() {
                         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           <Layers3 className="h-3.5 w-3.5" />
                           {collection.projects.length}{" "}
-                          {collection.projects.length === 1 ? "project" : "projects"}
+                          {collection.projects.length === 1 ? "repository" : "repositories"}
                         </div>
                       </div>
 
@@ -632,9 +632,9 @@ export default function Settings() {
                     <div className="space-y-3 pt-2">
                       <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground">Hidden Projects</p>
+                          <p className="text-sm font-medium text-foreground">Hidden Repositories</p>
                           <p className="text-xs text-muted-foreground">
-                            {hiddenProjectCount} hidden {hiddenProjectCount === 1 ? "project" : "projects"} are still monitored but removed from the sidebar.
+                            {hiddenProjectCount} hidden {hiddenProjectCount === 1 ? "repository" : "repositories"} are still monitored but removed from the sidebar.
                           </p>
                         </div>
                         <button
@@ -657,7 +657,7 @@ export default function Settings() {
                                 {collection.name}
                               </p>
                               <p className="mt-1 text-xs text-muted-foreground">
-                                {collection.projects.length} hidden {collection.projects.length === 1 ? "project" : "projects"}
+                                {collection.projects.length} hidden {collection.projects.length === 1 ? "repository" : "repositories"}
                               </p>
                             </div>
                             <button

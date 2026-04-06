@@ -298,7 +298,7 @@ export default function AddProjectsDialog({
 
   const handleImport = () => {
     if (!selectedDir) {
-      setSelectionError("Choose a workspace folder to continue.");
+      setSelectionError("Choose a local clone folder to continue.");
       return;
     }
 
@@ -348,7 +348,7 @@ export default function AddProjectsDialog({
     >
       <DialogContent className="no-drag max-w-2xl p-0 overflow-hidden bg-white/95 backdrop-blur-2xl border-black/10">
         <DialogHeader className="px-6 pt-6 pb-0 text-left">
-          <DialogTitle className="text-xl">Add Projects</DialogTitle>
+          <DialogTitle className="text-xl">Add Repositories</DialogTitle>
           <DialogDescription>
             Import more repositories into your current DevDeck workspace without leaving the page.
           </DialogDescription>
@@ -362,7 +362,7 @@ export default function AddProjectsDialog({
             </div>
 
             <p className="text-xs text-muted-foreground mb-4">
-              DevDeck scans the selected folder locally and lets you append the repositories you want to manage.
+              DevDeck scans the selected folder locally and lets you append the repositories you want to track.
             </p>
 
             <button
@@ -409,7 +409,7 @@ export default function AddProjectsDialog({
                     id="add-projects-collection"
                     value={collectionName}
                     onChange={(event) => setCollectionName(event.target.value)}
-                    placeholder="Personal Projects"
+                    placeholder="Personal Repositories"
                     className="bg-white"
                   />
                   <p className="text-xs text-muted-foreground">
@@ -519,7 +519,7 @@ export default function AddProjectsDialog({
                   <div>
                     <p className="text-sm font-medium text-foreground">
                       {selectedProjects.length > 0
-                        ? `DevDeck will add ${selectedProjects.length} ${selectedProjects.length === 1 ? "project" : "projects"}`
+                        ? `DevDeck will add ${selectedProjects.length} ${selectedProjects.length === 1 ? "repository" : "repositories"}`
                         : "DevDeck is ready to add your selection"}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
@@ -554,7 +554,7 @@ export default function AddProjectsDialog({
             className="px-3 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors inline-flex items-center gap-2"
           >
             <HardDrive className="w-4 h-4" />
-            Add to DevDeck
+            Add Repositories
           </button>
         </DialogFooter>
       </DialogContent>

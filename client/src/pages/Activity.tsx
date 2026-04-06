@@ -89,7 +89,7 @@ export default function Activity() {
           <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Activity Inbox</h1>
             <p className="text-muted-foreground text-sm">
-              GitHub-first personal activity across your connected account, with local repository events below.
+              GitHub-first personal activity across your connected account, with linked local clone context below.
             </p>
           </div>
         </div>
@@ -253,7 +253,7 @@ export default function Activity() {
               Local Activity Feed
             </h2>
             <p className="text-xs text-muted-foreground">
-              Recent local commits from the projects currently monitored in DevDeck.
+              Recent local commits from the repositories currently monitored in DevDeck.
             </p>
           </div>
         </div>

@@ -14,7 +14,11 @@ import { execFile } from "child_process";
 import { existsSync } from "fs";
 import path from "path";
 import { promisify } from "util";
-import type { WorkspaceSelection, WorkspaceSnapshot } from "../shared/workspace";
+import type {
+  GitHubRepositoryCandidate,
+  WorkspaceSelection,
+  WorkspaceSnapshot,
+} from "../shared/workspace";
 import {
   collectWorkspaceNotifications,
   getWorkspaceAttentionSummary,
@@ -30,6 +34,7 @@ import {
 } from "./github-auth";
 import {
   createGitHubPullRequestComment,
+  fetchGitHubViewerRepositories,
   requestGitHubPullRequestReviewers,
 } from "./github-api";
 import {
@@ -532,9 +537,9 @@ async function runGitHubWorkspaceMutation(
 
 ipcMain.handle("devdeck:pick-workspace", async () => {
   const result = await dialog.showOpenDialog({
-    buttonLabel: "Choose Workspace",
+    buttonLabel: "Choose Folder",
     properties: ["openDirectory"],
-    title: "Select a workspace folder",
+    title: "Select a local clone folder",
   });
 
   if (result.canceled || result.filePaths.length === 0) {
@@ -607,6 +612,37 @@ ipcMain.handle(
 
 ipcMain.handle("devdeck:get-github-auth-capabilities", async () => {
   return getGitHubAuthCapabilities();
+});
+
+ipcMain.handle("devdeck:list-github-repositories", async () => {
+  const token = await readStoredGitHubToken();
+  if (!token) {
+    return [] as GitHubRepositoryCandidate[];
+  }
+
+  const repositories: GitHubRepositoryCandidate[] = [];
+
+  for (let page = 1; page <= 5; page += 1) {
+    const pageRepositories = await fetchGitHubViewerRepositories(token, { page, perPage: 100 });
+    repositories.push(
+      ...pageRepositories.map((repository) => ({
+        defaultBranch: repository.default_branch ?? null,
+        description: repository.description ?? null,
+        id: repository.full_name,
+        isPrivate: repository.private,
+        name: repository.name,
+        slug: repository.full_name,
+        updatedAt: repository.pushed_at ?? repository.updated_at,
+        viewerPermission: repository.viewer_permission?.permission ?? null,
+      })),
+    );
+
+    if (pageRepositories.length < 100) {
+      break;
+    }
+  }
+
+  return repositories;
 });
 
 ipcMain.handle("devdeck:save-github-token", async (_event, token: string) => {

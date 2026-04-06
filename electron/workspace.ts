@@ -444,11 +444,13 @@ function createRepositoryCandidate(
   rootName: string,
   localPath: string,
   relativePath = "",
+  githubRepositorySlug?: string,
 ): MonitoredProject {
   const isRoot = relativePath.length === 0;
   const pathSegments = relativePath.split("/").filter(Boolean);
 
   return {
+    githubRepositorySlug,
     id: `${rootName}/${relativePath || "."}`,
     isRoot,
     localPath,
@@ -508,7 +510,14 @@ async function collectRepositoryCandidates(
   const directoryPath = relativePath ? path.join(rootPath, relativePath) : rootPath;
 
   if (await pathExists(path.join(directoryPath, ".git"))) {
-    return [createRepositoryCandidate(rootName, directoryPath, relativePath)];
+    return [
+      createRepositoryCandidate(
+        rootName,
+        directoryPath,
+        relativePath,
+        await getRepositoryGitHubSlug(directoryPath),
+      ),
+    ];
   }
 
   if (depth >= MAX_DISCOVERY_DEPTH) {
@@ -564,6 +573,11 @@ async function readOptionalText(targetPath: string) {
   } catch {
     return null;
   }
+}
+
+async function getRepositoryGitHubSlug(repositoryPath: string) {
+  const configText = await readOptionalText(path.join(repositoryPath, ".git", "config"));
+  return parseGitHubRepository(parseConfigOriginUrl(configText))?.slug;
 }
 
 function parseConfigOriginUrl(configText: string | null) {

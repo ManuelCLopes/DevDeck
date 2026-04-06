@@ -6,7 +6,7 @@ The app now runs through Electron on top of the existing React and Vite UI, so i
 
 ## What the app does
 
-- Shows a project overview dashboard for local repositories
+- Shows a repository overview dashboard with linked local clone context
 - Surfaces a branch review inbox and activity feed from local Git data
 - Syncs open pull requests and commit status directly from the GitHub API
 - Includes a local-first onboarding flow and preferences screen
@@ -81,15 +81,16 @@ npm run dev:web
 When you first open DevDeck:
 
 1. Go through the onboarding flow
-2. Choose the workspace folder that contains your local projects
-3. If DevDeck finds multiple repositories, select which ones to monitor
+2. Optionally choose the repositories you want DevDeck to focus on from GitHub
+3. Choose the local clone folder that contains those repositories
+4. If DevDeck finds multiple repositories, select which ones to monitor
 4. Launch the app into the main dashboard
 
 From there you can use:
 
 - `Overview` to see repository health, branch counts, and recent workspace signals
 - `Pull Requests` to inspect live GitHub pull requests plus local review signals
-- `Local Projects` to browse repositories and inspect project details
+- `Repositories` to browse tracked repositories and inspect their details
 - `Activity Inbox` to review recent local Git activity
 - `Preferences` to revisit onboarding and toggle local behavior settings
 

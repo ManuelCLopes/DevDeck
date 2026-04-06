@@ -34,6 +34,7 @@ export type WorkspaceSyncState = "fresh" | "stale" | "offline" | "error";
 export interface MonitoredProject {
   collectionId?: string;
   collectionName?: string;
+  githubRepositorySlug?: string;
   hidden?: boolean;
   id: string;
   isRoot?: boolean;
@@ -55,8 +56,20 @@ export interface WorkspaceSelection {
 export interface WorkspaceDiscoveryResult {
   candidates: MonitoredProject[];
   discoveredRepositoryCount: number;
+  githubLinkedRepositoryCount?: number;
   rootName: string;
   rootPath?: string;
+}
+
+export interface GitHubRepositoryCandidate {
+  defaultBranch: string | null;
+  description: string | null;
+  id: string;
+  isPrivate: boolean;
+  name: string;
+  slug: string;
+  updatedAt: string;
+  viewerPermission: string | null;
 }
 
 export interface WorkspaceProject {

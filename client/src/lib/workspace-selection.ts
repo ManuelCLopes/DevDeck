@@ -38,7 +38,7 @@ function compareProjects(left: MonitoredProject, right: MonitoredProject) {
 }
 
 function getProjectMergeKey(project: MonitoredProject) {
-  return project.localPath ?? project.id;
+  return project.githubRepositorySlug ?? project.localPath ?? project.id;
 }
 
 function getWorkspaceName(project: MonitoredProject, rootName: string) {
@@ -330,6 +330,8 @@ export function mergeWorkspaceSelection(
         ...project,
         collectionId: existingProject.collectionId ?? project.collectionId,
         collectionName: existingProject.collectionName ?? project.collectionName,
+        githubRepositorySlug:
+          project.githubRepositorySlug ?? existingProject.githubRepositorySlug,
         hidden: existingProject.hidden ?? project.hidden,
         localPath: project.localPath ?? existingProject.localPath,
         order: existingProject.order ?? project.order,
