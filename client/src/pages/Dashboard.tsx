@@ -3,6 +3,13 @@ import AppLayout from "@/components/layout/AppLayout";
 import ProjectCard from "@/components/dashboard/ProjectCard";
 import ProjectRow from "@/components/dashboard/ProjectRow";
 import PullRequestQueueControl from "@/components/pull-requests/PullRequestQueueControl";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
@@ -28,6 +35,7 @@ import {
   SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY,
 } from "@/lib/pull-request-utils";
 import { formatDistanceToNow } from "date-fns";
+import type { WorkspacePullRequestItem } from "@shared/workspace";
 import { Link, useSearch } from "wouter";
 import {
   Activity,
@@ -54,6 +62,11 @@ const PullRequestDetailDialog = lazy(
   () => import("@/components/pull-requests/PullRequestDetailDialog"),
 );
 
+type DashboardIndicatorDialogId =
+  | "needs_review"
+  | "needs_follow_up"
+  | "marked_for_review";
+
 export default function Dashboard() {
   const formatCount = (value: number) => new Intl.NumberFormat().format(value);
   const [showDependabotPullRequests, setShowDependabotPullRequests] =
@@ -67,6 +80,8 @@ export default function Dashboard() {
     "All",
   );
   const [selectedPullRequestId, setSelectedPullRequestId] = useState<string | null>(null);
+  const [activeIndicatorDialog, setActiveIndicatorDialog] =
+    useState<DashboardIndicatorDialogId | null>(null);
   const search = useSearch();
   const focusedProjectId = new URLSearchParams(search).get("project");
   const workspaceSelection = useWorkspaceSelection();
@@ -122,12 +137,23 @@ export default function Dashboard() {
   const needsViewerReviewCount = visiblePullRequests.filter(
     pullRequestNeedsViewerReview,
   ).length;
-  const needsFollowUpCount = visiblePullRequests.filter(
-    pullRequestNeedsFollowUp,
-  ).length;
-  const markedPullRequestCount = visiblePullRequests.filter((pullRequest) =>
-    markedPullRequestIds.has(pullRequest.id),
-  ).length;
+  const needsReviewPullRequests = useMemo(
+    () => visiblePullRequests.filter(pullRequestNeedsViewerReview),
+    [visiblePullRequests],
+  );
+  const needsFollowUpPullRequests = useMemo(
+    () => visiblePullRequests.filter(pullRequestNeedsFollowUp),
+    [visiblePullRequests],
+  );
+  const markedPullRequests = useMemo(
+    () =>
+      visiblePullRequests.filter((pullRequest) =>
+        markedPullRequestIds.has(pullRequest.id),
+      ),
+    [markedPullRequestIds, visiblePullRequests],
+  );
+  const needsFollowUpCount = needsFollowUpPullRequests.length;
+  const markedPullRequestCount = markedPullRequests.length;
   const workspaceLabel = workspaceSelection?.rootPath ?? workspaceSelection?.rootName ?? "~/Developer";
   const overviewPullRequestsPagination = usePagination(
     visiblePullRequests,
@@ -185,6 +211,49 @@ export default function Dashboard() {
     status: PullRequestWatchStatus | null,
   ) => {
     setPullRequestWatchStatus(pullRequestId, status);
+  };
+
+  const activeIndicatorDialogConfig = useMemo(() => {
+    if (!activeIndicatorDialog) {
+      return null;
+    }
+
+    const dialogById: Record<
+      DashboardIndicatorDialogId,
+      {
+        description: string;
+        emptyMessage: string;
+        pullRequests: WorkspacePullRequestItem[];
+        title: string;
+      }
+    > = {
+      marked_for_review: {
+        description: "Pull requests you explicitly marked to keep on your review radar.",
+        emptyMessage: "You have not marked any pull requests for review.",
+        pullRequests: markedPullRequests,
+        title: "Marked For Review",
+      },
+      needs_follow_up: {
+        description:
+          "Pull requests you reviewed that changed afterward and now need another pass.",
+        emptyMessage: "Nothing currently needs your follow-up.",
+        pullRequests: needsFollowUpPullRequests,
+        title: "Needs Your Follow-Up",
+      },
+      needs_review: {
+        description: "Pull requests currently waiting for your review in this workspace.",
+        emptyMessage: "Nothing currently needs your review.",
+        pullRequests: needsReviewPullRequests,
+        title: "Needs Review",
+      },
+    };
+
+    return dialogById[activeIndicatorDialog];
+  }, [activeIndicatorDialog, markedPullRequests, needsFollowUpPullRequests, needsReviewPullRequests]);
+
+  const handleInspectIndicatorPullRequest = (pullRequestId: string) => {
+    setActiveIndicatorDialog(null);
+    setSelectedPullRequestId(pullRequestId);
   };
 
   return (
@@ -556,7 +625,11 @@ export default function Dashboard() {
                   <FolderGit2 className="w-24 h-24" />
                 </div>
               </div>
-              <div className="rounded-xl border border-border/50 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              <button
+                type="button"
+                onClick={() => setActiveIndicatorDialog("needs_review")}
+                className="rounded-xl border border-border/50 bg-white/60 p-4 text-left shadow-sm backdrop-blur-md transition-colors hover:bg-black/[0.02]"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Needs Review
@@ -566,8 +639,12 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">review queue</p>
-              </div>
-              <div className="rounded-xl border border-border/50 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveIndicatorDialog("needs_follow_up")}
+                className="rounded-xl border border-border/50 bg-white/60 p-4 text-left shadow-sm backdrop-blur-md transition-colors hover:bg-black/[0.02]"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Needs Your Follow-Up
@@ -577,8 +654,12 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">updated since review</p>
-              </div>
-              <div className="rounded-xl border border-border/50 bg-white/60 p-4 shadow-sm backdrop-blur-md">
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveIndicatorDialog("marked_for_review")}
+                className="rounded-xl border border-border/50 bg-white/60 p-4 text-left shadow-sm backdrop-blur-md transition-colors hover:bg-black/[0.02]"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Marked For Review
@@ -588,7 +669,7 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">your shortlist</p>
-              </div>
+              </button>
             </div>
 
             <section>
@@ -922,6 +1003,149 @@ export default function Dashboard() {
           </>
         )}
         </div>
+        <Dialog
+          open={Boolean(activeIndicatorDialogConfig)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setActiveIndicatorDialog(null);
+            }
+          }}
+        >
+          <DialogContent className="max-h-[min(88vh,860px)] max-w-[min(92vw,56rem)] overflow-hidden border-border/60 bg-white/95 p-0 backdrop-blur-md">
+            {activeIndicatorDialogConfig ? (
+              <div className="flex min-h-0 min-w-0 flex-col">
+                <DialogHeader className="border-b border-border/60 px-6 pb-4 pt-6 pr-14">
+                  <div className="flex items-center gap-2">
+                    <DialogTitle>{activeIndicatorDialogConfig.title}</DialogTitle>
+                    <span className="rounded-sm border border-border/60 bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-secondary-foreground">
+                      {formatCount(activeIndicatorDialogConfig.pullRequests.length)}
+                    </span>
+                  </div>
+                  <DialogDescription>
+                    {activeIndicatorDialogConfig.description}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                  <div className="space-y-3">
+                    {activeIndicatorDialogConfig.pullRequests.map((pullRequest) => {
+                      const watchStatus = getPullRequestWatchStatus(
+                        pullRequest.id,
+                        pullRequestWatchlist,
+                      );
+                      const signalBadges = getPullRequestSignalBadges(
+                        pullRequest,
+                        watchStatus,
+                      );
+                      const visibleBadges = signalBadges.filter(
+                        (badge) =>
+                          badge.label === "marked" ||
+                          badge.label === "reviewed" ||
+                          badge.label === "awaiting follow-up",
+                      );
+                      const hasNoReviews = pullRequestHasNoReviews(pullRequest);
+                      const ciStatusIcon =
+                        pullRequest.ciStatus === "passing" ? (
+                          <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-1" />
+                        ) : pullRequest.ciStatus === "failing" ? (
+                          <X className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-chart-3" />
+                        ) : pullRequest.ciStatus === "pending" ? (
+                          <Circle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 fill-current text-chart-2" />
+                        ) : null;
+
+                      return (
+                        <div
+                          key={`dashboard-indicator:${pullRequest.id}`}
+                          onClick={() => handleInspectIndicatorPullRequest(pullRequest.id)}
+                          className="relative overflow-hidden rounded-xl border border-border/60 bg-white p-4 transition-colors hover:bg-black/[0.02] cursor-pointer"
+                        >
+                          {hasNoReviews ? (
+                            <div
+                              aria-hidden="true"
+                              className="absolute inset-y-0 left-0 w-1.5 bg-muted-foreground/30"
+                            />
+                          ) : null}
+                          <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0 space-y-2">
+                                <div className="flex min-w-0 items-start gap-2">
+                                  <p className="text-sm font-medium text-foreground break-words">
+                                    #{pullRequest.number} {pullRequest.title}
+                                  </p>
+                                  {ciStatusIcon}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  <span className={getProjectTagClassName(pullRequest.repo)}>
+                                    {pullRequest.repo}
+                                  </span>
+                                  <span className="break-words">
+                                    {pullRequest.headBranch} into {pullRequest.baseBranch}
+                                  </span>
+                                </div>
+                                {visibleBadges.length > 0 ? (
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    {visibleBadges.map((badge) => (
+                                      <span
+                                        key={`${pullRequest.id}:${badge.label}`}
+                                        className={`whitespace-nowrap rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${badge.className}`}
+                                      >
+                                        {badge.label}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <div
+                                className="flex flex-wrap items-center gap-2 self-start"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => void handleOpenPullRequest(pullRequest.url)}
+                                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2 text-[11px] font-medium transition-colors hover:bg-black/5"
+                                >
+                                  <Github className="h-3.5 w-3.5" />
+                                  View
+                                </button>
+                                <PullRequestQueueControl
+                                  awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
+                                  mode="open"
+                                  onStatusChange={(status) =>
+                                    handleSetPullRequestQueueStatus(
+                                      pullRequest.id,
+                                      status,
+                                    )
+                                  }
+                                  status={watchStatus}
+                                />
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
+                              <span className="min-w-0 break-words">
+                                {pullRequest.authoredByViewer
+                                  ? "Opened by you"
+                                  : pullRequest.author ?? "Unknown author"}
+                              </span>
+                              <span className="whitespace-nowrap text-right">
+                                {formatDistanceToNow(new Date(pullRequest.updatedAt), {
+                                  addSuffix: true,
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {activeIndicatorDialogConfig.pullRequests.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-border/60 px-4 py-6 text-center text-sm text-muted-foreground">
+                        {activeIndicatorDialogConfig.emptyMessage}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
         {selectedPullRequest ? (
           <Suspense fallback={null}>
             <PullRequestDetailDialog
