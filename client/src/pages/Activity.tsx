@@ -16,7 +16,6 @@ import { getProjectTagClassName } from "@/lib/project-tag-color";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { CheckCircle2 } from "lucide-react";
 import {
-  Bar,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -30,11 +29,11 @@ const contributionChartConfig = {
     label: "Commits",
   },
   linesAdded: {
-    color: "hsla(var(--chart-1), 0.35)",
+    color: "hsl(var(--chart-1))",
     label: "Lines Added",
   },
   linesDeleted: {
-    color: "hsla(var(--chart-3), 0.28)",
+    color: "hsl(var(--chart-3))",
     label: "Lines Deleted",
   },
   pullRequestsMerged: {
@@ -220,16 +219,6 @@ export default function Activity() {
               <p className="text-xs text-muted-foreground">
                 Daily GitHub commits, reviews, merges, and code churn for the selected period.
               </p>
-              <p className="text-xs text-muted-foreground">
-                Lines changed in this window:{" "}
-                <span className="font-medium text-foreground">
-                  +{formatCount(selectedUserActivity?.linesAdded ?? 0)}
-                </span>{" "}
-                /{" "}
-                <span className="font-medium text-foreground">
-                  -{formatCount(selectedUserActivity?.linesDeleted ?? 0)}
-                </span>
-              </p>
             </div>
             <ChartContainer
               config={contributionChartConfig}
@@ -268,26 +257,28 @@ export default function Activity() {
                   verticalAlign="top"
                   content={<ChartLegendContent className="justify-start" />}
                 />
-                <Bar
-                  barSize={10}
-                  dataKey="linesAdded"
-                  fill="var(--color-linesAdded)"
-                  radius={[4, 4, 0, 0]}
-                  yAxisId="churn"
-                />
-                <Bar
-                  barSize={10}
-                  dataKey="linesDeleted"
-                  fill="var(--color-linesDeleted)"
-                  radius={[4, 4, 0, 0]}
-                  yAxisId="churn"
-                />
                 <Line
                   dataKey="commits"
                   dot={renderNonZeroDot("--color-commits")}
                   yAxisId="activity"
                   stroke="var(--color-commits)"
                   strokeWidth={2.25}
+                  type="monotone"
+                />
+                <Line
+                  dataKey="linesAdded"
+                  dot={renderNonZeroDot("--color-linesAdded")}
+                  yAxisId="churn"
+                  stroke="var(--color-linesAdded)"
+                  strokeWidth={2}
+                  type="monotone"
+                />
+                <Line
+                  dataKey="linesDeleted"
+                  dot={renderNonZeroDot("--color-linesDeleted")}
+                  yAxisId="churn"
+                  stroke="var(--color-linesDeleted)"
+                  strokeWidth={2}
                   type="monotone"
                 />
                 <Line
