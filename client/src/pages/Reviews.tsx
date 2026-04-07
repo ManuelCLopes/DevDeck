@@ -393,7 +393,22 @@ export default function Reviews() {
                 "Open GitHub pull requests from your connected repositories."}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {selectedRepoFilters.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedRepoFilters.map((repo) => (
+                  <button
+                    key={repo}
+                    type="button"
+                    onClick={() => removeRepoFilter(repo)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${getProjectTagClassName(repo)}`}
+                  >
+                    <span>{repo}</span>
+                    <X className="h-3 w-3" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div className="inline-flex items-center text-xs text-muted-foreground">
               <button
                 type="button"
@@ -668,21 +683,6 @@ export default function Reviews() {
                   </button>
                 ))}
               </div>
-              {selectedRepoFilters.length > 0 ? (
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  {selectedRepoFilters.map((repo) => (
-                    <button
-                      key={repo}
-                      type="button"
-                      onClick={() => removeRepoFilter(repo)}
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${getProjectTagClassName(repo)}`}
-                    >
-                      <span>{repo}</span>
-                      <X className="h-3 w-3" />
-                    </button>
-                  ))}
-                </div>
-              ) : null}
               <div className="overflow-hidden rounded-xl border border-border/60 bg-white/60 px-4 py-1 shadow-sm backdrop-blur-md">
                 <div className="flex flex-col">
                   {openPullRequestsPagination.paginatedItems.map((pullRequest) => (
@@ -757,14 +757,14 @@ export default function Reviews() {
                                 </div>
                               )}
                             </div>
-                            <div className="flex flex-shrink-0 flex-wrap items-center gap-2 self-start">
+                            <div className="inline-flex flex-shrink-0 flex-nowrap items-center gap-2 self-start">
                               <button
                                 type="button"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   void handleOpenPullRequest(pullRequest.url);
                                 }}
-                                className="inline-flex h-8 items-center rounded-md border border-border bg-white px-2 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
+                                className="inline-flex h-8 shrink-0 whitespace-nowrap items-center rounded-md border border-border bg-white px-2 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
                               >
                                 <Github className="mr-1.5 h-3.5 w-3.5" />
                                 <span>View</span>

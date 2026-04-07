@@ -711,7 +711,22 @@ export default function Dashboard() {
                   </span>
                 </div>
               </div>
-              <div className="mb-4 flex justify-end">
+              <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+                {selectedOverviewRepoFilters.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedOverviewRepoFilters.map((repo) => (
+                      <button
+                        key={repo}
+                        type="button"
+                        onClick={() => removeOverviewRepoFilter(repo)}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${getProjectTagClassName(repo)}`}
+                      >
+                        <span>{repo}</span>
+                        <X className="h-3 w-3" />
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="inline-flex items-center text-xs text-muted-foreground">
                   <button
                     type="button"
@@ -724,21 +739,6 @@ export default function Dashboard() {
                   </button>
                 </div>
               </div>
-              {selectedOverviewRepoFilters.length > 0 ? (
-                <div className="mb-4 flex flex-wrap items-center gap-2">
-                  {selectedOverviewRepoFilters.map((repo) => (
-                    <button
-                      key={repo}
-                      type="button"
-                      onClick={() => removeOverviewRepoFilter(repo)}
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${getProjectTagClassName(repo)}`}
-                    >
-                      <span>{repo}</span>
-                      <X className="h-3 w-3" />
-                    </button>
-                  ))}
-                </div>
-              ) : null}
 
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                 <div className="space-y-3">
@@ -806,14 +806,14 @@ export default function Dashboard() {
                                 </span>
                               </div>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2 self-start">
+                            <div className="inline-flex flex-shrink-0 flex-nowrap items-center gap-2 self-start">
                               <button
                                 type="button"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   void handleOpenPullRequest(pullRequest.url);
                                 }}
-                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2 text-[11px] font-medium transition-colors hover:bg-black/5"
+                                className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-md border border-border/60 bg-white px-2 text-[11px] font-medium transition-colors hover:bg-black/5"
                               >
                                 <Github className="h-3.5 w-3.5" />
                                 View
