@@ -4,6 +4,10 @@ import ProjectCard from "@/components/dashboard/ProjectCard";
 import ProjectRow from "@/components/dashboard/ProjectRow";
 import PullRequestQueueControl from "@/components/pull-requests/PullRequestQueueControl";
 import {
+  PullRequestCiStatusIcon,
+  PullRequestListStatusIcon,
+} from "@/components/pull-requests/PullRequestStatusIndicators";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -40,8 +44,6 @@ import { Link, useSearch } from "wouter";
 import {
   Activity,
   ArrowUpRight,
-  Check,
-  Circle,
   ChevronLeft,
   Clock3,
   Filter,
@@ -517,19 +519,9 @@ export default function Dashboard() {
                       const visibleBadges = signalBadges.filter(
                         (badge) =>
                           badge.label === "marked" ||
-                          badge.label === "reviewed" ||
                           badge.label === "awaiting follow-up",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
-                      const ciStatusIcon =
-                        pullRequest.ciStatus === "passing" ? (
-                          <Check className="h-3.5 w-3.5 text-chart-1" />
-                        ) : pullRequest.ciStatus === "failing" ? (
-                          <X className="h-3.5 w-3.5 text-chart-3" />
-                        ) : pullRequest.ciStatus === "pending" ? (
-                          <Circle className="h-3.5 w-3.5 fill-current text-chart-2" />
-                        ) : null;
-
                       return (
                         <div
                           key={pullRequest.id}
@@ -547,11 +539,10 @@ export default function Dashboard() {
                             <div className="min-w-0">
                               <p className="text-sm font-medium leading-5 text-foreground break-words">
                                 #{pullRequest.number} {pullRequest.title}
-                                {ciStatusIcon ? (
-                                  <span className="ml-1 inline-flex align-[-0.125em]">
-                                    {ciStatusIcon}
-                                  </span>
-                                ) : null}
+                                <PullRequestCiStatusIcon
+                                  className="ml-1 align-[-0.125em]"
+                                  status={pullRequest.ciStatus}
+                                />
                               </p>
                               <p className="text-xs text-muted-foreground mt-1">
                                 {pullRequest.headBranch} into {pullRequest.baseBranch}
@@ -711,7 +702,7 @@ export default function Dashboard() {
                   </span>
                 </div>
               </div>
-              <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+              <div className="mb-4 flex flex-wrap items-center gap-2">
                 {selectedOverviewRepoFilters.length > 0 ? (
                   <div className="flex flex-wrap items-center gap-2">
                     {selectedOverviewRepoFilters.map((repo) => (
@@ -727,7 +718,7 @@ export default function Dashboard() {
                     ))}
                   </div>
                 ) : null}
-                <div className="inline-flex items-center text-xs text-muted-foreground">
+                <div className="ml-auto inline-flex items-center text-xs text-muted-foreground">
                   <button
                     type="button"
                     onClick={() => setShowDependabotPullRequests((current) => !current)}
@@ -754,19 +745,9 @@ export default function Dashboard() {
                       const visibleBadges = signalBadges.filter(
                         (badge) =>
                           badge.label === "marked" ||
-                          badge.label === "reviewed" ||
                           badge.label === "awaiting follow-up",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
-                      const ciStatusIcon =
-                        pullRequest.ciStatus === "passing" ? (
-                          <Check className="h-3.5 w-3.5 text-chart-1" />
-                        ) : pullRequest.ciStatus === "failing" ? (
-                          <X className="h-3.5 w-3.5 text-chart-3" />
-                        ) : pullRequest.ciStatus === "pending" ? (
-                          <Circle className="h-3.5 w-3.5 fill-current text-chart-2" />
-                        ) : null;
-
                       return (
                       <div
                         key={pullRequest.id}
@@ -784,11 +765,10 @@ export default function Dashboard() {
                             <div className="min-w-0">
                               <p className="text-sm font-medium leading-5 text-foreground break-words">
                                 #{pullRequest.number} {pullRequest.title}
-                                {ciStatusIcon ? (
-                                  <span className="ml-1 inline-flex align-[-0.125em]">
-                                    {ciStatusIcon}
-                                  </span>
-                                ) : null}
+                                <PullRequestCiStatusIcon
+                                  className="ml-1 align-[-0.125em]"
+                                  status={pullRequest.ciStatus}
+                                />
                               </p>
                               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                 <button
@@ -1090,19 +1070,9 @@ export default function Dashboard() {
                       const visibleBadges = signalBadges.filter(
                         (badge) =>
                           badge.label === "marked" ||
-                          badge.label === "reviewed" ||
                           badge.label === "awaiting follow-up",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
-                      const ciStatusIcon =
-                        pullRequest.ciStatus === "passing" ? (
-                          <Check className="h-3.5 w-3.5 text-chart-1" />
-                        ) : pullRequest.ciStatus === "failing" ? (
-                          <X className="h-3.5 w-3.5 text-chart-3" />
-                        ) : pullRequest.ciStatus === "pending" ? (
-                          <Circle className="h-3.5 w-3.5 fill-current text-chart-2" />
-                        ) : null;
-
                       return (
                         <div
                           key={`dashboard-indicator:${pullRequest.id}`}
@@ -1120,12 +1090,11 @@ export default function Dashboard() {
                               <div className="min-w-0 space-y-2">
                                 <p className="text-sm font-medium leading-5 text-foreground break-words">
                                   #{pullRequest.number} {pullRequest.title}
-                                  {ciStatusIcon ? (
-                                    <span className="ml-1 inline-flex align-[-0.125em]">
-                                      {ciStatusIcon}
-                                    </span>
-                                  ) : null}
-                                </p>
+                                    <PullRequestCiStatusIcon
+                                      className="ml-1 align-[-0.125em]"
+                                      status={pullRequest.ciStatus}
+                                    />
+                                  </p>
                                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                   <span className={getProjectTagClassName(pullRequest.repo)}>
                                     {pullRequest.repo}

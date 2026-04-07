@@ -1,6 +1,10 @@
 import AppLayout from "@/components/layout/AppLayout";
 import PullRequestQueueControl from "@/components/pull-requests/PullRequestQueueControl";
 import {
+  PullRequestCiStatusIcon,
+  PullRequestListStatusIcon,
+} from "@/components/pull-requests/PullRequestStatusIndicators";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -39,11 +43,7 @@ import type {
   WorkspacePullRequestItem,
 } from "@shared/workspace";
 import {
-  AlertCircle,
-  Check,
   CheckCircle2,
-  Circle,
-  Clock,
   Github,
   GitPullRequest,
   X,
@@ -393,34 +393,6 @@ export default function Reviews() {
                 "Open GitHub pull requests from your connected repositories."}
             </p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {selectedRepoFilters.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-2">
-                {selectedRepoFilters.map((repo) => (
-                  <button
-                    key={repo}
-                    type="button"
-                    onClick={() => removeRepoFilter(repo)}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${getProjectTagClassName(repo)}`}
-                  >
-                    <span>{repo}</span>
-                    <X className="h-3 w-3" />
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            <div className="inline-flex items-center text-xs text-muted-foreground">
-              <button
-                type="button"
-                onClick={() => setShowDependabotPullRequests((current) => !current)}
-                className="font-medium text-primary transition-colors hover:text-primary/80 hover:underline"
-              >
-                {showDependabotPullRequests
-                  ? "Hide Dependabot PRs"
-                  : "Show Dependabot PRs"}
-              </button>
-            </div>
-          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -683,6 +655,34 @@ export default function Reviews() {
                   </button>
                 ))}
               </div>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                {selectedRepoFilters.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedRepoFilters.map((repo) => (
+                      <button
+                        key={repo}
+                        type="button"
+                        onClick={() => removeRepoFilter(repo)}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${getProjectTagClassName(repo)}`}
+                      >
+                        <span>{repo}</span>
+                        <X className="h-3 w-3" />
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="ml-auto inline-flex items-center text-xs text-muted-foreground">
+                  <button
+                    type="button"
+                    onClick={() => setShowDependabotPullRequests((current) => !current)}
+                    className="font-medium text-primary transition-colors hover:text-primary/80 hover:underline"
+                  >
+                    {showDependabotPullRequests
+                      ? "Hide Dependabot PRs"
+                      : "Show Dependabot PRs"}
+                  </button>
+                </div>
+              </div>
               <div className="overflow-hidden rounded-xl border border-border/60 bg-white/60 px-4 py-1 shadow-sm backdrop-blur-md">
                 <div className="flex flex-col">
                   {openPullRequestsPagination.paginatedItems.map((pullRequest) => (
@@ -698,19 +698,9 @@ export default function Reviews() {
                       const visibleBadges = signalBadges.filter(
                         (badge) =>
                           badge.label === "marked" ||
-                          badge.label === "reviewed" ||
                           badge.label === "awaiting follow-up",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
-                      const ciStatusIcon =
-                        pullRequest.ciStatus === "passing" ? (
-                          <Check className="h-3.5 w-3.5 text-chart-1" />
-                        ) : pullRequest.ciStatus === "failing" ? (
-                          <X className="h-3.5 w-3.5 text-chart-3" />
-                        ) : pullRequest.ciStatus === "pending" ? (
-                          <Circle className="h-3.5 w-3.5 fill-current text-chart-2" />
-                        ) : null;
-
                       return (
                     <div
                       key={pullRequest.id}
@@ -725,24 +715,17 @@ export default function Reviews() {
                       ) : null}
                       <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-3">
                         <div className="mt-0.5">
-                          {pullRequest.status === "approved" ? (
-                            <CheckCircle2 className="w-4 h-4 text-chart-1" />
-                          ) : pullRequest.status === "changes_requested" ? (
-                            <AlertCircle className="w-4 h-4 text-chart-3" />
-                          ) : (
-                            <Clock className="w-4 h-4 text-muted-foreground" />
-                          )}
+                          <PullRequestListStatusIcon status={pullRequest.status} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="mb-0.5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0 space-y-2">
                               <p className="min-w-0 break-words text-[13px] font-semibold leading-5 text-foreground">
                                 #{pullRequest.number} {pullRequest.title}
-                                {ciStatusIcon ? (
-                                  <span className="ml-1 inline-flex align-[-0.125em]">
-                                    {ciStatusIcon}
-                                  </span>
-                                ) : null}
+                                <PullRequestCiStatusIcon
+                                  className="ml-1 align-[-0.125em]"
+                                  status={pullRequest.ciStatus}
+                                />
                               </p>
                               {visibleBadges.length > 0 && (
                                 <div className="flex flex-wrap items-center gap-2">
@@ -957,19 +940,9 @@ export default function Reviews() {
                         const visibleBadges = signalBadges.filter(
                           (badge) =>
                             badge.label === "marked" ||
-                            badge.label === "reviewed" ||
                             badge.label === "awaiting follow-up",
                         );
                         const hasNoReviews = pullRequestHasNoReviews(pullRequest);
-                        const ciStatusIcon =
-                          pullRequest.ciStatus === "passing" ? (
-                            <Check className="h-3.5 w-3.5 text-chart-1" />
-                          ) : pullRequest.ciStatus === "failing" ? (
-                            <X className="h-3.5 w-3.5 text-chart-3" />
-                          ) : pullRequest.ciStatus === "pending" ? (
-                            <Circle className="h-3.5 w-3.5 fill-current text-chart-2" />
-                          ) : null;
-
                         return (
                           <div
                             key={`indicator:${pullRequest.id}`}
@@ -989,11 +962,10 @@ export default function Reviews() {
                                 <div className="min-w-0 space-y-2">
                                   <p className="min-w-0 break-words text-[13px] font-semibold leading-5 text-foreground">
                                     #{pullRequest.number} {pullRequest.title}
-                                    {ciStatusIcon ? (
-                                      <span className="ml-1 inline-flex align-[-0.125em]">
-                                        {ciStatusIcon}
-                                      </span>
-                                    ) : null}
+                                    <PullRequestCiStatusIcon
+                                      className="ml-1 align-[-0.125em]"
+                                      status={pullRequest.ciStatus}
+                                    />
                                   </p>
                                   {visibleBadges.length > 0 ? (
                                     <div className="flex flex-wrap items-center gap-2">

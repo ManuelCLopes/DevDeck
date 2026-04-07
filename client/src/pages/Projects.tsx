@@ -1,5 +1,6 @@
 import { Suspense, lazy, useMemo } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import { PullRequestCiStatusIcon } from "@/components/pull-requests/PullRequestStatusIndicators";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
@@ -16,8 +17,6 @@ import {
 } from "@/lib/pull-request-utils";
 import { formatDistanceToNow } from "date-fns";
 import {
-  Check,
-  Circle,
   Copy,
   FolderGit2,
   TerminalSquare,
@@ -355,19 +354,9 @@ export default function Projects() {
                       const visibleBadges = signalBadges.filter(
                         (badge) =>
                           badge.label === "marked" ||
-                          badge.label === "reviewed" ||
                           badge.label === "awaiting follow-up",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
-                      const ciStatusIcon =
-                        pullRequest.ciStatus === "passing" ? (
-                          <Check className="h-3.5 w-3.5 text-chart-1" />
-                        ) : pullRequest.ciStatus === "failing" ? (
-                          <X className="h-3.5 w-3.5 text-chart-3" />
-                        ) : pullRequest.ciStatus === "pending" ? (
-                          <Circle className="h-3.5 w-3.5 fill-current text-chart-2" />
-                        ) : null;
-
                       return (
                         <button
                           key={pullRequest.id}
@@ -383,11 +372,10 @@ export default function Projects() {
                           ) : null}
                           <p className="text-[12px] font-semibold leading-5 text-foreground line-clamp-2">
                             #{pullRequest.number} {pullRequest.title}
-                            {ciStatusIcon ? (
-                              <span className="ml-1 inline-flex align-[-0.125em]">
-                                {ciStatusIcon}
-                              </span>
-                            ) : null}
+                            <PullRequestCiStatusIcon
+                              className="ml-1 align-[-0.125em]"
+                              status={pullRequest.ciStatus}
+                            />
                           </p>
                           {visibleBadges.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-2">
