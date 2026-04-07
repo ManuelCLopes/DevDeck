@@ -1,9 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import {
   ChartContainer,
   ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
@@ -13,6 +12,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
+import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { CheckCircle2 } from "lucide-react";
 import {
@@ -50,7 +50,9 @@ const contributionChartConfig = {
   },
 } satisfies ChartConfig;
 
-function renderNonZeroDot(colorVariable: string) {
+type ContributionSeriesKey = keyof typeof contributionChartConfig;
+
+function renderNonZeroDot(colorVariable: string, opacity = 1) {
   return function NonZeroDot(props: any) {
     const { cx, cy, payload, dataKey } = props;
     if (
@@ -72,6 +74,7 @@ function renderNonZeroDot(colorVariable: string) {
         cx={cx}
         cy={cy}
         fill={`var(${colorVariable})`}
+        opacity={opacity}
         r={3}
         stroke="white"
         strokeWidth={1.5}
@@ -82,6 +85,8 @@ function renderNonZeroDot(colorVariable: string) {
 
 export default function Activity() {
   const formatCount = (value: number) => new Intl.NumberFormat().format(value);
+  const [highlightedSeries, setHighlightedSeries] =
+    useState<ContributionSeriesKey | null>(null);
   const [period, setPeriod] = usePersistentState<"7d" | "30d" | "90d">(
     "devdeck:activity:period",
     "7d",
@@ -129,6 +134,57 @@ export default function Activity() {
 
   const formatChartTooltipLabel = (dateKey: string) =>
     format(parseISO(dateKey), period === "7d" ? "EEE, MMM d" : "MMM d, yyyy");
+
+  const getSeriesOpacity = (key: ContributionSeriesKey) =>
+    highlightedSeries === null || highlightedSeries === key ? 1 : 0.2;
+
+  const renderContributionLegend = (props: any) => {
+    const payload = props?.payload as
+      | Array<{ color?: string; dataKey?: string | number; type?: string }>
+      | undefined;
+    if (!payload?.length) {
+      return null;
+    }
+
+    return (
+      <div className="flex items-center justify-start gap-4 pb-3">
+        {payload
+          .filter((item) => item.type !== "none")
+          .map((item) => {
+            const key = String(item.dataKey) as ContributionSeriesKey;
+            const itemConfig = contributionChartConfig[key];
+            if (!itemConfig) {
+              return null;
+            }
+
+            const isActive =
+              highlightedSeries === null || highlightedSeries === key;
+
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() =>
+                  setHighlightedSeries((current) =>
+                    current === key ? null : key,
+                  )
+                }
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-xs transition-opacity",
+                  isActive ? "opacity-100" : "opacity-35",
+                )}
+              >
+                <span
+                  className="h-2 w-2 shrink-0 rounded-[2px]"
+                  style={{ backgroundColor: item.color }}
+                />
+                <span className="text-muted-foreground">{itemConfig.label}</span>
+              </button>
+            );
+          })}
+      </div>
+    );
+  };
 
   return (
     <AppLayout>
@@ -273,11 +329,12 @@ export default function Activity() {
                 />
                 <ChartLegend
                   verticalAlign="top"
-                  content={<ChartLegendContent className="justify-start" />}
+                  content={renderContributionLegend}
                 />
                 <Line
                   dataKey="commits"
-                  dot={renderNonZeroDot("--color-commits")}
+                  dot={renderNonZeroDot("--color-commits", getSeriesOpacity("commits"))}
+                  opacity={getSeriesOpacity("commits")}
                   yAxisId="activity"
                   stroke="var(--color-commits)"
                   strokeWidth={2.25}
@@ -285,7 +342,8 @@ export default function Activity() {
                 />
                 <Line
                   dataKey="linesAdded"
-                  dot={renderNonZeroDot("--color-linesAdded")}
+                  dot={renderNonZeroDot("--color-linesAdded", getSeriesOpacity("linesAdded"))}
+                  opacity={getSeriesOpacity("linesAdded")}
                   yAxisId="churn"
                   stroke="var(--color-linesAdded)"
                   strokeWidth={2}
@@ -293,7 +351,8 @@ export default function Activity() {
                 />
                 <Line
                   dataKey="linesDeleted"
-                  dot={renderNonZeroDot("--color-linesDeleted")}
+                  dot={renderNonZeroDot("--color-linesDeleted", getSeriesOpacity("linesDeleted"))}
+                  opacity={getSeriesOpacity("linesDeleted")}
                   yAxisId="churn"
                   stroke="var(--color-linesDeleted)"
                   strokeWidth={2}
@@ -301,7 +360,11 @@ export default function Activity() {
                 />
                 <Line
                   dataKey="pullRequestsReviewed"
-                  dot={renderNonZeroDot("--color-pullRequestsReviewed")}
+                  dot={renderNonZeroDot(
+                    "--color-pullRequestsReviewed",
+                    getSeriesOpacity("pullRequestsReviewed"),
+                  )}
+                  opacity={getSeriesOpacity("pullRequestsReviewed")}
                   yAxisId="activity"
                   stroke="var(--color-pullRequestsReviewed)"
                   strokeWidth={2}
@@ -309,7 +372,8 @@ export default function Activity() {
                 />
                 <Line
                   dataKey="reviewEvents"
-                  dot={renderNonZeroDot("--color-reviewEvents")}
+                  dot={renderNonZeroDot("--color-reviewEvents", getSeriesOpacity("reviewEvents"))}
+                  opacity={getSeriesOpacity("reviewEvents")}
                   yAxisId="activity"
                   stroke="var(--color-reviewEvents)"
                   strokeWidth={2}
@@ -317,7 +381,11 @@ export default function Activity() {
                 />
                 <Line
                   dataKey="pullRequestsMerged"
-                  dot={renderNonZeroDot("--color-pullRequestsMerged")}
+                  dot={renderNonZeroDot(
+                    "--color-pullRequestsMerged",
+                    getSeriesOpacity("pullRequestsMerged"),
+                  )}
+                  opacity={getSeriesOpacity("pullRequestsMerged")}
                   yAxisId="activity"
                   stroke="var(--color-pullRequestsMerged)"
                   strokeWidth={2}
