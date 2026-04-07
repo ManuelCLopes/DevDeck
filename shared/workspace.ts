@@ -24,6 +24,7 @@ export type WorkspaceAuthoredPullRequestStatus =
   | "approved"
   | "merged"
   | "closed";
+export type WorkspaceAuthoredPullRequestOwnership = "viewer" | "automation";
 export type WorkspaceGitHubState =
   | "connected"
   | "unauthenticated"
@@ -149,10 +150,12 @@ export interface WorkspacePullRequestItem {
 }
 
 export interface WorkspaceAuthoredPullRequestItem {
+  author: string | null;
   baseBranch: string;
   headBranch: string;
   id: string;
   number: number;
+  ownership: WorkspaceAuthoredPullRequestOwnership;
   projectId: string;
   repo: string;
   repositorySlug: string;

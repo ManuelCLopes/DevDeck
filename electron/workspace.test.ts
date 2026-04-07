@@ -629,3 +629,179 @@ test("loadWorkspaceSnapshot aggregates merged and reviewed PRs from GitHub acros
     rmSync(tempDirectory, { force: true, recursive: true });
   }
 });
+
+test("loadWorkspaceSnapshot includes automation-opened pull requests with viewer commits in your PRs", async () => {
+  const tempDirectory = mkdtempSync(join(tmpdir(), "devdeck-authored-automation-"));
+  const workspaceRoot = join(tempDirectory, "workspace");
+  const repositoryPath = join(workspaceRoot, "alpha");
+  const tokenPath = join(tempDirectory, "github-token.json");
+  const originalFetch = globalThis.fetch;
+  process.env.DEVDECK_GITHUB_STORAGE = "file";
+  process.env.DEVDECK_GITHUB_TOKEN_PATH = tokenPath;
+
+  createCommittedRepository(repositoryPath);
+  execFileSync(
+    "git",
+    ["remote", "add", "origin", "https://github.com/acme/alpha.git"],
+    { cwd: repositoryPath, stdio: "ignore" },
+  );
+  writeFileSync(tokenPath, JSON.stringify({ token: "test-token" }), "utf8");
+  clearWorkspaceSnapshotCaches();
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const requestUrl = new URL(String(input));
+    const pathname = requestUrl.pathname;
+    const query = requestUrl.searchParams.get("q") ?? "";
+
+    if (pathname === "/user") {
+      return new Response(JSON.stringify({ login: "manuel" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    if (pathname === "/repos/acme/alpha/pulls") {
+      return new Response(
+        JSON.stringify([
+          {
+            base: { ref: "main" },
+            closed_at: null,
+            draft: false,
+            head: {
+              ref: "automation/update-deps",
+              sha: "prhead123",
+            },
+            html_url: "https://github.com/acme/alpha/pull/42",
+            merged_at: null,
+            number: 42,
+            requested_reviewers: [],
+            state: "open",
+            title: "Update dependencies",
+            updated_at: new Date().toISOString(),
+            user: { login: "dependabot[bot]" },
+          },
+        ]),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
+
+    if (pathname === "/repos/acme/alpha/pulls/42/reviews") {
+      return new Response(JSON.stringify([]), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    if (pathname === "/repos/acme/alpha/pulls/42/commits") {
+      return new Response(
+        JSON.stringify([
+          {
+            author: { login: "manuel" },
+            commit: {
+              author: { email: "manuel@example.com" },
+              committer: { email: "manuel@example.com" },
+            },
+            committer: { login: "manuel" },
+            sha: "viewercommit123",
+          },
+        ]),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
+
+    if (pathname === "/repos/acme/alpha/commits/prhead123/status") {
+      return new Response(JSON.stringify({ state: null }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
+
+    if (pathname === "/search/issues" && query.includes("author:manuel")) {
+      return new Response(
+        JSON.stringify({
+          incomplete_results: false,
+          items: [],
+          total_count: 0,
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
+
+    if (pathname === "/search/issues" && query.includes("reviewed-by:manuel")) {
+      return new Response(
+        JSON.stringify({
+          incomplete_results: false,
+          items: [],
+          total_count: 0,
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
+
+    if (pathname === "/graphql") {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      const queryText = String(body.query ?? "");
+
+      if (queryText.includes("ViewerCommitRepositories")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              viewer: {
+                contributionsCollection: {
+                  commitContributionsByRepository: [],
+                },
+                id: "viewer-node-id",
+              },
+            },
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ errors: [{ message: "Unexpected GraphQL query" }] }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 400,
+        },
+      );
+    }
+
+    throw new Error(`Unexpected fetch: ${requestUrl.toString()}`);
+  }) as typeof fetch;
+
+  try {
+    const discovery = await discoverWorkspace(workspaceRoot);
+    const snapshot = await loadWorkspaceSnapshot({
+      projects: discovery.candidates,
+      rootName: discovery.rootName,
+      rootPath: discovery.rootPath,
+    });
+
+    assert.equal(snapshot.authoredPullRequests.length, 1);
+    assert.equal(snapshot.authoredPullRequests[0]?.ownership, "automation");
+    assert.equal(snapshot.authoredPullRequests[0]?.author, "dependabot[bot]");
+    assert.equal(snapshot.authoredPullRequests[0]?.title, "Update dependencies");
+  } finally {
+    clearWorkspaceSnapshotCaches();
+    globalThis.fetch = originalFetch;
+    delete process.env.DEVDECK_GITHUB_STORAGE;
+    delete process.env.DEVDECK_GITHUB_TOKEN_PATH;
+    rmSync(tempDirectory, { force: true, recursive: true });
+  }
+});

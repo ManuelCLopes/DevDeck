@@ -274,11 +274,11 @@ export default function Reviews() {
       },
       authored_by_you: {
         description:
-          "Your active pull requests, so you can quickly check what is still open or waiting.",
-        emptyMessage: "You do not currently have active authored pull requests.",
+          "Pull requests you currently own, including automation-opened work that already has your commits.",
+        emptyMessage: "You do not currently have active pull requests assigned to you.",
         kind: "authored",
         pullRequests: activeAuthoredPullRequests,
-        title: "Authored By You",
+        title: "Your PRs",
       },
       stale_prs: {
         description: `Open pull requests without updates for at least ${STALE_PULL_REQUEST_DAYS} days.`,
@@ -449,7 +449,7 @@ export default function Reviews() {
             className="flex flex-col rounded-xl border border-border/60 bg-white/60 p-4 text-left shadow-sm backdrop-blur-md transition-colors hover:bg-black/[0.02]"
           >
             <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              Authored By You
+              Your PRs
             </h3>
             <div className="flex items-baseline gap-2 mt-auto">
               <span className="text-3xl font-bold tracking-tight text-primary">
@@ -835,7 +835,7 @@ export default function Reviews() {
             <section>
               <div className="mb-3 flex items-center gap-2">
                 <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                  Authored By You
+                  Your PRs
                 </h2>
                 <span className="rounded-sm border border-border/60 bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
                   {authoredPullRequests.length}
@@ -858,7 +858,13 @@ export default function Reviews() {
                                 </p>
                               </div>
                               <p className="mt-2 text-[11px] text-muted-foreground">
-                                {pullRequest.repo} · {pullRequest.reviewCount} review
+                                {pullRequest.repo}
+                                {pullRequest.ownership === "automation" &&
+                                pullRequest.author
+                                  ? ` · opened by ${pullRequest.author}`
+                                  : ""}
+                                {" · "}
+                                {pullRequest.reviewCount} review
                                 {pullRequest.reviewCount === 1 ? "" : "s"}
                               </p>
                             </div>
@@ -889,7 +895,7 @@ export default function Reviews() {
                   })}
                   {authoredPullRequests.length === 0 ? (
                     <div className="py-3 text-sm text-muted-foreground">
-                      You do not currently have authored pull requests in this workspace.
+                      You do not currently have pull requests assigned to you in this workspace.
                     </div>
                   ) : null}
                 </div>
@@ -898,7 +904,7 @@ export default function Reviews() {
                   onPageChange={authoredPullRequestsPagination.setCurrentPage}
                   pageSize={authoredPullRequestsPagination.pageSize}
                   totalItems={authoredPullRequestsPagination.totalItems}
-                  label="authored pull requests"
+                  label="your pull requests"
                   className="pt-4"
                 />
               </div>
@@ -1061,7 +1067,13 @@ export default function Reviews() {
                                     </p>
                                   </div>
                                   <p className="mt-2 text-[11px] text-muted-foreground">
-                                    {pullRequest.repo} · {pullRequest.reviewCount} review
+                                    {pullRequest.repo}
+                                    {pullRequest.ownership === "automation" &&
+                                    pullRequest.author
+                                      ? ` · opened by ${pullRequest.author}`
+                                      : ""}
+                                    {" · "}
+                                    {pullRequest.reviewCount} review
                                     {pullRequest.reviewCount === 1 ? "" : "s"}
                                   </p>
                                 </div>

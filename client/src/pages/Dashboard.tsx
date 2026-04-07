@@ -856,7 +856,7 @@ export default function Dashboard() {
             <section>
               <div className="mb-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold tracking-tight">Opened By You</h2>
+                  <h2 className="text-sm font-semibold tracking-tight">Your PRs</h2>
                   <span className="rounded-full border border-border bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
                     {authoredPullRequests.length}
                   </span>
@@ -880,7 +880,13 @@ export default function Dashboard() {
                                 #{pullRequest.number} {pullRequest.title}
                               </p>
                               <p className="mt-1 text-xs text-muted-foreground">
-                                {pullRequest.repo} · {pullRequest.headBranch} into {pullRequest.baseBranch}
+                                {pullRequest.repo}
+                                {pullRequest.ownership === "automation" &&
+                                pullRequest.author
+                                  ? ` · opened by ${pullRequest.author}`
+                                  : ""}
+                                {" · "}
+                                {pullRequest.headBranch} into {pullRequest.baseBranch}
                               </p>
                             </div>
                             <div className="flex flex-wrap items-center gap-2 self-start">
@@ -917,7 +923,7 @@ export default function Dashboard() {
                   })}
                   {authoredPullRequests.length === 0 && (
                     <div className="rounded-lg border border-dashed border-border/60 p-4 text-sm text-muted-foreground">
-                      No authored pull requests were found in the monitored repositories.
+                      No pull requests assigned to you were found in the monitored repositories.
                     </div>
                   )}
                 </div>
@@ -926,7 +932,7 @@ export default function Dashboard() {
                   onPageChange={authoredPullRequestsPagination.setCurrentPage}
                   pageSize={authoredPullRequestsPagination.pageSize}
                   totalItems={authoredPullRequestsPagination.totalItems}
-                  label="authored pull requests"
+                  label="your pull requests"
                 />
               </div>
             </section>

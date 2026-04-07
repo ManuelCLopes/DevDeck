@@ -5,6 +5,7 @@ import { promisify } from "util";
 import {
   fetchGitHubRepositoryCommitHistory,
   fetchGitHubCommitStatus,
+  fetchGitHubPullRequestCommits,
   fetchGitHubPullRequestReviews,
   fetchGitHubPullRequests,
   fetchGitHubPullRequestSearchResults,
@@ -12,6 +13,7 @@ import {
   fetchGitHubViewer,
   GitHubApiError,
   GitHubConnectivityError,
+  type GitHubApiPullRequestCommit,
   type GitHubApiPullRequest,
   type GitHubApiPullRequestSearchItem,
   type GitHubApiPullRequestReview,
@@ -165,6 +167,10 @@ let cachedGitHubConnectivityFailure:
 const pullRequestCache = new Map<
   string,
   { expiresAt: number; pullRequests: WorkspacePullRequestItem[] }
+>();
+const pullRequestOwnershipCache = new Map<
+  string,
+  { expiresAt: number; viewerCommitCount: number }
 >();
 const authoredPullRequestCache = new Map<
   string,
@@ -1081,10 +1087,109 @@ function getAuthoredPullRequestStatus(
     : ("waiting_for_review" as const);
 }
 
+function isAutomationPullRequestAuthor(authorLogin: string | null) {
+  if (!authorLogin) {
+    return false;
+  }
+
+  const normalizedAuthorLogin = authorLogin.trim().toLowerCase();
+  return (
+    normalizedAuthorLogin.includes("[bot]") ||
+    normalizedAuthorLogin.includes("github-actions") ||
+    normalizedAuthorLogin.includes("automation") ||
+    normalizedAuthorLogin.endsWith("-bot")
+  );
+}
+
+function countViewerPullRequestCommits(
+  commits: GitHubApiPullRequestCommit[],
+  viewerLogin: string,
+) {
+  const normalizedViewerLogin = viewerLogin.trim().toLowerCase();
+
+  return commits.filter((commit) => {
+    const commitAuthorLogin = commit.author?.login?.trim().toLowerCase() ?? null;
+    const commitCommitterLogin =
+      commit.committer?.login?.trim().toLowerCase() ?? null;
+
+    return (
+      commitAuthorLogin === normalizedViewerLogin ||
+      commitCommitterLogin === normalizedViewerLogin
+    );
+  }).length;
+}
+
+async function fetchViewerPullRequestCommitCount(
+  repositorySlug: string,
+  pullRequestNumber: number,
+  githubAuthStatus: GitHubAuthStatus,
+) {
+  if (
+    !githubAuthStatus.authenticated ||
+    !githubAuthStatus.token ||
+    !githubAuthStatus.viewerLogin
+  ) {
+    return 0;
+  }
+
+  const cacheKey = `${repositorySlug}#${pullRequestNumber}#${githubAuthStatus.viewerLogin}`;
+  const cachedOwnership = pullRequestOwnershipCache.get(cacheKey);
+  if (cachedOwnership && cachedOwnership.expiresAt > Date.now()) {
+    return cachedOwnership.viewerCommitCount;
+  }
+
+  try {
+    const commits = await fetchGitHubPullRequestCommits(
+      repositorySlug,
+      pullRequestNumber,
+      githubAuthStatus.token,
+    );
+    const viewerCommitCount = countViewerPullRequestCommits(
+      commits,
+      githubAuthStatus.viewerLogin,
+    );
+    pullRequestOwnershipCache.set(cacheKey, {
+      expiresAt: Date.now() + PULL_REQUEST_CACHE_TTL_MS,
+      viewerCommitCount,
+    });
+    return viewerCommitCount;
+  } catch (error) {
+    if (isGitHubRateLimitError(error)) {
+      markGitHubConnectivityFailure(
+        "GitHub rate limited DevDeck temporarily. Using cached PR ownership data.",
+      );
+      return cachedOwnership?.viewerCommitCount ?? 0;
+    }
+
+    if (
+      error instanceof GitHubApiError &&
+      (error.status === 403 || error.status === 404)
+    ) {
+      pullRequestOwnershipCache.set(cacheKey, {
+        expiresAt: Date.now() + PULL_REQUEST_CACHE_TTL_MS,
+        viewerCommitCount: 0,
+      });
+      return 0;
+    }
+
+    if (error instanceof GitHubConnectivityError) {
+      markGitHubConnectivityFailure();
+      return cachedOwnership?.viewerCommitCount ?? 0;
+    }
+
+    console.error(
+      `Failed to load PR commits for ${repositorySlug}#${pullRequestNumber}`,
+      error,
+    );
+    return 0;
+  }
+}
+
 export function clearWorkspaceSnapshotCaches() {
   cachedGitHubAuthStatus = null;
   cachedGitHubConnectivityFailure = null;
   pullRequestCache.clear();
+  pullRequestOwnershipCache.clear();
   authoredPullRequestCache.clear();
   ciStatusCache.clear();
   userActivityCache.clear();
@@ -1662,11 +1767,47 @@ async function fetchAuthoredPullRequests(
         state: "all",
       },
     );
-    const authoredGitHubPullRequests = allPullRequests.filter(
-      (pullRequest) => pullRequest.user?.login === githubAuthStatus.viewerLogin,
+    const ownedPullRequestCandidates = (
+      await Promise.all(
+        allPullRequests.map(async (pullRequest) => {
+          const authorLogin = pullRequest.user?.login ?? null;
+
+          if (authorLogin === githubAuthStatus.viewerLogin) {
+            return {
+              ownership: "viewer" as const,
+              pullRequest,
+            };
+          }
+
+          if (!isAutomationPullRequestAuthor(authorLogin)) {
+            return null;
+          }
+
+          const viewerCommitCount = await fetchViewerPullRequestCommitCount(
+            githubRepository.slug,
+            pullRequest.number,
+            githubAuthStatus,
+          );
+          if (viewerCommitCount === 0) {
+            return null;
+          }
+
+          return {
+            ownership: "automation" as const,
+            pullRequest,
+          };
+        }),
+      )
+    ).filter(
+      (
+        candidate,
+      ): candidate is {
+        ownership: "automation" | "viewer";
+        pullRequest: GitHubApiPullRequest;
+      } => Boolean(candidate),
     );
     const authoredPullRequestReviews = await Promise.all(
-      authoredGitHubPullRequests.map((pullRequest) =>
+      ownedPullRequestCandidates.map(({ pullRequest }) =>
         fetchGitHubPullRequestReviews(
           githubRepository.slug,
           pullRequest.number,
@@ -1675,8 +1816,8 @@ async function fetchAuthoredPullRequests(
       ),
     );
 
-    const authoredPullRequests = authoredGitHubPullRequests.map(
-      (pullRequest, index) => {
+    const authoredPullRequests = ownedPullRequestCandidates.map(
+      ({ ownership, pullRequest }, index) => {
         const normalizedPullRequest = normalizePullRequestRecord(
           pullRequest,
           authoredPullRequestReviews[index] ?? [],
@@ -1685,10 +1826,12 @@ async function fetchAuthoredPullRequests(
         const reviewerLogins = normalizeReviewerLogins(normalizedPullRequest);
 
         return {
+          author: authorLogin,
           baseBranch: normalizedPullRequest.baseRefName,
           headBranch: normalizedPullRequest.headRefName,
           id: `${githubRepository.slug}#authored:${normalizedPullRequest.number}`,
           number: normalizedPullRequest.number,
+          ownership,
           projectId: project.id,
           repo: project.name,
           repositorySlug: githubRepository.slug,

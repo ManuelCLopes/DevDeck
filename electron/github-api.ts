@@ -44,6 +44,20 @@ export interface GitHubApiPullRequest {
   user: { login: string } | null;
 }
 
+export interface GitHubApiPullRequestCommit {
+  author: { login: string } | null;
+  commit: {
+    author: {
+      email: string | null;
+    } | null;
+    committer: {
+      email: string | null;
+    } | null;
+  };
+  committer: { login: string } | null;
+  sha: string;
+}
+
 export interface GitHubApiPullRequestSearchItem {
   closed_at: string | null;
   html_url: string;
@@ -498,6 +512,18 @@ export function fetchGitHubPullRequestReviews(
 ) {
   return githubApiRequest<GitHubApiPullRequestReview[]>(
     `/repos/${repositorySlug}/pulls/${pullRequestNumber}/reviews?per_page=100`,
+    token,
+    { allowPublicFallback: true },
+  );
+}
+
+export function fetchGitHubPullRequestCommits(
+  repositorySlug: string,
+  pullRequestNumber: number,
+  token: string,
+) {
+  return githubApiRequest<GitHubApiPullRequestCommit[]>(
+    `/repos/${repositorySlug}/pulls/${pullRequestNumber}/commits?per_page=100`,
     token,
     { allowPublicFallback: true },
   );
