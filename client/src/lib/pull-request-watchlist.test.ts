@@ -187,6 +187,45 @@ test("syncPullRequestWatchlistStatuses upgrades marked pull requests after you r
   }
 });
 
+test("syncPullRequestWatchlistStatuses adds reviewed pull requests even when they were not marked first", () => {
+  const previousWindow = globalThis.window;
+  const previousLocalStorage = globalThis.localStorage;
+  const localStorage = new MemoryStorage() as unknown as Storage;
+  const fakeWindow = {
+    addEventListener() {},
+    dispatchEvent() {
+      return true;
+    },
+    removeEventListener() {},
+  } as unknown as Window & typeof globalThis;
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: fakeWindow,
+  });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: localStorage,
+  });
+
+  try {
+    syncPullRequestWatchlistStatuses([
+      { id: "repo#88", reviewedByViewer: true },
+    ]);
+
+    assert.equal(getPullRequestWatchStatus("repo#88"), "reviewed");
+  } finally {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: previousWindow,
+    });
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: previousLocalStorage,
+    });
+  }
+});
+
 test("getPullRequestWatchlist normalizes legacy queue statuses to reviewed", () => {
   const previousWindow = globalThis.window;
   const previousLocalStorage = globalThis.localStorage;

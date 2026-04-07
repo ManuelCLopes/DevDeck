@@ -221,21 +221,24 @@ export function syncPullRequestWatchlistStatuses(
 
   for (const reviewState of reviewStates) {
     const currentEntry = currentWatchlist[reviewState.id];
-    if (!currentEntry) {
+    if (!currentEntry && !reviewState.reviewedByViewer) {
       continue;
     }
 
-    if (currentEntry.status === "marked" && reviewState.reviewedByViewer) {
-      if (!nextWatchlist) {
-        nextWatchlist = { ...currentWatchlist };
-      }
-
-      nextWatchlist[reviewState.id] = {
-        ...currentEntry,
-        status: "reviewed",
-        updatedAt: new Date().toISOString(),
-      };
+    if (!reviewState.reviewedByViewer) {
+      continue;
     }
+
+    if (!nextWatchlist) {
+      nextWatchlist = { ...currentWatchlist };
+    }
+
+    const timestamp = new Date().toISOString();
+    nextWatchlist[reviewState.id] = {
+      markedAt: currentEntry?.markedAt ?? timestamp,
+      status: "reviewed",
+      updatedAt: timestamp,
+    };
   }
 
   if (nextWatchlist) {
