@@ -539,7 +539,9 @@ export default function Reviews() {
                       watchStatus,
                     );
                     const visibleSignalBadges = signalBadges.filter(
-                      (badge) => badge.label !== "reviewed",
+                      (badge) =>
+                        badge.label !== "reviewed" &&
+                        badge.label !== "awaiting follow-up",
                     );
 
                     return (
@@ -699,9 +701,7 @@ export default function Reviews() {
                         watchStatus,
                       );
                       const visibleBadges = signalBadges.filter(
-                        (badge) =>
-                          badge.label === "marked" ||
-                          badge.label === "awaiting follow-up",
+                        (badge) => badge.label === "marked",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       return (
@@ -941,9 +941,7 @@ export default function Reviews() {
                           watchStatus,
                         );
                         const visibleBadges = signalBadges.filter(
-                          (badge) =>
-                            badge.label === "marked" ||
-                            badge.label === "awaiting follow-up",
+                          (badge) => badge.label === "marked",
                         );
                         const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                         return (

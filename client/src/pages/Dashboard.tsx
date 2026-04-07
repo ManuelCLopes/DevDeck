@@ -517,9 +517,7 @@ export default function Dashboard() {
                         watchStatus,
                       );
                       const visibleBadges = signalBadges.filter(
-                        (badge) =>
-                          badge.label === "marked" ||
-                          badge.label === "awaiting follow-up",
+                        (badge) => badge.label === "marked",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       return (
@@ -743,9 +741,7 @@ export default function Dashboard() {
                         watchStatus,
                       );
                       const visibleBadges = signalBadges.filter(
-                        (badge) =>
-                          badge.label === "marked" ||
-                          badge.label === "awaiting follow-up",
+                        (badge) => badge.label === "marked",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       return (
@@ -1068,9 +1064,7 @@ export default function Dashboard() {
                         watchStatus,
                       );
                       const visibleBadges = signalBadges.filter(
-                        (badge) =>
-                          badge.label === "marked" ||
-                          badge.label === "awaiting follow-up",
+                        (badge) => badge.label === "marked",
                       );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       return (
