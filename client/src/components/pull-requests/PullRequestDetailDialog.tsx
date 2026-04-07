@@ -63,7 +63,9 @@ export default function PullRequestDetailDialog({
     ? getPullRequestWatchStatus(pullRequest.id, pullRequestWatchlist)
     : null;
   const signalBadges = pullRequest
-    ? getPullRequestSignalBadges(pullRequest, watchStatus)
+    ? getPullRequestSignalBadges(pullRequest, watchStatus).filter(
+        (badge) => badge.label !== "reviewed",
+      )
     : [];
 
   useEffect(() => {
@@ -195,15 +197,6 @@ export default function PullRequestDetailDialog({
                   ))}
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleOpenPullRequest()}
-                    className="h-9 gap-1.5"
-                  >
-                    <Github className="w-3.5 h-3.5" />
-                    View
-                  </Button>
                   <PullRequestQueueControl
                     awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
                     className="h-9"
@@ -227,6 +220,15 @@ export default function PullRequestDetailDialog({
                     }}
                     status={watchStatus || null}
                   />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleOpenPullRequest()}
+                    className="h-9 gap-1.5"
+                  >
+                    <Github className="w-3.5 h-3.5" />
+                    View
+                  </Button>
                 </div>
               </div>
               <div className="space-y-2">

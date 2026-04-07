@@ -538,6 +538,9 @@ export default function Reviews() {
                       pullRequest,
                       watchStatus,
                     );
+                    const visibleSignalBadges = signalBadges.filter(
+                      (badge) => badge.label !== "reviewed",
+                    );
 
                     return (
                       <div
@@ -555,7 +558,7 @@ export default function Reviews() {
                                 <span className={getProjectTagClassName(pullRequest.repo)}>
                                   {pullRequest.repo}
                                 </span>
-                                {signalBadges.map((badge) => (
+                                {visibleSignalBadges.map((badge) => (
                                   <span
                                     key={`${pullRequest.id}:${badge.label}`}
                                     className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${badge.className}`}
@@ -569,14 +572,6 @@ export default function Reviews() {
                               className="flex flex-wrap items-center gap-2 self-start"
                               onClick={(event) => event.stopPropagation()}
                             >
-                              <button
-                                type="button"
-                                onClick={() => void handleOpenPullRequest(pullRequest.url)}
-                                className="inline-flex h-8 items-center rounded-md border border-border bg-white px-2 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
-                              >
-                                <Github className="mr-1.5 h-3.5 w-3.5" />
-                                View
-                              </button>
                               <PullRequestQueueControl
                                 awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
                                 mode="queue"
@@ -585,6 +580,14 @@ export default function Reviews() {
                                 }
                                 status={watchStatus}
                               />
+                              <button
+                                type="button"
+                                onClick={() => void handleOpenPullRequest(pullRequest.url)}
+                                className="inline-flex h-8 items-center rounded-md border border-border bg-white px-2 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
+                              >
+                                <Github className="mr-1.5 h-3.5 w-3.5" />
+                                View
+                              </button>
                             </div>
                           </div>
                           <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
@@ -741,17 +744,6 @@ export default function Reviews() {
                               )}
                             </div>
                             <div className="inline-flex flex-shrink-0 flex-nowrap items-center gap-2 self-start">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleOpenPullRequest(pullRequest.url);
-                                }}
-                                className="inline-flex h-8 shrink-0 whitespace-nowrap items-center rounded-md border border-border bg-white px-2 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
-                              >
-                                <Github className="mr-1.5 h-3.5 w-3.5" />
-                                <span>View</span>
-                              </button>
                               <div onClick={(event) => event.stopPropagation()}>
                                 <PullRequestQueueControl
                                   awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
@@ -765,6 +757,17 @@ export default function Reviews() {
                                   status={watchStatus}
                                 />
                               </div>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleOpenPullRequest(pullRequest.url);
+                                }}
+                                className="inline-flex h-8 shrink-0 whitespace-nowrap items-center rounded-md border border-border bg-white px-2 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
+                              >
+                                <Github className="mr-1.5 h-3.5 w-3.5" />
+                                <span>View</span>
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -984,14 +987,6 @@ export default function Reviews() {
                                   className="flex flex-shrink-0 flex-wrap items-center gap-2 self-start"
                                   onClick={(event) => event.stopPropagation()}
                                 >
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleOpenPullRequest(pullRequest.url)}
-                                    className="inline-flex h-8 items-center rounded-md border border-border bg-white px-2 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
-                                  >
-                                    <Github className="mr-1.5 h-3.5 w-3.5" />
-                                    View
-                                  </button>
                                   <PullRequestQueueControl
                                     awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
                                     mode="open"
@@ -1003,6 +998,14 @@ export default function Reviews() {
                                     }
                                     status={watchStatus}
                                   />
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleOpenPullRequest(pullRequest.url)}
+                                    className="inline-flex h-8 items-center rounded-md border border-border bg-white px-2 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
+                                  >
+                                    <Github className="mr-1.5 h-3.5 w-3.5" />
+                                    View
+                                  </button>
                                 </div>
                               </div>
                               <div className="flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">

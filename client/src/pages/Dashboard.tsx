@@ -549,17 +549,6 @@ export default function Dashboard() {
                               </p>
                             </div>
                             <div className="flex flex-wrap items-center gap-2 self-start">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleOpenPullRequest(pullRequest.url);
-                                }}
-                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2 text-[11px] font-medium transition-colors hover:bg-black/5"
-                              >
-                                <Github className="h-3.5 w-3.5" />
-                                View
-                              </button>
                               <div onClick={(event) => event.stopPropagation()}>
                                 <PullRequestQueueControl
                                   awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
@@ -573,6 +562,17 @@ export default function Dashboard() {
                                   status={watchStatus}
                                 />
                               </div>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleOpenPullRequest(pullRequest.url);
+                                }}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2 text-[11px] font-medium transition-colors hover:bg-black/5"
+                              >
+                                <Github className="h-3.5 w-3.5" />
+                                View
+                              </button>
                             </div>
                           </div>
                           {visibleBadges.length > 0 && (
@@ -787,17 +787,6 @@ export default function Dashboard() {
                               </div>
                             </div>
                             <div className="inline-flex flex-shrink-0 flex-nowrap items-center gap-2 self-start">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleOpenPullRequest(pullRequest.url);
-                                }}
-                                className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-md border border-border/60 bg-white px-2 text-[11px] font-medium transition-colors hover:bg-black/5"
-                              >
-                                <Github className="h-3.5 w-3.5" />
-                                View
-                              </button>
                               <div onClick={(event) => event.stopPropagation()}>
                                 <PullRequestQueueControl
                                   awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
@@ -811,6 +800,17 @@ export default function Dashboard() {
                                   status={watchStatus}
                                 />
                               </div>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleOpenPullRequest(pullRequest.url);
+                                }}
+                                className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-md border border-border/60 bg-white px-2 text-[11px] font-medium transition-colors hover:bg-black/5"
+                              >
+                                <Github className="h-3.5 w-3.5" />
+                                View
+                              </button>
                             </div>
                           </div>
                           {visibleBadges.length > 0 && (
@@ -1120,14 +1120,6 @@ export default function Dashboard() {
                                 className="flex flex-wrap items-center gap-2 self-start"
                                 onClick={(event) => event.stopPropagation()}
                               >
-                                <button
-                                  type="button"
-                                  onClick={() => void handleOpenPullRequest(pullRequest.url)}
-                                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2 text-[11px] font-medium transition-colors hover:bg-black/5"
-                                >
-                                  <Github className="h-3.5 w-3.5" />
-                                  View
-                                </button>
                                 <PullRequestQueueControl
                                   awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
                                   mode="open"
@@ -1139,6 +1131,14 @@ export default function Dashboard() {
                                   }
                                   status={watchStatus}
                                 />
+                                <button
+                                  type="button"
+                                  onClick={() => void handleOpenPullRequest(pullRequest.url)}
+                                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border/60 bg-white px-2 text-[11px] font-medium transition-colors hover:bg-black/5"
+                                >
+                                  <Github className="h-3.5 w-3.5" />
+                                  View
+                                </button>
                               </div>
                             </div>
                             <div className="flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
