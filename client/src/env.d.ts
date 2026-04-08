@@ -1,5 +1,7 @@
 import type {
   GitHubRepositoryCandidate,
+  GitHubTeamCandidate,
+  TeamInsightsSnapshot,
   WorkspaceDiscoveryResult,
   WorkspaceSelection,
   WorkspaceSnapshot,
@@ -35,6 +37,12 @@ interface DevDeckDesktopApi {
     storageBackend: "file" | "keychain";
   }>;
   listGitHubRepositories(): Promise<GitHubRepositoryCandidate[]>;
+  listGitHubTeams(): Promise<GitHubTeamCandidate[]>;
+  loadTeamInsights(payload: {
+    organizationLogin: string;
+    periodDays: number;
+    teamSlug: string;
+  }): Promise<TeamInsightsSnapshot>;
   loadWorkspaceSnapshot(selection: WorkspaceSelection): Promise<WorkspaceSnapshot>;
   onNavigate(listener: (targetPath: string) => void): () => void;
   onWorkspaceSnapshotUpdated(

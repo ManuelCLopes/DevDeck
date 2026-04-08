@@ -16,6 +16,8 @@ import path from "path";
 import { promisify } from "util";
 import type {
   GitHubRepositoryCandidate,
+  GitHubTeamCandidate,
+  TeamInsightsSnapshot,
   WorkspaceSelection,
   WorkspaceSnapshot,
 } from "../shared/workspace";
@@ -36,7 +38,11 @@ import {
   createGitHubPullRequestComment,
   deleteGitHubIssueComment,
   fetchGitHubIssueComments,
+  fetchGitHubOrganizationTeams,
+  fetchGitHubTeamContributionMembers,
+  fetchGitHubTeamMembers,
   fetchGitHubViewer,
+  fetchGitHubViewerOrganizationMemberships,
   fetchGitHubViewerRepositories,
   requestGitHubPullRequestReviewers,
 } from "./github-api";
@@ -581,6 +587,200 @@ async function unclaimPullRequestReview(
   await deleteGitHubIssueComment(repositorySlug, claimComment.id, token);
 }
 
+async function listGitHubTeams() {
+  const token = await readStoredGitHubToken();
+  if (!token) {
+    return [] as GitHubTeamCandidate[];
+  }
+
+  const memberships = await fetchGitHubViewerOrganizationMemberships(token);
+  const teams: GitHubTeamCandidate[] = [];
+
+  for (const membership of memberships) {
+    const organizationLogin = membership.organization?.login;
+    if (!organizationLogin) {
+      continue;
+    }
+
+    const organizationTeams = await fetchGitHubOrganizationTeams(
+      organizationLogin,
+      token,
+    );
+
+    teams.push(
+      ...organizationTeams.map((team) => ({
+        id: `${organizationLogin}/${team.slug}`,
+        memberCount: team.members_count ?? null,
+        name: team.name,
+        organizationLogin,
+        slug: team.slug,
+      })),
+    );
+  }
+
+  return teams.sort((left, right) =>
+    `${left.organizationLogin}/${left.name}`.localeCompare(
+      `${right.organizationLogin}/${right.name}`,
+    ),
+  );
+}
+
+function getActiveClaimCountsByReviewerLogin(
+  snapshot: WorkspaceSnapshot | null,
+  reviewerLogins: Set<string>,
+) {
+  const counts = new Map<string, number>();
+
+  if (!snapshot) {
+    return counts;
+  }
+
+  for (const pullRequest of snapshot.pullRequests) {
+    const reviewerLogin = pullRequest.claim?.reviewerLogin ?? null;
+    if (!reviewerLogin || !reviewerLogins.has(reviewerLogin)) {
+      continue;
+    }
+
+    counts.set(reviewerLogin, (counts.get(reviewerLogin) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
+function getAverageMetric(
+  values: Array<number | null | undefined>,
+) {
+  const validValues = values.filter(
+    (value): value is number => typeof value === "number" && Number.isFinite(value),
+  );
+
+  if (validValues.length === 0) {
+    return null;
+  }
+
+  return Math.round(
+    (validValues.reduce((sum, value) => sum + value, 0) / validValues.length) * 10,
+  ) / 10;
+}
+
+async function loadTeamInsights(payload: {
+  organizationLogin: string;
+  periodDays: number;
+  teamSlug: string;
+}) {
+  const token = await readStoredGitHubToken();
+  if (!token) {
+    throw new Error("Connect GitHub in Preferences before loading team insights.");
+  }
+
+  const teamMembers = await fetchGitHubTeamMembers(
+    payload.organizationLogin,
+    payload.teamSlug,
+    token,
+  );
+
+  const generatedAt = new Date().toISOString();
+  const from = new Date(
+    Date.now() - payload.periodDays * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const reviewerLogins = new Set(
+    teamMembers.map((member) => member.login).filter(Boolean),
+  );
+  const contributionMembers = await fetchGitHubTeamContributionMembers(
+    Array.from(reviewerLogins),
+    token,
+    {
+      from,
+      to: generatedAt,
+    },
+  );
+  const activeClaimCounts = getActiveClaimCountsByReviewerLogin(
+    workspaceMonitorState.latestSnapshot,
+    reviewerLogins,
+  );
+
+  const members = teamMembers.map((member) => {
+    const contributionMember = contributionMembers.find(
+      (candidate) => candidate.login === member.login,
+    );
+
+    return {
+      activeClaimCount: activeClaimCounts.get(member.login) ?? 0,
+      averageFirstReviewHours: contributionMember?.averageFirstReviewHours ?? null,
+      averageMergeHours: contributionMember?.averageMergeHours ?? null,
+      avatarUrl: contributionMember?.avatarUrl ?? member.avatar_url ?? null,
+      commits: contributionMember?.commits ?? 0,
+      login: member.login,
+      mergedPullRequests: contributionMember?.mergedPullRequests ?? 0,
+      name: contributionMember?.name ?? null,
+      openedPullRequests: contributionMember?.openedPullRequests ?? 0,
+      reviewsSubmitted: contributionMember?.reviewsSubmitted ?? 0,
+    };
+  });
+
+  const summary: TeamInsightsSnapshot["summary"] = members.reduce(
+    (aggregate, member) => ({
+      activeClaims: aggregate.activeClaims + member.activeClaimCount,
+      averageFirstReviewHours: aggregate.averageFirstReviewHours,
+      averageMergeHours: aggregate.averageMergeHours,
+      commits: aggregate.commits + member.commits,
+      members: aggregate.members + 1,
+      mergedPullRequests:
+        aggregate.mergedPullRequests + member.mergedPullRequests,
+      openedPullRequests:
+        aggregate.openedPullRequests + member.openedPullRequests,
+      reviewsSubmitted:
+        aggregate.reviewsSubmitted + member.reviewsSubmitted,
+    }),
+    {
+      activeClaims: 0,
+      averageFirstReviewHours: null,
+      averageMergeHours: null,
+      commits: 0,
+      members: 0,
+      mergedPullRequests: 0,
+      openedPullRequests: 0,
+      reviewsSubmitted: 0,
+    },
+  );
+
+  summary.averageFirstReviewHours = getAverageMetric(
+    members.map((member) => member.averageFirstReviewHours),
+  );
+  summary.averageMergeHours = getAverageMetric(
+    members.map((member) => member.averageMergeHours),
+  );
+
+  return {
+    generatedAt,
+    members: members.sort((left, right) => {
+      const leftScore =
+        left.mergedPullRequests * 5 +
+        left.reviewsSubmitted * 4 +
+        left.activeClaimCount * 3 +
+        left.openedPullRequests * 2 +
+        left.commits;
+      const rightScore =
+        right.mergedPullRequests * 5 +
+        right.reviewsSubmitted * 4 +
+        right.activeClaimCount * 3 +
+        right.openedPullRequests * 2 +
+        right.commits;
+
+      return rightScore - leftScore || left.login.localeCompare(right.login);
+    }),
+    periodDays: payload.periodDays,
+    summary,
+    team: {
+      id: `${payload.organizationLogin}/${payload.teamSlug}`,
+      memberCount: members.length,
+      name: payload.teamSlug,
+      organizationLogin: payload.organizationLogin,
+      slug: payload.teamSlug,
+    },
+  } satisfies TeamInsightsSnapshot;
+}
+
 ipcMain.handle("devdeck:pick-workspace", async () => {
   const result = await dialog.showOpenDialog({
     buttonLabel: "Choose Folder",
@@ -690,6 +890,24 @@ ipcMain.handle("devdeck:list-github-repositories", async () => {
 
   return repositories;
 });
+
+ipcMain.handle("devdeck:list-github-teams", async () => {
+  return listGitHubTeams();
+});
+
+ipcMain.handle(
+  "devdeck:load-team-insights",
+  async (
+    _event,
+    payload: {
+      organizationLogin: string;
+      periodDays: number;
+      teamSlug: string;
+    },
+  ) => {
+    return loadTeamInsights(payload);
+  },
+);
 
 ipcMain.handle("devdeck:save-github-token", async (_event, token: string) => {
   const result = await validateAndStoreGitHubToken(token);

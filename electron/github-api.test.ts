@@ -2,9 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createGitHubPullRequestComment,
+  fetchGitHubOrganizationTeams,
   fetchGitHubPullRequestSearchResults,
   fetchGitHubPullRequests,
   fetchGitHubRepositoryCommitHistory,
+  fetchGitHubTeamContributionMembers,
+  fetchGitHubTeamMembers,
+  fetchGitHubViewerOrganizationMemberships,
   fetchGitHubViewerCommitRepositories,
   GitHubApiError,
   GitHubConnectivityError,
@@ -313,4 +317,208 @@ test("fetchGitHubRepositoryCommitHistory returns default-branch history for the 
   assert.match(requestBody, /RepositoryCommitHistory/);
   assert.match(requestBody, /"owner":"acme"/);
   assert.match(requestBody, /"name":"repo"/);
+});
+
+test("fetchGitHubViewerOrganizationMemberships returns active org memberships", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify([
+        {
+          organization: { login: "acme" },
+          role: "member",
+          state: "active",
+        },
+      ]),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      },
+    )) as typeof fetch;
+
+  try {
+    const memberships = await fetchGitHubViewerOrganizationMemberships("test-token");
+    assert.equal(memberships[0]?.organization.login, "acme");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchGitHubOrganizationTeams returns visible org teams", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl = "";
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    requestUrl = String(input);
+    return new Response(
+      JSON.stringify([
+        {
+          id: 1,
+          members_count: 4,
+          name: "Platform",
+          organization: { login: "acme" },
+          slug: "platform",
+        },
+      ]),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      },
+    );
+  }) as typeof fetch;
+
+  try {
+    const teams = await fetchGitHubOrganizationTeams("acme", "test-token");
+    assert.equal(teams[0]?.slug, "platform");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(
+    requestUrl,
+    "https://api.github.com/orgs/acme/teams?per_page=100",
+  );
+});
+
+test("fetchGitHubTeamMembers returns visible team members", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify([
+        {
+          avatar_url: "https://avatars.githubusercontent.com/u/1?v=4",
+          login: "manuel",
+        },
+      ]),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      },
+    )) as typeof fetch;
+
+  try {
+    const members = await fetchGitHubTeamMembers("acme", "platform", "test-token");
+    assert.equal(members[0]?.login, "manuel");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchGitHubTeamContributionMembers aggregates contribution and merge counts", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody = "";
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    assert.equal(String(input), "https://api.github.com/graphql");
+    requestBody = String(init?.body ?? "");
+
+    return new Response(
+      JSON.stringify({
+        data: {
+          member0: {
+            avatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
+            contributionsCollection: {
+              totalCommitContributions: 8,
+              totalPullRequestContributions: 3,
+              totalPullRequestReviewContributions: 6,
+            },
+            login: "manuel",
+            name: "Manuel",
+          },
+          merged0: {
+            issueCount: 2,
+          },
+          authoredPullRequests0: {
+            nodes: [
+              {
+                createdAt: "2026-03-01T08:00:00Z",
+                mergedAt: "2026-03-02T08:00:00Z",
+                reviews: {
+                  nodes: [{ submittedAt: "2026-03-01T12:00:00Z" }],
+                },
+              },
+              {
+                createdAt: "2026-03-03T08:00:00Z",
+                mergedAt: "2026-03-03T20:00:00Z",
+                reviews: {
+                  nodes: [{ submittedAt: "2026-03-03T10:00:00Z" }],
+                },
+              },
+            ],
+          },
+          member1: {
+            avatarUrl: null,
+            contributionsCollection: {
+              totalCommitContributions: 4,
+              totalPullRequestContributions: 1,
+              totalPullRequestReviewContributions: 2,
+            },
+            login: "teammate",
+            name: "Teammate",
+          },
+          merged1: {
+            issueCount: 1,
+          },
+          authoredPullRequests1: {
+            nodes: [
+              {
+                createdAt: "2026-03-02T08:00:00Z",
+                mergedAt: "2026-03-04T08:00:00Z",
+                reviews: {
+                  nodes: [{ submittedAt: "2026-03-02T14:00:00Z" }],
+                },
+              },
+            ],
+          },
+        },
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      },
+    );
+  }) as typeof fetch;
+
+  try {
+    const members = await fetchGitHubTeamContributionMembers(
+      ["manuel", "teammate"],
+      "test-token",
+      {
+        from: "2026-03-01T00:00:00.000Z",
+        to: "2026-04-01T00:00:00.000Z",
+      },
+    );
+
+    assert.deepEqual(members, [
+      {
+        avatarUrl: "https://avatars.githubusercontent.com/u/1?v=4",
+        averageFirstReviewHours: 3,
+        averageMergeHours: 18,
+        commits: 8,
+        login: "manuel",
+        mergedPullRequests: 2,
+        name: "Manuel",
+        openedPullRequests: 3,
+        reviewsSubmitted: 6,
+      },
+      {
+        avatarUrl: null,
+        averageFirstReviewHours: 6,
+        averageMergeHours: 48,
+        commits: 4,
+        login: "teammate",
+        mergedPullRequests: 1,
+        name: "Teammate",
+        openedPullRequests: 1,
+        reviewsSubmitted: 2,
+      },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.match(requestBody, /TeamContributionMembers/);
+  assert.match(requestBody, /is:pr is:merged author:manuel merged:2026-03-01\.\.2026-04-01/);
 });

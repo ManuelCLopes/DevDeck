@@ -77,6 +77,44 @@ export interface GitHubRepositoryCandidate {
   viewerPermission: string | null;
 }
 
+export interface GitHubTeamCandidate {
+  id: string;
+  memberCount: number | null;
+  name: string;
+  organizationLogin: string;
+  slug: string;
+}
+
+export interface TeamInsightsMemberStats {
+  activeClaimCount: number;
+  averageFirstReviewHours: number | null;
+  averageMergeHours: number | null;
+  avatarUrl: string | null;
+  commits: number;
+  login: string;
+  mergedPullRequests: number;
+  name: string | null;
+  openedPullRequests: number;
+  reviewsSubmitted: number;
+}
+
+export interface TeamInsightsSnapshot {
+  generatedAt: string;
+  members: TeamInsightsMemberStats[];
+  periodDays: number;
+  summary: {
+    activeClaims: number;
+    averageFirstReviewHours: number | null;
+    averageMergeHours: number | null;
+    commits: number;
+    members: number;
+    mergedPullRequests: number;
+    openedPullRequests: number;
+    reviewsSubmitted: number;
+  };
+  team: GitHubTeamCandidate;
+}
+
 export interface WorkspaceProject {
   aheadBy: number;
   awaitingReviewCount: number;

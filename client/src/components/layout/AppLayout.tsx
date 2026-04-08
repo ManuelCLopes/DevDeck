@@ -62,6 +62,7 @@ import {
   HardDrive,
   MessageSquare,
   RefreshCw,
+  Users2,
 } from "lucide-react";
 
 const AddProjectsDialog = lazy(() => import("@/components/workspace/AddProjectsDialog"));
@@ -231,6 +232,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { href: "/reviews", icon: MessageSquare, label: "Pull Requests" },
     { href: "/projects", icon: FolderGit2, label: "Repositories" },
     { href: "/activity", icon: Activity, label: "Activity Inbox" },
+    { href: "/team", icon: Users2, label: "Team Insights" },
   ];
 
   useEffect(() => {
@@ -647,6 +649,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <CommandItem value="open activity inbox" onSelect={() => handleNavigate("/activity")}>
               <Activity className="w-4 h-4 text-primary" />
               <span className="font-medium">Open Activity Inbox</span>
+            </CommandItem>
+            <CommandItem value="open team insights collaboration" onSelect={() => handleNavigate("/team")}>
+              <Users2 className="w-4 h-4 text-primary" />
+              <span className="font-medium">Open Team Insights</span>
             </CommandItem>
             <CommandItem value="open preferences settings" onSelect={() => handleNavigate("/settings")}>
               <Settings className="w-4 h-4 text-primary" />

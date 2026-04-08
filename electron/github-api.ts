@@ -19,6 +19,29 @@ export interface GitHubApiRepository {
   } | null;
 }
 
+export interface GitHubApiOrganizationMembership {
+  organization: {
+    login: string;
+  };
+  role: string | null;
+  state: string;
+}
+
+export interface GitHubApiTeam {
+  id: number;
+  members_count?: number;
+  name: string;
+  organization?: {
+    login: string;
+  } | null;
+  slug: string;
+}
+
+export interface GitHubApiTeamMember {
+  avatar_url: string | null;
+  login: string;
+}
+
 export interface GitHubApiPullRequestReview {
   id: number;
   state: string;
@@ -89,6 +112,18 @@ export interface GitHubApiRepositoryCommitHistoryItem {
   oid: string;
 }
 
+export interface GitHubTeamContributionMember {
+  avatarUrl: string | null;
+  averageFirstReviewHours: number | null;
+  averageMergeHours: number | null;
+  commits: number;
+  login: string;
+  mergedPullRequests: number;
+  name: string | null;
+  openedPullRequests: number;
+  reviewsSubmitted: number;
+}
+
 interface GitHubApiRepositoryCommitHistoryResponse {
   items: GitHubApiRepositoryCommitHistoryItem[];
   pageInfo: {
@@ -111,6 +146,16 @@ interface GitHubGraphQLError {
 interface GitHubGraphQLResponse<TData> {
   data?: TData;
   errors?: GitHubGraphQLError[];
+}
+
+interface GitHubApiTeamContributionSearchPullRequestNode {
+  createdAt: string;
+  mergedAt: string | null;
+  reviews: {
+    nodes: Array<{
+      submittedAt: string | null;
+    } | null>;
+  };
 }
 
 interface GitHubApiRequestOptions {
@@ -313,6 +358,37 @@ export async function fetchGitHubViewerRepositories(
   );
 }
 
+export async function fetchGitHubViewerOrganizationMemberships(token: string) {
+  return githubApiRequest<GitHubApiOrganizationMembership[]>(
+    "/user/memberships/orgs?state=active&per_page=100",
+    token,
+    { timeoutMs: 8000 },
+  );
+}
+
+export async function fetchGitHubOrganizationTeams(
+  organizationLogin: string,
+  token: string,
+) {
+  return githubApiRequest<GitHubApiTeam[]>(
+    `/orgs/${organizationLogin}/teams?per_page=100`,
+    token,
+    { timeoutMs: 8000 },
+  );
+}
+
+export async function fetchGitHubTeamMembers(
+  organizationLogin: string,
+  teamSlug: string,
+  token: string,
+) {
+  return githubApiRequest<GitHubApiTeamMember[]>(
+    `/orgs/${organizationLogin}/teams/${teamSlug}/members?per_page=100`,
+    token,
+    { timeoutMs: 8000 },
+  );
+}
+
 export function fetchGitHubPullRequests(
   repositorySlug: string,
   token: string,
@@ -328,6 +404,213 @@ export function fetchGitHubPullRequests(
     token,
     { allowPublicFallback: true },
   );
+}
+
+function chunkArray<TItem>(items: TItem[], chunkSize: number) {
+  const result: TItem[][] = [];
+
+  for (let index = 0; index < items.length; index += chunkSize) {
+    result.push(items.slice(index, index + chunkSize));
+  }
+
+  return result;
+}
+
+function getAverageHours(values: number[]) {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return Math.round((total / values.length) * 10) / 10;
+}
+
+export async function fetchGitHubTeamContributionMembers(
+  memberLogins: string[],
+  token: string,
+  options: {
+    from: string;
+    to?: string;
+  },
+) {
+  const uniqueMemberLogins = Array.from(
+    new Set(
+      memberLogins
+        .map((login) => login.trim())
+        .filter(Boolean),
+    ),
+  );
+
+  if (uniqueMemberLogins.length === 0) {
+    return [] satisfies GitHubTeamContributionMember[];
+  }
+
+  const to = options.to ?? new Date().toISOString();
+  const mergedFromDate = options.from.slice(0, 10);
+  const mergedToDate = to.slice(0, 10);
+  const metrics = new Map<string, GitHubTeamContributionMember>();
+
+  for (const login of uniqueMemberLogins) {
+    metrics.set(login, {
+      avatarUrl: null,
+      averageFirstReviewHours: null,
+      averageMergeHours: null,
+      commits: 0,
+      login,
+      mergedPullRequests: 0,
+      name: null,
+      openedPullRequests: 0,
+      reviewsSubmitted: 0,
+    });
+  }
+
+  for (const loginChunk of chunkArray(uniqueMemberLogins, 10)) {
+    const querySections: string[] = [];
+
+    loginChunk.forEach((login, index) => {
+      const memberAlias = `member${index}`;
+      const mergedAlias = `merged${index}`;
+      const authoredPullRequestsAlias = `authoredPullRequests${index}`;
+      const mergedSearchQuery = `is:pr is:merged author:${login} merged:${mergedFromDate}..${mergedToDate}`;
+      const authoredSearchQuery = `is:pr author:${login} created:${mergedFromDate}..${mergedToDate}`;
+
+      querySections.push(`
+        ${memberAlias}: user(login: ${JSON.stringify(login)}) {
+          login
+          name
+          avatarUrl(size: 64)
+          contributionsCollection(from: $from, to: $to) {
+            totalCommitContributions
+            totalPullRequestContributions
+            totalPullRequestReviewContributions
+          }
+        }
+        ${mergedAlias}: search(query: ${JSON.stringify(mergedSearchQuery)}, type: ISSUE) {
+          issueCount
+        }
+        ${authoredPullRequestsAlias}: search(query: ${JSON.stringify(authoredSearchQuery)}, type: ISSUE, first: 50) {
+          nodes {
+            ... on PullRequest {
+              createdAt
+              mergedAt
+              reviews(first: 100) {
+                nodes {
+                  submittedAt
+                }
+              }
+            }
+          }
+        }
+      `);
+    });
+
+    const data = await githubGraphqlRequest<Record<string, any>>(
+      `
+        query TeamContributionMembers($from: DateTime!, $to: DateTime!) {
+          ${querySections.join("\n")}
+        }
+      `,
+      {
+        from: options.from,
+        to,
+      },
+      token,
+    );
+
+    loginChunk.forEach((login, index) => {
+      const memberAlias = `member${index}`;
+      const mergedAlias = `merged${index}`;
+      const authoredPullRequestsAlias = `authoredPullRequests${index}`;
+      const memberData = data[memberAlias] as
+        | {
+            avatarUrl?: string | null;
+            contributionsCollection?: {
+              totalCommitContributions?: number | null;
+              totalPullRequestContributions?: number | null;
+              totalPullRequestReviewContributions?: number | null;
+            } | null;
+            login?: string | null;
+            name?: string | null;
+          }
+        | null
+        | undefined;
+      const mergedData = data[mergedAlias] as { issueCount?: number | null } | null | undefined;
+      const authoredPullRequestsData = data[authoredPullRequestsAlias] as
+        | {
+            nodes?: Array<GitHubApiTeamContributionSearchPullRequestNode | null> | null;
+          }
+        | null
+        | undefined;
+      const existingMetric = metrics.get(login);
+
+      if (!existingMetric || !memberData?.login) {
+        return;
+      }
+
+      const authoredPullRequests =
+        authoredPullRequestsData?.nodes?.filter(
+          (
+            node,
+          ): node is GitHubApiTeamContributionSearchPullRequestNode => Boolean(node),
+        ) ?? [];
+      const firstReviewHours = authoredPullRequests
+        .map((pullRequest) => {
+          const firstReviewTimestamp = pullRequest.reviews.nodes
+            .filter((review): review is { submittedAt: string | null } => Boolean(review))
+            .map((review) => review.submittedAt)
+            .filter((submittedAt): submittedAt is string => Boolean(submittedAt))
+            .sort()[0];
+
+          if (!firstReviewTimestamp) {
+            return null;
+          }
+
+          return (
+            (new Date(firstReviewTimestamp).getTime() -
+              new Date(pullRequest.createdAt).getTime()) /
+            (1000 * 60 * 60)
+          );
+        })
+        .filter((value): value is number => value !== null && value >= 0);
+      const mergeHours = authoredPullRequests
+        .map((pullRequest) => {
+          if (!pullRequest.mergedAt) {
+            return null;
+          }
+
+          return (
+            (new Date(pullRequest.mergedAt).getTime() -
+              new Date(pullRequest.createdAt).getTime()) /
+            (1000 * 60 * 60)
+          );
+        })
+        .filter((value): value is number => value !== null && value >= 0);
+
+      metrics.set(login, {
+        avatarUrl: memberData.avatarUrl ?? existingMetric.avatarUrl,
+        averageFirstReviewHours:
+          getAverageHours(firstReviewHours) ?? existingMetric.averageFirstReviewHours,
+        averageMergeHours:
+          getAverageHours(mergeHours) ?? existingMetric.averageMergeHours,
+        commits:
+          memberData.contributionsCollection?.totalCommitContributions ??
+          existingMetric.commits,
+        login: memberData.login,
+        mergedPullRequests: mergedData?.issueCount ?? existingMetric.mergedPullRequests,
+        name: memberData.name ?? existingMetric.name,
+        openedPullRequests:
+          memberData.contributionsCollection?.totalPullRequestContributions ??
+          existingMetric.openedPullRequests,
+        reviewsSubmitted:
+          memberData.contributionsCollection?.totalPullRequestReviewContributions ??
+          existingMetric.reviewsSubmitted,
+      });
+    });
+  }
+
+  return uniqueMemberLogins
+    .map((login) => metrics.get(login))
+    .filter((metric): metric is GitHubTeamContributionMember => Boolean(metric));
 }
 
 export function fetchGitHubPullRequestSearchResults(

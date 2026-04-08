@@ -18,6 +18,7 @@ const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const Reviews = lazy(() => import("@/pages/Reviews"));
 const Activity = lazy(() => import("@/pages/Activity"));
+const TeamInsights = lazy(() => import("@/pages/TeamInsights"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
 
@@ -73,6 +74,7 @@ function AppRouter() {
         <Route path="/onboarding">{() => <Onboarding />}</Route>
         <Route path="/">{() => <Dashboard />}</Route>
         <Route path="/reviews">{() => <Reviews />}</Route>
+        <Route path="/team">{() => <TeamInsights />}</Route>
         <Route path="/projects">{() => <Projects />}</Route>
         <Route path="/activity">{() => <Activity />}</Route>
         <Route path="/settings">{() => <Settings />}</Route>

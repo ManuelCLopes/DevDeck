@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   GitHubRepositoryCandidate,
+  GitHubTeamCandidate,
+  TeamInsightsSnapshot,
   WorkspaceDiscoveryResult,
   WorkspaceSelection,
   WorkspaceSnapshot,
@@ -106,6 +108,16 @@ const devdeck = {
   },
   listGitHubRepositories(): Promise<GitHubRepositoryCandidate[]> {
     return ipcRenderer.invoke("devdeck:list-github-repositories");
+  },
+  listGitHubTeams(): Promise<GitHubTeamCandidate[]> {
+    return ipcRenderer.invoke("devdeck:list-github-teams");
+  },
+  loadTeamInsights(payload: {
+    organizationLogin: string;
+    periodDays: number;
+    teamSlug: string;
+  }): Promise<TeamInsightsSnapshot> {
+    return ipcRenderer.invoke("devdeck:load-team-insights", payload);
   },
   pollGitHubDeviceAuth(deviceCode: string) {
     return ipcRenderer.invoke("devdeck:poll-github-device-auth", deviceCode);
