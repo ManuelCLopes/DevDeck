@@ -36,9 +36,9 @@ import {
 import { useWorkspaceAlerts } from "@/hooks/use-workspace-alerts";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { getDesktopApi } from "@/lib/desktop";
+import { setPullRequestClaimed } from "@/lib/pull-request-actions";
 import { getOpenAddProjectsDialogEvent } from "@/lib/project-import-events";
-import { setPullRequestWatchStatus } from "@/lib/pull-request-watchlist";
-import { syncPullRequestWatchlistStatuses } from "@/lib/pull-request-watchlist";
+import { getPullRequestQueueStatus } from "@/lib/pull-request-utils";
 import {
   getManagedProjectCollections,
 } from "@/lib/workspace-selection";
@@ -47,10 +47,8 @@ import {
   Settings, 
   Activity, 
   Bookmark,
-  CheckCheck,
   FolderOpen,
   FolderGit2,
-  Bell,
   Github,
   Search,
   LayoutGrid,
@@ -154,19 +152,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
   useWorkspaceAlerts(snapshot, preferences);
   useWorkspaceAutoRefresh();
   useDesktopWorkspaceMonitor(workspaceSelection, preferences);
-
-  useEffect(() => {
-    if (!snapshot?.pullRequests?.length) {
-      return;
-    }
-
-    syncPullRequestWatchlistStatuses(
-      snapshot.pullRequests.map((pullRequest) => ({
-        id: pullRequest.id,
-        reviewedByViewer: pullRequest.reviewedByViewer,
-      })),
-    );
-  }, [snapshot?.pullRequests]);
 
   const collapsedCollectionIdSet = useMemo(
     () => new Set(collapsedCollectionIds),
@@ -660,7 +645,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <span className="font-medium">Open Pull Requests</span>
             </CommandItem>
             <CommandItem value="open activity inbox" onSelect={() => handleNavigate("/activity")}>
-              <Bell className="w-4 h-4 text-primary" />
+              <Activity className="w-4 h-4 text-primary" />
               <span className="font-medium">Open Activity Inbox</span>
             </CommandItem>
             <CommandItem value="open preferences settings" onSelect={() => handleNavigate("/settings")}>
@@ -779,39 +764,40 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   </CommandItem>
                 ))}
                 {searchResults.pullRequests.slice(0, 3).map((pullRequest) => (
-                  <CommandItem
-                    key={`mark:${pullRequest.id}`}
-                    value={`mark ${pullRequest.title} for review ${pullRequest.repo}`}
-                    onSelect={() =>
-                      handleCommandAction(() =>
-                        setPullRequestWatchStatus(pullRequest.id, "marked"),
-                      )
-                    }
-                  >
-                    <Bookmark className="w-4 h-4 text-primary" />
-                    <span className="truncate font-medium">
-                      Mark #{pullRequest.number} to Review
-                    </span>
-                    <CommandShortcut>Marked</CommandShortcut>
-                  </CommandItem>
+                  getPullRequestQueueStatus(pullRequest) === null ? (
+                    <CommandItem
+                      key={`claim:${pullRequest.id}`}
+                      value={`claim ${pullRequest.title} for review ${pullRequest.repo}`}
+                      onSelect={() =>
+                        handleCommandAction(() => setPullRequestClaimed(pullRequest, true))
+                      }
+                    >
+                      <Bookmark className="w-4 h-4 text-primary" />
+                      <span className="truncate font-medium">
+                        Claim #{pullRequest.number} Review
+                      </span>
+                      <CommandShortcut>Claim</CommandShortcut>
+                    </CommandItem>
+                  ) : null
                 ))}
-                {searchResults.pullRequests.slice(0, 3).map((pullRequest) => (
-                  <CommandItem
-                    key={`reviewed:${pullRequest.id}`}
-                    value={`set ${pullRequest.title} reviewed ${pullRequest.repo}`}
-                    onSelect={() =>
-                      handleCommandAction(() =>
-                        setPullRequestWatchStatus(pullRequest.id, "reviewed"),
-                      )
-                    }
-                  >
-                    <CheckCheck className="w-4 h-4 text-primary" />
-                    <span className="truncate font-medium">
-                      Set #{pullRequest.number} Reviewed
-                    </span>
-                    <CommandShortcut>Reviewed</CommandShortcut>
-                  </CommandItem>
-                ))}
+                {searchResults.pullRequests
+                  .slice(0, 3)
+                  .filter((pullRequest) => getPullRequestQueueStatus(pullRequest) === "claimed")
+                  .map((pullRequest) => (
+                    <CommandItem
+                      key={`unclaim:${pullRequest.id}`}
+                      value={`unclaim ${pullRequest.title} ${pullRequest.repo}`}
+                      onSelect={() =>
+                        handleCommandAction(() => setPullRequestClaimed(pullRequest, false))
+                      }
+                    >
+                      <Bookmark className="w-4 h-4 text-primary" />
+                      <span className="truncate font-medium">
+                        Unclaim #{pullRequest.number}
+                      </span>
+                      <CommandShortcut>Claimed</CommandShortcut>
+                    </CommandItem>
+                  ))}
               </CommandGroup>
             </>
           ) : null}
@@ -823,7 +809,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 value={`${activity.title} ${activity.description} ${activity.repo}`}
                 onSelect={() => handleNavigate("/activity")}
               >
-                <Bell className="w-4 h-4 text-primary" />
+                <Activity className="w-4 h-4 text-primary" />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate font-medium">{activity.title}</span>
                   <span className="truncate text-xs text-muted-foreground">

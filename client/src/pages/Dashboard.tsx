@@ -16,23 +16,18 @@ import {
 } from "@/components/ui/dialog";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
-import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
+import { toast } from "@/hooks/use-toast";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
+import { setPullRequestClaimed } from "@/lib/pull-request-actions";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
-import {
-  getPullRequestQueueIds,
-  getPullRequestWatchStatus,
-  setPullRequestWatchStatus,
-  type PullRequestWatchStatus,
-} from "@/lib/pull-request-watchlist";
 import { getCiStatusMeta } from "@/lib/project-health";
 import {
   filterPullRequestsByDependabotVisibility,
   getAuthoredPullRequestStatusMeta,
-  getPullRequestSignalBadges,
+  getPullRequestQueueStatus,
   pullRequestHasNoReviews,
   pullRequestNeedsFollowUp,
   pullRequestNeedsViewerReview,
@@ -67,7 +62,7 @@ const PullRequestDetailDialog = lazy(
 type DashboardIndicatorDialogId =
   | "needs_review"
   | "needs_follow_up"
-  | "marked_for_review";
+  | "claimed_by_you";
 
 export default function Dashboard() {
   const formatCount = (value: number) => new Intl.NumberFormat().format(value);
@@ -90,7 +85,6 @@ export default function Dashboard() {
   const focusedProjectId = new URLSearchParams(search).get("project");
   const workspaceSelection = useWorkspaceSelection();
   const { data: snapshot, isLoading } = useWorkspaceSnapshot();
-  const pullRequestWatchlist = usePullRequestWatchlist();
 
   const projects = snapshot?.projects ?? [];
   const allPullRequests = snapshot?.pullRequests ?? [];
@@ -108,14 +102,6 @@ export default function Dashboard() {
   const visiblePullRequests = focusedProject
     ? pullRequests.filter((pullRequest) => pullRequest.projectId === focusedProject.id)
     : pullRequests;
-  const markedPullRequestIds = useMemo(
-    () => getPullRequestQueueIds(pullRequestWatchlist, "marked"),
-    [pullRequestWatchlist],
-  );
-  const reviewedPullRequestIds = useMemo(
-    () => getPullRequestQueueIds(pullRequestWatchlist, "reviewed"),
-    [pullRequestWatchlist],
-  );
   const selectedPullRequest =
     visiblePullRequests.find((pullRequest) => pullRequest.id === selectedPullRequestId) ??
     null;
@@ -149,15 +135,15 @@ export default function Dashboard() {
     () => visiblePullRequests.filter(pullRequestNeedsFollowUp),
     [visiblePullRequests],
   );
-  const markedPullRequests = useMemo(
+  const claimedPullRequests = useMemo(
     () =>
       visiblePullRequests.filter((pullRequest) =>
-        markedPullRequestIds.has(pullRequest.id),
+        getPullRequestQueueStatus(pullRequest) === "claimed",
       ),
-    [markedPullRequestIds, visiblePullRequests],
+    [visiblePullRequests],
   );
   const needsFollowUpCount = needsFollowUpPullRequests.length;
-  const markedPullRequestCount = markedPullRequests.length;
+  const claimedPullRequestCount = claimedPullRequests.length;
   const workspaceLabel = workspaceSelection?.rootPath ?? workspaceSelection?.rootName ?? "~/Developer";
   const overviewRepoFilteredPullRequests = useMemo(
     () =>
@@ -219,11 +205,20 @@ export default function Dashboard() {
     window.open(targetUrl, "_blank", "noopener,noreferrer");
   };
 
-  const handleSetPullRequestQueueStatus = (
-    pullRequestId: string,
-    status: PullRequestWatchStatus | null,
+  const handleSetPullRequestClaimed = async (
+    pullRequest: Pick<
+      WorkspacePullRequestItem,
+      "claim" | "number" | "repo" | "repositorySlug"
+    >,
+    claimed: boolean,
   ) => {
-    setPullRequestWatchStatus(pullRequestId, status);
+    await setPullRequestClaimed(pullRequest, claimed);
+    toast({
+      title: claimed ? "Review claimed" : "Claim removed",
+      description: claimed
+        ? `${pullRequest.repo} #${pullRequest.number} is now claimed for review.`
+        : `${pullRequest.repo} #${pullRequest.number} is no longer claimed by you.`,
+    });
   };
 
   const addOverviewRepoFilter = (repo: string) => {
@@ -252,11 +247,11 @@ export default function Dashboard() {
         title: string;
       }
     > = {
-      marked_for_review: {
-        description: "Pull requests you explicitly marked to keep on your review radar.",
-        emptyMessage: "You have not marked any pull requests for review.",
-        pullRequests: markedPullRequests,
-        title: "Marked For Review",
+      claimed_by_you: {
+        description: "Pull requests you claimed so the team can see you are taking them.",
+        emptyMessage: "You have not claimed any pull requests yet.",
+        pullRequests: claimedPullRequests,
+        title: "Claimed By You",
       },
       needs_follow_up: {
         description:
@@ -274,7 +269,7 @@ export default function Dashboard() {
     };
 
     return dialogById[activeIndicatorDialog];
-  }, [activeIndicatorDialog, markedPullRequests, needsFollowUpPullRequests, needsReviewPullRequests]);
+  }, [activeIndicatorDialog, claimedPullRequests, needsFollowUpPullRequests, needsReviewPullRequests]);
 
   const handleInspectIndicatorPullRequest = (pullRequestId: string) => {
     setActiveIndicatorDialog(null);
@@ -359,9 +354,8 @@ export default function Dashboard() {
                     <div className="flex items-start justify-between gap-4">
                       <span className="text-muted-foreground">In your queue</span>
                       <span className="min-w-0 text-right font-semibold text-foreground">
-                        {focusedProjectPullRequests.filter((pullRequest) =>
-                          markedPullRequestIds.has(pullRequest.id) ||
-                          reviewedPullRequestIds.has(pullRequest.id),
+                        {focusedProjectPullRequests.filter(
+                          (pullRequest) => getPullRequestQueueStatus(pullRequest) !== null,
                         ).length}
                       </span>
                     </div>
@@ -508,17 +502,7 @@ export default function Dashboard() {
                   </div>
                   <div className="space-y-3">
                     {focusedPullRequestsPagination.paginatedItems.map((pullRequest) => {
-                      const watchStatus = getPullRequestWatchStatus(
-                        pullRequest.id,
-                        pullRequestWatchlist,
-                      );
-                      const signalBadges = getPullRequestSignalBadges(
-                        pullRequest,
-                        watchStatus,
-                      );
-                      const visibleBadges = signalBadges.filter(
-                        (badge) => badge.label === "marked",
-                      );
+                      const queueStatus = getPullRequestQueueStatus(pullRequest);
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       return (
                         <div
@@ -549,15 +533,21 @@ export default function Dashboard() {
                             <div className="flex flex-wrap items-center gap-2 self-start">
                               <div onClick={(event) => event.stopPropagation()}>
                                 <PullRequestQueueControl
-                                  awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
-                                  mode="open"
-                                  onStatusChange={(status) =>
-                                    handleSetPullRequestQueueStatus(
-                                      pullRequest.id,
-                                      status,
-                                    )
+                                  claimedReviewerLogin={
+                                    pullRequest.claimedByViewer
+                                      ? null
+                                      : pullRequest.claim?.reviewerLogin ?? null
                                   }
-                                  status={watchStatus}
+                                  onClaimChange={
+                                    queueStatus === "claimed" || queueStatus === null
+                                      ? (claimed) =>
+                                          void handleSetPullRequestClaimed(
+                                            pullRequest,
+                                            claimed,
+                                          )
+                                      : undefined
+                                  }
+                                  status={queueStatus}
                                 />
                               </div>
                               <button
@@ -573,18 +563,6 @@ export default function Dashboard() {
                               </button>
                             </div>
                           </div>
-                          {visibleBadges.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-2">
-                              {visibleBadges.map((badge) => (
-                                <span
-                                  key={badge.label}
-                                  className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${badge.className}`}
-                                >
-                                  {badge.label}
-                                </span>
-                              ))}
-                            </div>
-                          )}
                         </div>
                         <div className="mt-3 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
                           <span className="min-w-0 break-words">
@@ -671,18 +649,18 @@ export default function Dashboard() {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveIndicatorDialog("marked_for_review")}
+                onClick={() => setActiveIndicatorDialog("claimed_by_you")}
                 className="rounded-xl border border-border/50 bg-white/60 p-4 text-left shadow-sm backdrop-blur-md transition-colors hover:bg-black/[0.02]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Marked For Review
+                    Claimed By You
                   </h3>
                   <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-sm font-semibold tabular-nums text-primary">
-                    {formatCount(markedPullRequestCount)}
+                    {formatCount(claimedPullRequestCount)}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">your shortlist</p>
+                <p className="mt-1 text-xs text-muted-foreground">team-visible ownership</p>
               </button>
             </div>
 
@@ -732,17 +710,7 @@ export default function Dashboard() {
               <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
                 <div className="space-y-3">
                     {overviewPullRequestsPagination.paginatedItems.map((pullRequest) => {
-                      const watchStatus = getPullRequestWatchStatus(
-                        pullRequest.id,
-                        pullRequestWatchlist,
-                      );
-                      const signalBadges = getPullRequestSignalBadges(
-                        pullRequest,
-                        watchStatus,
-                      );
-                      const visibleBadges = signalBadges.filter(
-                        (badge) => badge.label === "marked",
-                      );
+                      const queueStatus = getPullRequestQueueStatus(pullRequest);
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       return (
                       <div
@@ -785,15 +753,21 @@ export default function Dashboard() {
                             <div className="inline-flex flex-shrink-0 flex-nowrap items-center gap-2 self-start">
                               <div onClick={(event) => event.stopPropagation()}>
                                 <PullRequestQueueControl
-                                  awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
-                                  mode="open"
-                                  onStatusChange={(status) =>
-                                    handleSetPullRequestQueueStatus(
-                                      pullRequest.id,
-                                      status,
-                                    )
+                                  claimedReviewerLogin={
+                                    pullRequest.claimedByViewer
+                                      ? null
+                                      : pullRequest.claim?.reviewerLogin ?? null
                                   }
-                                  status={watchStatus}
+                                  onClaimChange={
+                                    queueStatus === "claimed" || queueStatus === null
+                                      ? (claimed) =>
+                                          void handleSetPullRequestClaimed(
+                                            pullRequest,
+                                            claimed,
+                                          )
+                                      : undefined
+                                  }
+                                  status={queueStatus}
                                 />
                               </div>
                               <button
@@ -809,18 +783,6 @@ export default function Dashboard() {
                               </button>
                             </div>
                           </div>
-                          {visibleBadges.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-2">
-                              {visibleBadges.map((badge) => (
-                                <span
-                                  key={badge.label}
-                                  className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full border whitespace-nowrap ${badge.className}`}
-                                >
-                                  {badge.label}
-                                </span>
-                              ))}
-                            </div>
-                          )}
                         </div>
                         <div className="mt-3 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-end sm:justify-between">
                           <span className="min-w-0 break-words">
@@ -1061,17 +1023,7 @@ export default function Dashboard() {
                 <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
                   <div className="space-y-3">
                     {activeIndicatorDialogConfig.pullRequests.map((pullRequest) => {
-                      const watchStatus = getPullRequestWatchStatus(
-                        pullRequest.id,
-                        pullRequestWatchlist,
-                      );
-                      const signalBadges = getPullRequestSignalBadges(
-                        pullRequest,
-                        watchStatus,
-                      );
-                      const visibleBadges = signalBadges.filter(
-                        (badge) => badge.label === "marked",
-                      );
+                      const queueStatus = getPullRequestQueueStatus(pullRequest);
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       return (
                         <div
@@ -1103,33 +1055,27 @@ export default function Dashboard() {
                                     {pullRequest.headBranch} into {pullRequest.baseBranch}
                                   </span>
                                 </div>
-                                {visibleBadges.length > 0 ? (
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    {visibleBadges.map((badge) => (
-                                      <span
-                                        key={`${pullRequest.id}:${badge.label}`}
-                                        className={`whitespace-nowrap rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${badge.className}`}
-                                      >
-                                        {badge.label}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : null}
                               </div>
                               <div
                                 className="flex flex-wrap items-center gap-2 self-start"
                                 onClick={(event) => event.stopPropagation()}
                               >
                                 <PullRequestQueueControl
-                                  awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
-                                  mode="open"
-                                  onStatusChange={(status) =>
-                                    handleSetPullRequestQueueStatus(
-                                      pullRequest.id,
-                                      status,
-                                    )
+                                  claimedReviewerLogin={
+                                    pullRequest.claimedByViewer
+                                      ? null
+                                      : pullRequest.claim?.reviewerLogin ?? null
                                   }
-                                  status={watchStatus}
+                                  onClaimChange={
+                                    queueStatus === "claimed" || queueStatus === null
+                                      ? (claimed) =>
+                                          void handleSetPullRequestClaimed(
+                                            pullRequest,
+                                            claimed,
+                                          )
+                                      : undefined
+                                  }
+                                  status={queueStatus}
                                 />
                                 <button
                                   type="button"

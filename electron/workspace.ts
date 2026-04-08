@@ -5,6 +5,7 @@ import { promisify } from "util";
 import {
   fetchGitHubRepositoryCommitHistory,
   fetchGitHubCommitStatus,
+  fetchGitHubIssueComments,
   fetchGitHubPullRequestCommits,
   fetchGitHubPullRequestReviews,
   fetchGitHubPullRequests,
@@ -13,6 +14,7 @@ import {
   fetchGitHubViewer,
   GitHubApiError,
   GitHubConnectivityError,
+  type GitHubApiIssueComment,
   type GitHubApiPullRequestCommit,
   type GitHubApiPullRequest,
   type GitHubApiPullRequestSearchItem,
@@ -123,6 +125,7 @@ const USER_ACTIVITY_CACHE_TTL_MS = 1000 * 60 * 2;
 const GITHUB_SEARCH_MAX_PAGES = 10;
 const GITHUB_SEARCH_PAGE_SIZE = 100;
 const GITHUB_COMMIT_HISTORY_PAGE_SIZE = 100;
+const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
 const USER_ACTIVITY_WINDOWS = [
   { days: 7, key: "last7Days" },
   { days: 30, key: "last30Days" },
@@ -1087,6 +1090,24 @@ function getAuthoredPullRequestStatus(
     : ("waiting_for_review" as const);
 }
 
+function getPullRequestClaim(comments: GitHubApiIssueComment[]) {
+  const claimComment = comments
+    .filter((comment) => comment.body.includes(REVIEW_CLAIM_COMMENT_MARKER))
+    .sort(
+      (left, right) =>
+        new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+    )[0];
+
+  if (!claimComment?.user?.login) {
+    return null;
+  }
+
+  return {
+    claimedAt: claimComment.created_at,
+    reviewerLogin: claimComment.user.login,
+  };
+}
+
 function isAutomationPullRequestAuthor(authorLogin: string | null) {
   if (!authorLogin) {
     return false;
@@ -1617,6 +1638,15 @@ async function fetchPullRequests(
         ),
       ),
     );
+    const pullRequestClaims = await Promise.all(
+      pullRequests.map((pullRequest) =>
+        fetchGitHubIssueComments(
+          githubRepository.slug,
+          pullRequest.number,
+          githubAuthStatus.token!,
+        ),
+      ),
+    );
     const pullRequestCiStatuses = await Promise.all(
       pullRequests.map((pullRequest) =>
         fetchDefaultBranchCiStatus(
@@ -1629,6 +1659,7 @@ async function fetchPullRequests(
 
     const workspacePullRequests = pullRequests.map((pullRequest, index) => {
       const reviews = pullRequestReviews[index];
+      const claim = getPullRequestClaim(pullRequestClaims[index] ?? []);
       const ciStatus = pullRequestCiStatuses[index] ?? "unknown";
       const normalizedPullRequest = normalizePullRequestRecord(
         pullRequest,
@@ -1659,6 +1690,10 @@ async function fetchPullRequests(
           Boolean(githubAuthStatus.viewerLogin) &&
           authorLogin === githubAuthStatus.viewerLogin,
         baseBranch: normalizedPullRequest.baseRefName,
+        claim,
+        claimedByViewer:
+          Boolean(claim?.reviewerLogin) &&
+          claim?.reviewerLogin === githubAuthStatus.viewerLogin,
         ciStatus,
         hasUpdatesSinceViewerReview:
           Boolean(lastReviewedByViewerAt) &&

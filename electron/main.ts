@@ -34,6 +34,9 @@ import {
 } from "./github-auth";
 import {
   createGitHubPullRequestComment,
+  deleteGitHubIssueComment,
+  fetchGitHubIssueComments,
+  fetchGitHubViewer,
   fetchGitHubViewerRepositories,
   requestGitHubPullRequestReviewers,
 } from "./github-api";
@@ -44,6 +47,7 @@ import {
 } from "./workspace";
 
 const execFileAsync = promisify(execFile);
+const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
 const DEFAULT_WORKSPACE_MONITOR_PREFERENCES = {
   alertFailingBuilds: true,
   autoRefreshEnabled: true,
@@ -535,6 +539,48 @@ async function runGitHubWorkspaceMutation(
   }
 }
 
+async function claimPullRequestReview(
+  repositorySlug: string,
+  pullRequestNumber: number,
+  token: string,
+) {
+  await createGitHubPullRequestComment(
+    repositorySlug,
+    pullRequestNumber,
+    REVIEW_CLAIM_COMMENT_MARKER,
+    token,
+  );
+}
+
+async function unclaimPullRequestReview(
+  repositorySlug: string,
+  pullRequestNumber: number,
+  token: string,
+) {
+  const viewer = await fetchGitHubViewer(token);
+  const comments = await fetchGitHubIssueComments(
+    repositorySlug,
+    pullRequestNumber,
+    token,
+  );
+  const claimComment = comments
+    .filter(
+      (comment) =>
+        comment.user?.login === viewer.login &&
+        comment.body.includes(REVIEW_CLAIM_COMMENT_MARKER),
+    )
+    .sort(
+      (left, right) =>
+        new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+    )[0];
+
+  if (!claimComment) {
+    return;
+  }
+
+  await deleteGitHubIssueComment(repositorySlug, claimComment.id, token);
+}
+
 ipcMain.handle("devdeck:pick-workspace", async () => {
   const result = await dialog.showOpenDialog({
     buttonLabel: "Choose Folder",
@@ -655,6 +701,36 @@ ipcMain.handle("devdeck:clear-github-token", async () => {
   await clearStoredGitHubToken();
   clearWorkspaceSnapshotCaches();
 });
+
+ipcMain.handle(
+  "devdeck:claim-pull-request-review",
+  async (
+    _event,
+    payload: {
+      pullRequestNumber: number;
+      repositorySlug: string;
+    },
+  ) => {
+    await runGitHubWorkspaceMutation((token) =>
+      claimPullRequestReview(payload.repositorySlug, payload.pullRequestNumber, token),
+    );
+  },
+);
+
+ipcMain.handle(
+  "devdeck:unclaim-pull-request-review",
+  async (
+    _event,
+    payload: {
+      pullRequestNumber: number;
+      repositorySlug: string;
+    },
+  ) => {
+    await runGitHubWorkspaceMutation((token) =>
+      unclaimPullRequestReview(payload.repositorySlug, payload.pullRequestNumber, token),
+    );
+  },
+);
 
 ipcMain.handle(
   "devdeck:add-pull-request-comment",

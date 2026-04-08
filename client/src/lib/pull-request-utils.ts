@@ -1,13 +1,10 @@
 import type {
+  WorkspacePullRequestClaim,
   WorkspaceAuthoredPullRequestStatus,
   WorkspaceCiStatus,
   WorkspacePullRequestItem,
   WorkspacePullRequestStatus,
 } from "@shared/workspace";
-import type {
-  PullRequestWatchStatus,
-  PullRequestWatchlist,
-} from "@/lib/pull-request-watchlist";
 
 export const SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY =
   "devdeck:pull-requests:show-dependabot";
@@ -15,7 +12,7 @@ export const SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY =
 export type PullRequestFocus =
   | "all"
   | "my_queue"
-  | "marked_for_review"
+  | "claimed_by_you"
   | "reviewed"
   | "no_reviews"
   | "checks_failing"
@@ -32,13 +29,7 @@ interface PullRequestBadgeMeta {
   label: string;
 }
 
-export type PullRequestDerivedQueueState =
-  | PullRequestWatchStatus
-  | "awaiting_follow_up";
-
-function normalizePullRequestWatchlist(value?: PullRequestWatchlist | null) {
-  return value ?? {};
-}
+export type PullRequestQueueStatus = "claimed" | "reviewed" | "awaiting_follow_up";
 
 export function isDependabotPullRequest(
   pullRequest: Pick<WorkspacePullRequestItem, "author">,
@@ -219,8 +210,8 @@ export function getPullRequestReviewEventMeta(state: string) {
   }
 }
 
-export function getPullRequestWatchStatusMeta(
-  status: PullRequestDerivedQueueState,
+export function getPullRequestQueueStatusMeta(
+  status: PullRequestQueueStatus,
 ) {
   if (status === "awaiting_follow_up") {
     return {
@@ -236,26 +227,32 @@ export function getPullRequestWatchStatusMeta(
       }
     : {
         className: "bg-primary/10 text-primary border-primary/20",
-        label: "marked",
+        label: "claimed",
       };
 }
 
-export function getPullRequestDerivedQueueState(
+export function getPullRequestQueueStatus(
   pullRequest: Pick<
     WorkspacePullRequestItem,
-    "authoredByViewer" | "hasUpdatesSinceViewerReview" | "reviewedByViewer"
+    | "authoredByViewer"
+    | "claimedByViewer"
+    | "hasUpdatesSinceViewerReview"
+    | "reviewedByViewer"
   >,
-  watchStatus: PullRequestWatchStatus | null,
-): PullRequestDerivedQueueState | null {
-  if (!watchStatus) {
-    return null;
-  }
-
-  if (watchStatus === "reviewed" && pullRequestNeedsFollowUp(pullRequest)) {
+): PullRequestQueueStatus | null {
+  if (pullRequest.reviewedByViewer && pullRequestNeedsFollowUp(pullRequest)) {
     return "awaiting_follow_up";
   }
 
-  return watchStatus;
+  if (pullRequest.reviewedByViewer) {
+    return "reviewed";
+  }
+
+  if (pullRequest.claimedByViewer) {
+    return "claimed";
+  }
+
+  return null;
 }
 
 export function getAuthoredPullRequestStatusMeta(
@@ -370,20 +367,19 @@ export function pullRequestWaitingOnOthers(
 export function filterPullRequestsByFocus(
   pullRequests: WorkspacePullRequestItem[],
   focus: PullRequestFocus,
-  watchlist: PullRequestWatchlist = {},
 ) {
-  const normalizedWatchlist = normalizePullRequestWatchlist(watchlist);
-
   switch (focus) {
     case "my_queue":
-      return pullRequests.filter((pullRequest) => Boolean(normalizedWatchlist[pullRequest.id]));
-    case "marked_for_review":
-      return pullRequests.filter((pullRequest) =>
-        normalizedWatchlist[pullRequest.id]?.status === "marked",
+      return pullRequests.filter(
+        (pullRequest) => getPullRequestQueueStatus(pullRequest) !== null,
+      );
+    case "claimed_by_you":
+      return pullRequests.filter(
+        (pullRequest) => getPullRequestQueueStatus(pullRequest) === "claimed",
       );
     case "reviewed":
-      return pullRequests.filter((pullRequest) =>
-        normalizedWatchlist[pullRequest.id]?.status === "reviewed",
+      return pullRequests.filter(
+        (pullRequest) => getPullRequestQueueStatus(pullRequest) === "reviewed",
       );
     case "no_reviews":
       return pullRequests.filter(pullRequestHasNoReviews);
@@ -461,13 +457,18 @@ export function getPullRequestFollowUpMeta(
   };
 }
 
-export function getPullRequestWatchMeta(markedForReview: boolean) {
-  return markedForReview
-    ? getPullRequestWatchStatusMeta("marked")
-    : {
-        className: "bg-secondary text-muted-foreground border-border/60",
-        label: "not marked",
-      };
+export function getPullRequestClaimMeta(claim: WorkspacePullRequestClaim | null) {
+  if (!claim) {
+    return {
+      className: "bg-secondary text-muted-foreground border-border/60",
+      label: "unclaimed",
+    };
+  }
+
+  return {
+    className: "bg-primary/10 text-primary border-primary/20",
+    label: `claimed by ${claim.reviewerLogin}`,
+  };
 }
 
 export function getPullRequestSignalBadges(
@@ -481,7 +482,6 @@ export function getPullRequestSignalBadges(
     | "reviewedByOthersCount"
     | "reviewedByViewer"
   >,
-  watchStatus: PullRequestWatchStatus | null,
 ): PullRequestBadgeMeta[] {
   const badges: PullRequestBadgeMeta[] = [];
 
@@ -494,14 +494,6 @@ export function getPullRequestSignalBadges(
 
   if (pullRequest.ciStatus === "passing" || pullRequest.ciStatus === "failing") {
     badges.push(getPullRequestCiStatusMeta(pullRequest.ciStatus));
-  }
-
-  if (watchStatus) {
-    badges.push(
-      getPullRequestWatchStatusMeta(
-        getPullRequestDerivedQueueState(pullRequest, watchStatus) ?? watchStatus,
-      ),
-    );
   }
 
   return badges;

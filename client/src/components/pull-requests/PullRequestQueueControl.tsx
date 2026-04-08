@@ -1,58 +1,85 @@
-import { Bookmark, CheckCheck } from "lucide-react";
-import type { PullRequestWatchStatus } from "@/lib/pull-request-watchlist";
-import { getPullRequestWatchStatusMeta } from "@/lib/pull-request-utils";
+import { Bookmark, CheckCheck, Clock3 } from "lucide-react";
+import {
+  getPullRequestQueueStatusMeta,
+  type PullRequestQueueStatus,
+} from "@/lib/pull-request-utils";
 
 interface PullRequestQueueControlProps {
-  awaitingFollowUp?: boolean;
+  claimedReviewerLogin?: string | null;
   className?: string;
-  mode?: "open" | "queue";
-  onStatusChange: (status: PullRequestWatchStatus | null) => void;
-  status: PullRequestWatchStatus | null;
+  onClaimChange?: (claimed: boolean) => void;
+  status: PullRequestQueueStatus | null;
 }
 
-function getQueueStatusIcon(status: PullRequestWatchStatus | null) {
+function getQueueStatusIcon(status: PullRequestQueueStatus | null) {
+  if (status === "awaiting_follow_up") {
+    return Clock3;
+  }
+
   return status === "reviewed" ? CheckCheck : Bookmark;
 }
 
-function getQueueButtonLabel(status: PullRequestWatchStatus | null) {
+function getQueueButtonLabel(
+  status: PullRequestQueueStatus | null,
+  claimedReviewerLogin?: string | null,
+) {
+  if (claimedReviewerLogin && !status) {
+    return `Claimed by ${claimedReviewerLogin}`;
+  }
+
   switch (status) {
+    case "awaiting_follow_up":
+      return "Awaiting Follow-Up";
     case "reviewed":
       return "Reviewed";
-    case "marked":
-      return "Marked";
+    case "claimed":
+      return "Claimed";
     default:
-      return "Mark";
+      return "Claim";
   }
 }
 
 export default function PullRequestQueueControl({
-  awaitingFollowUp = false,
+  claimedReviewerLogin = null,
   className,
-  mode: _mode = "open",
-  onStatusChange,
+  onClaimChange,
   status,
 }: PullRequestQueueControlProps) {
   const TriggerIcon = getQueueStatusIcon(status);
-  const derivedStatus =
-    status === "reviewed" && awaitingFollowUp ? "awaiting_follow_up" : status;
-  const statusMeta = derivedStatus ? getPullRequestWatchStatusMeta(derivedStatus) : null;
-  const nextStatus = status ? null : "marked";
+  const statusMeta = status ? getPullRequestQueueStatusMeta(status) : null;
+  const isClaimOwnedByOther = Boolean(claimedReviewerLogin && !status);
+  const isInteractive = Boolean(onClaimChange) && (status === null || status === "claimed");
 
   return (
     <button
       type="button"
-      onClick={() => onStatusChange(nextStatus)}
+      disabled={!isInteractive}
+      onClick={() => {
+        if (!onClaimChange) {
+          return;
+        }
+
+        onClaimChange(status !== "claimed");
+      }}
       className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium transition-colors ${
         statusMeta
-          ? `${statusMeta.className} hover:brightness-[0.98]`
-          : "border-border/60 bg-white text-foreground hover:bg-black/5"
-      } ${className ?? ""}`}
-      title={status ? "Remove from your queue" : "Mark to review later"}
+          ? `${statusMeta.className} ${isInteractive ? "hover:brightness-[0.98]" : ""}`
+          : isClaimOwnedByOther
+            ? "border-border/60 bg-secondary text-muted-foreground"
+            : "border-border/60 bg-white text-foreground hover:bg-black/5"
+      } ${!isInteractive ? "cursor-default" : ""} ${className ?? ""}`}
+      title={
+        isClaimOwnedByOther
+          ? `${claimedReviewerLogin} claimed this review`
+          : status === "claimed"
+            ? "Remove your claim"
+            : status
+              ? undefined
+              : "Claim this review"
+      }
     >
       <TriggerIcon className="h-3.5 w-3.5" />
-      {derivedStatus === "awaiting_follow_up"
-        ? "Awaiting Follow-Up"
-        : getQueueButtonLabel(status)}
+      {getQueueButtonLabel(status, claimedReviewerLogin)}
     </button>
   );
 }

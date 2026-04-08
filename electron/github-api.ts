@@ -26,6 +26,14 @@ export interface GitHubApiPullRequestReview {
   user: { login: string } | null;
 }
 
+export interface GitHubApiIssueComment {
+  body: string;
+  created_at: string;
+  id: number;
+  updated_at: string;
+  user: { login: string } | null;
+}
+
 export interface GitHubApiPullRequest {
   base: { ref: string };
   closed_at: string | null;
@@ -517,6 +525,18 @@ export function fetchGitHubPullRequestReviews(
   );
 }
 
+export function fetchGitHubIssueComments(
+  repositorySlug: string,
+  issueNumber: number,
+  token: string,
+) {
+  return githubApiRequest<GitHubApiIssueComment[]>(
+    `/repos/${repositorySlug}/issues/${issueNumber}/comments?per_page=100`,
+    token,
+    { allowPublicFallback: true },
+  );
+}
+
 export function fetchGitHubPullRequestCommits(
   repositorySlug: string,
   pullRequestNumber: number,
@@ -556,6 +576,20 @@ export async function createGitHubPullRequestComment(
     {
       body: JSON.stringify({ body }),
       method: "POST",
+    },
+  );
+}
+
+export async function deleteGitHubIssueComment(
+  repositorySlug: string,
+  commentId: number,
+  token: string,
+) {
+  await githubApiRequest<void>(
+    `/repos/${repositorySlug}/issues/comments/${commentId}`,
+    token,
+    {
+      method: "DELETE",
     },
   );
 }

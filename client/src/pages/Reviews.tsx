@@ -13,23 +13,18 @@ import {
 } from "@/components/ui/dialog";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
-import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
+import { toast } from "@/hooks/use-toast";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { navigateInApp } from "@/lib/app-navigation";
 import { getDesktopApi } from "@/lib/desktop";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
-import {
-  getPullRequestQueueIds,
-  getPullRequestWatchStatus,
-  setPullRequestWatchStatus,
-  type PullRequestWatchStatus,
-} from "@/lib/pull-request-watchlist";
+import { setPullRequestClaimed } from "@/lib/pull-request-actions";
 import {
   filterPullRequestsByDependabotVisibility,
   filterPullRequestsByFocus,
   getAuthoredPullRequestStatusMeta,
-  getPullRequestSignalBadges,
+  getPullRequestQueueStatus,
   pullRequestHasNoReviews,
   pullRequestNeedsFollowUp,
   pullRequestNeedsViewerReview,
@@ -56,7 +51,7 @@ const PullRequestDetailDialog = lazy(
 );
 
 const STALE_PULL_REQUEST_DAYS = 5;
-type ReviewQueueFocus = "all" | PullRequestWatchStatus;
+type ReviewQueueFocus = "all" | "claimed" | "reviewed" | "awaiting_follow_up";
 type ReviewIndicatorDialogId =
   | "open_prs"
   | "requested_from_you"
@@ -85,7 +80,6 @@ export default function Reviews() {
   const [activeIndicatorDialog, setActiveIndicatorDialog] =
     useState<ReviewIndicatorDialogId | null>(null);
   const { data: snapshot, isLoading } = useWorkspaceSnapshot();
-  const pullRequestWatchlist = usePullRequestWatchlist();
   const allPullRequests = snapshot?.pullRequests ?? [];
   const pullRequests = useMemo(
     () =>
@@ -96,8 +90,8 @@ export default function Reviews() {
     [allPullRequests, showDependabotPullRequests],
   );
   const filteredPullRequests = useMemo(
-    () => filterPullRequestsByFocus(pullRequests, focusFilter, pullRequestWatchlist),
-    [focusFilter, pullRequestWatchlist, pullRequests],
+    () => filterPullRequestsByFocus(pullRequests, focusFilter),
+    [focusFilter, pullRequests],
   );
   const repoFilteredPullRequests = useMemo(
     () =>
@@ -107,14 +101,6 @@ export default function Reviews() {
             selectedRepoFilters.includes(pullRequest.repo),
           ),
     [filteredPullRequests, selectedRepoFilters],
-  );
-  const markedPullRequestIds = useMemo(
-    () => getPullRequestQueueIds(pullRequestWatchlist, "marked"),
-    [pullRequestWatchlist],
-  );
-  const reviewedPullRequestIds = useMemo(
-    () => getPullRequestQueueIds(pullRequestWatchlist, "reviewed"),
-    [pullRequestWatchlist],
   );
   const requestedFromYouPullRequests = useMemo(
     () =>
@@ -130,12 +116,27 @@ export default function Reviews() {
     () => pullRequests.filter(pullRequestNeedsFollowUp),
     [pullRequests],
   );
-  const markedPullRequestCount = pullRequests.filter((pullRequest) =>
-    markedPullRequestIds.has(pullRequest.id),
-  ).length;
-  const reviewedPullRequestCount = pullRequests.filter((pullRequest) =>
-    reviewedPullRequestIds.has(pullRequest.id),
-  ).length;
+  const claimedPullRequests = useMemo(
+    () =>
+      pullRequests.filter(
+        (pullRequest) => getPullRequestQueueStatus(pullRequest) === "claimed",
+      ),
+    [pullRequests],
+  );
+  const reviewedPullRequests = useMemo(
+    () =>
+      pullRequests.filter(
+        (pullRequest) => getPullRequestQueueStatus(pullRequest) === "reviewed",
+      ),
+    [pullRequests],
+  );
+  const allQueuePullRequests = useMemo(
+    () =>
+      pullRequests.filter(
+        (pullRequest) => getPullRequestQueueStatus(pullRequest) !== null,
+      ),
+    [pullRequests],
+  );
   const authoredPullRequests = snapshot?.authoredPullRequests ?? [];
   const activeAuthoredPullRequests = useMemo(
     () =>
@@ -147,13 +148,13 @@ export default function Reviews() {
   );
   const queuePullRequests = useMemo(() => {
     if (queueFocus === "all") {
-      return pullRequests.filter((pullRequest) => pullRequestWatchlist[pullRequest.id]);
+      return allQueuePullRequests;
     }
 
     return pullRequests.filter(
-      (pullRequest) => pullRequestWatchlist[pullRequest.id]?.status === queueFocus,
+      (pullRequest) => getPullRequestQueueStatus(pullRequest) === queueFocus,
     );
-  }, [pullRequestWatchlist, pullRequests, queueFocus]);
+  }, [allQueuePullRequests, pullRequests, queueFocus]);
   const stalePullRequests = useMemo(
     () =>
       pullRequests.filter((pullRequest) => {
@@ -223,6 +224,11 @@ export default function Reviews() {
 
   useEffect(() => {
     const persistedQueueFocus = String(queueFocus);
+    if (persistedQueueFocus === "marked") {
+      setQueueFocus("claimed");
+      return;
+    }
+
     if (persistedQueueFocus === "in_review" || persistedQueueFocus === "done") {
       setQueueFocus("reviewed");
     }
@@ -333,11 +339,20 @@ export default function Reviews() {
     await handleOpenPullRequest(pullRequest.url);
   };
 
-  const handleSetPullRequestQueueStatus = (
-    pullRequestId: string,
-    status: PullRequestWatchStatus | null,
+  const handleSetPullRequestClaimed = async (
+    pullRequest: Pick<
+      WorkspacePullRequestItem,
+      "claim" | "id" | "number" | "repo" | "repositorySlug"
+    >,
+    claimed: boolean,
   ) => {
-    setPullRequestWatchStatus(pullRequestId, status);
+    await setPullRequestClaimed(pullRequest, claimed);
+    toast({
+      title: claimed ? "Review claimed" : "Claim removed",
+      description: claimed
+        ? `${pullRequest.repo} #${pullRequest.number} is now claimed for review.`
+        : `${pullRequest.repo} #${pullRequest.number} is no longer claimed by you.`,
+    });
   };
 
   const addRepoFilter = (repo: string) => {
@@ -365,14 +380,14 @@ export default function Reviews() {
 
   const emptyPullRequestMessageByFilter: Record<PullRequestFocus, string> = {
     all: "No open pull requests were found for the connected repositories.",
-    my_queue: "Your local review queue is empty.",
+    my_queue: "Your review queue is empty.",
     checks_failing: "No pull requests currently have failing checks.",
     checks_passing: "No pull requests currently have passing checks.",
     no_reviews: "No pull requests are currently waiting on a first review.",
     authored_by_me: "You do not currently have open pull requests in this workspace.",
     changes_requested: "No pull requests are currently waiting on requested changes.",
-    marked_for_review: "You have not marked any pull requests for review yet.",
-    reviewed: "You do not currently have any pull requests marked as reviewed.",
+    claimed_by_you: "You have not claimed any pull requests yet.",
+    reviewed: "You do not currently have any reviewed pull requests in your queue.",
     needs_my_follow_up: "Nothing currently needs your follow-up.",
     needs_my_review: "You do not currently have a review queue here.",
     reviewed_by_me: "You have not reviewed any of the current open pull requests yet.",
@@ -488,26 +503,31 @@ export default function Reviews() {
                     My Queue
                   </h2>
                   <span className="rounded-sm border border-border/60 bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-secondary-foreground">
-                    {markedPullRequestCount + reviewedPullRequestCount}
+                    {allQueuePullRequests.length}
                   </span>
                 </div>
               </div>
               <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
                 {[
                   {
-                    count: markedPullRequestCount + reviewedPullRequestCount,
+                    count: allQueuePullRequests.length,
                     id: "all" as const,
                     label: "All Queue Items",
                   },
                   {
-                    count: markedPullRequestCount,
-                    id: "marked" as const,
-                    label: "Marked",
+                    count: claimedPullRequests.length,
+                    id: "claimed" as const,
+                    label: "Claimed",
                   },
                   {
-                    count: reviewedPullRequestCount,
+                    count: reviewedPullRequests.length,
                     id: "reviewed" as const,
                     label: "Reviewed",
+                  },
+                  {
+                    count: needsFollowUpPullRequests.length,
+                    id: "awaiting_follow_up" as const,
+                    label: "Awaiting Follow-Up",
                   },
                 ].map((filter) => (
                   <button
@@ -530,19 +550,7 @@ export default function Reviews() {
               <div className="overflow-hidden rounded-xl border border-border/60 bg-white/60 px-4 py-1 shadow-sm backdrop-blur-md">
                 <div className="flex flex-col">
                   {myQueuePagination.paginatedItems.map((pullRequest) => {
-                    const watchStatus = getPullRequestWatchStatus(
-                      pullRequest.id,
-                      pullRequestWatchlist,
-                    );
-                    const signalBadges = getPullRequestSignalBadges(
-                      pullRequest,
-                      watchStatus,
-                    );
-                    const visibleSignalBadges = signalBadges.filter(
-                      (badge) =>
-                        badge.label !== "reviewed" &&
-                        badge.label !== "awaiting follow-up",
-                    );
+                    const queueStatus = getPullRequestQueueStatus(pullRequest);
 
                     return (
                       <div
@@ -560,14 +568,6 @@ export default function Reviews() {
                                 <span className={getProjectTagClassName(pullRequest.repo)}>
                                   {pullRequest.repo}
                                 </span>
-                                {visibleSignalBadges.map((badge) => (
-                                  <span
-                                    key={`${pullRequest.id}:${badge.label}`}
-                                    className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${badge.className}`}
-                                  >
-                                    {badge.label}
-                                  </span>
-                                ))}
                               </div>
                             </div>
                             <div
@@ -575,12 +575,21 @@ export default function Reviews() {
                               onClick={(event) => event.stopPropagation()}
                             >
                               <PullRequestQueueControl
-                                awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
-                                mode="queue"
-                                onStatusChange={(status) =>
-                                  handleSetPullRequestQueueStatus(pullRequest.id, status)
+                                claimedReviewerLogin={
+                                  pullRequest.claimedByViewer
+                                    ? null
+                                    : pullRequest.claim?.reviewerLogin ?? null
                                 }
-                                status={watchStatus}
+                                onClaimChange={
+                                  queueStatus === "claimed"
+                                    ? (claimed) =>
+                                        void handleSetPullRequestClaimed(
+                                          pullRequest,
+                                          claimed,
+                                        )
+                                    : undefined
+                                }
+                                status={queueStatus}
                               />
                               <button
                                 type="button"
@@ -615,7 +624,7 @@ export default function Reviews() {
                   })}
                   {queuePullRequests.length === 0 ? (
                     <div className="py-6 text-center text-sm text-muted-foreground">
-                      Your local PR queue is empty for this view.
+                      Your PR queue is empty for this view.
                     </div>
                   ) : null}
                 </div>
@@ -692,17 +701,7 @@ export default function Reviews() {
                 <div className="flex flex-col">
                   {openPullRequestsPagination.paginatedItems.map((pullRequest) => (
                     (() => {
-                      const watchStatus = getPullRequestWatchStatus(
-                        pullRequest.id,
-                        pullRequestWatchlist,
-                      );
-                      const signalBadges = getPullRequestSignalBadges(
-                        pullRequest,
-                        watchStatus,
-                      );
-                      const visibleBadges = signalBadges.filter(
-                        (badge) => badge.label === "marked",
-                      );
+                      const queueStatus = getPullRequestQueueStatus(pullRequest);
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       return (
                     <div
@@ -730,31 +729,25 @@ export default function Reviews() {
                                   status={pullRequest.ciStatus}
                                 />
                               </p>
-                              {visibleBadges.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-2">
-                                  {visibleBadges.map((badge) => (
-                                    <span
-                                      key={badge.label}
-                                      className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm whitespace-nowrap border ${badge.className}`}
-                                    >
-                                      {badge.label}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
                             </div>
                             <div className="inline-flex flex-shrink-0 flex-nowrap items-center gap-2 self-start">
                               <div onClick={(event) => event.stopPropagation()}>
                                 <PullRequestQueueControl
-                                  awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
-                                  mode="open"
-                                  onStatusChange={(status) =>
-                                    handleSetPullRequestQueueStatus(
-                                      pullRequest.id,
-                                      status,
-                                    )
+                                  claimedReviewerLogin={
+                                    pullRequest.claimedByViewer
+                                      ? null
+                                      : pullRequest.claim?.reviewerLogin ?? null
                                   }
-                                  status={watchStatus}
+                                  onClaimChange={
+                                    queueStatus === "claimed" || queueStatus === null
+                                      ? (claimed) =>
+                                          void handleSetPullRequestClaimed(
+                                            pullRequest,
+                                            claimed,
+                                          )
+                                      : undefined
+                                  }
+                                  status={queueStatus}
                                 />
                               </div>
                               <button
@@ -938,17 +931,7 @@ export default function Reviews() {
                   {activeIndicatorDialogConfig.kind === "open" ? (
                     <div className="space-y-3">
                       {activeIndicatorDialogConfig.pullRequests.map((pullRequest) => {
-                        const watchStatus = getPullRequestWatchStatus(
-                          pullRequest.id,
-                          pullRequestWatchlist,
-                        );
-                        const signalBadges = getPullRequestSignalBadges(
-                          pullRequest,
-                          watchStatus,
-                        );
-                        const visibleBadges = signalBadges.filter(
-                          (badge) => badge.label === "marked",
-                        );
+                        const queueStatus = getPullRequestQueueStatus(pullRequest);
                         const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                         return (
                           <div
@@ -974,33 +957,27 @@ export default function Reviews() {
                                       status={pullRequest.ciStatus}
                                     />
                                   </p>
-                                  {visibleBadges.length > 0 ? (
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {visibleBadges.map((badge) => (
-                                        <span
-                                          key={`${pullRequest.id}:${badge.label}`}
-                                          className={`rounded-sm border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badge.className}`}
-                                        >
-                                          {badge.label}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  ) : null}
                                 </div>
                                 <div
                                   className="flex flex-shrink-0 flex-wrap items-center gap-2 self-start"
                                   onClick={(event) => event.stopPropagation()}
                                 >
                                   <PullRequestQueueControl
-                                    awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
-                                    mode="open"
-                                    onStatusChange={(status) =>
-                                      handleSetPullRequestQueueStatus(
-                                        pullRequest.id,
-                                        status,
-                                      )
+                                    claimedReviewerLogin={
+                                      pullRequest.claimedByViewer
+                                        ? null
+                                        : pullRequest.claim?.reviewerLogin ?? null
                                     }
-                                    status={watchStatus}
+                                    onClaimChange={
+                                      queueStatus === "claimed" || queueStatus === null
+                                        ? (claimed) =>
+                                            void handleSetPullRequestClaimed(
+                                              pullRequest,
+                                              claimed,
+                                            )
+                                        : undefined
+                                    }
+                                    status={queueStatus}
                                   />
                                   <button
                                     type="button"

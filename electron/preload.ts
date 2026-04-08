@@ -39,6 +39,12 @@ const devdeck = {
   }): Promise<void> {
     return ipcRenderer.invoke("devdeck:add-pull-request-comment", payload);
   },
+  claimPullRequestReview(payload: {
+    pullRequestNumber: number;
+    repositorySlug: string;
+  }): Promise<void> {
+    return ipcRenderer.invoke("devdeck:claim-pull-request-review", payload);
+  },
   clearGitHubToken(): Promise<void> {
     return ipcRenderer.invoke("devdeck:clear-github-token");
   },
@@ -88,6 +94,12 @@ const devdeck = {
     reviewers: string[];
   }): Promise<void> {
     return ipcRenderer.invoke("devdeck:request-pull-request-reviewers", payload);
+  },
+  unclaimPullRequestReview(payload: {
+    pullRequestNumber: number;
+    repositorySlug: string;
+  }): Promise<void> {
+    return ipcRenderer.invoke("devdeck:unclaim-pull-request-review", payload);
   },
   getGitHubAuthCapabilities() {
     return ipcRenderer.invoke("devdeck:get-github-auth-capabilities");

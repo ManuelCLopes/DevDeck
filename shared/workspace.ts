@@ -16,6 +16,10 @@ export type WorkspacePullRequestReviewState =
   | "unreviewed"
   | "reviewed"
   | "reviewed_by_you";
+export interface WorkspacePullRequestClaim {
+  claimedAt: string;
+  reviewerLogin: string;
+}
 export type WorkspaceAuthoredPullRequestStatus =
   | "draft"
   | "waiting_for_review"
@@ -126,6 +130,8 @@ export interface WorkspacePullRequestItem {
   author: string | null;
   authoredByViewer: boolean;
   baseBranch: string;
+  claim: WorkspacePullRequestClaim | null;
+  claimedByViewer: boolean;
   ciStatus: WorkspaceCiStatus;
   hasUpdatesSinceViewerReview: boolean;
   headBranch: string;

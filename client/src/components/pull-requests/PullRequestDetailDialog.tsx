@@ -20,19 +20,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
 import { getDesktopApi } from "@/lib/desktop";
 import {
-  getPullRequestWatchStatus,
-  setPullRequestWatchStatus,
-} from "@/lib/pull-request-watchlist";
-import {
   getPullRequestCiStatusMeta,
+  getPullRequestQueueStatus,
   getPullRequestReviewEventMeta,
   getPullRequestSignalBadges,
-  pullRequestNeedsFollowUp,
 } from "@/lib/pull-request-utils";
-import { parseReviewerLogins } from "@/lib/pull-request-actions";
+import { parseReviewerLogins, setPullRequestClaimed } from "@/lib/pull-request-actions";
 import { toast } from "@/hooks/use-toast";
 import type { WorkspacePullRequestItem } from "@shared/workspace";
 
@@ -52,20 +47,17 @@ export default function PullRequestDetailDialog({
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isSubmittingReviewers, setIsSubmittingReviewers] = useState(false);
-  const pullRequestWatchlist = usePullRequestWatchlist();
   const ciStatusMeta = pullRequest
     ? getPullRequestCiStatusMeta(pullRequest.ciStatus)
     : null;
   const desktopApi = getDesktopApi();
   const reviewerLogins = parseReviewerLogins(reviewerInput);
   const canRunGitHubActions = Boolean(desktopApi && pullRequest?.repositorySlug);
-  const watchStatus = pullRequest
-    ? getPullRequestWatchStatus(pullRequest.id, pullRequestWatchlist)
+  const queueStatus = pullRequest
+    ? getPullRequestQueueStatus(pullRequest)
     : null;
   const signalBadges = pullRequest
-    ? getPullRequestSignalBadges(pullRequest, watchStatus).filter(
-        (badge) => badge.label !== "reviewed",
-      )
+    ? getPullRequestSignalBadges(pullRequest)
     : [];
 
   useEffect(() => {
@@ -144,6 +136,28 @@ export default function PullRequestDetailDialog({
     }
   };
 
+  const handleSetClaimed = async (claimed: boolean) => {
+    if (!pullRequest) {
+      return;
+    }
+
+    try {
+      await setPullRequestClaimed(pullRequest, claimed);
+      toast({
+        title: claimed ? "Review claimed" : "Claim removed",
+        description: claimed
+          ? `${pullRequest.repo} #${pullRequest.number} is now claimed for review.`
+          : `${pullRequest.repo} #${pullRequest.number} is no longer claimed by you.`,
+      });
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "DevDeck could not update the shared review claim.",
+      );
+    }
+  };
+
   const handleRequestReviewers = async () => {
     const activeDesktopApi = getDesktopApi();
     if (!pullRequest || !pullRequest.repositorySlug || !activeDesktopApi) {
@@ -198,27 +212,18 @@ export default function PullRequestDetailDialog({
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                   <PullRequestQueueControl
-                    awaitingFollowUp={pullRequestNeedsFollowUp(pullRequest)}
                     className="h-9"
-                    mode="open"
-                    onStatusChange={(status) => {
-                      if (!pullRequest) {
-                        return;
-                      }
-
-                      setPullRequestWatchStatus(pullRequest.id, status);
-                      toast({
-                        title: status
-                          ? `PR ${status.replaceAll("_", " ")}`
-                          : "Removed from queue",
-                        description: `${pullRequest.repo} #${pullRequest.number} ${
-                          status
-                            ? `is now ${status.replaceAll("_", " ")} in your queue.`
-                            : "was removed from your local queue."
-                        }`,
-                      });
-                    }}
-                    status={watchStatus || null}
+                    claimedReviewerLogin={
+                      pullRequest.claimedByViewer
+                        ? null
+                        : pullRequest.claim?.reviewerLogin ?? null
+                    }
+                    onClaimChange={
+                      queueStatus === "claimed" || queueStatus === null
+                        ? (claimed) => void handleSetClaimed(claimed)
+                        : undefined
+                    }
+                    status={queueStatus}
                   />
                   <Button
                     type="button"

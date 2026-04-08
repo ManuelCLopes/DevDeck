@@ -3,15 +3,12 @@ import AppLayout from "@/components/layout/AppLayout";
 import { PullRequestCiStatusIcon } from "@/components/pull-requests/PullRequestStatusIndicators";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
-import { usePullRequestWatchlist } from "@/hooks/use-pull-request-watchlist";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { getDesktopApi } from "@/lib/desktop";
 import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
-import { getPullRequestWatchStatus } from "@/lib/pull-request-watchlist";
 import {
   filterPullRequestsByDependabotVisibility,
-  getPullRequestSignalBadges,
   pullRequestHasNoReviews,
   SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY,
 } from "@/lib/pull-request-utils";
@@ -53,7 +50,6 @@ export default function Projects() {
     null,
   );
   const { data: snapshot, isLoading } = useWorkspaceSnapshot();
-  const pullRequestWatchlist = usePullRequestWatchlist();
   const desktopApi = getDesktopApi();
 
   const filteredProjects = useMemo(() => {
@@ -343,17 +339,6 @@ export default function Projects() {
                   </div>
                   <div className="space-y-2">
                     {selectedProjectPullRequestsPagination.paginatedItems.map((pullRequest) => {
-                      const watchStatus = getPullRequestWatchStatus(
-                        pullRequest.id,
-                        pullRequestWatchlist,
-                      );
-                      const signalBadges = getPullRequestSignalBadges(
-                        pullRequest,
-                        watchStatus,
-                      );
-                      const visibleBadges = signalBadges.filter(
-                        (badge) => badge.label === "marked",
-                      );
                       const hasNoReviews = pullRequestHasNoReviews(pullRequest);
                       return (
                         <button
@@ -375,18 +360,6 @@ export default function Projects() {
                               status={pullRequest.ciStatus}
                             />
                           </p>
-                          {visibleBadges.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {visibleBadges.map((badge) => (
-                                <span
-                                  key={badge.label}
-                                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}
-                                >
-                                  {badge.label}
-                                </span>
-                              ))}
-                            </div>
-                          )}
                         </button>
                       );
                     })}

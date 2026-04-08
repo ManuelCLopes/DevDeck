@@ -5,7 +5,7 @@ import {
   filterPullRequestsByFocus,
   getAuthoredPullRequestStatusMeta,
   getPullRequestCiStatusMeta,
-  getPullRequestDerivedQueueState,
+  getPullRequestQueueStatus,
   getPullRequestFollowUpMeta,
   getPullRequestReviewSummary,
   getPullRequestSignalBadges,
@@ -58,16 +58,13 @@ test("getPullRequestCiStatusMeta exposes readable CI labels", () => {
 
 test("getPullRequestSignalBadges keeps only key PR signals", () => {
   assert.deepEqual(
-    getPullRequestSignalBadges(
-      {
-        ciStatus: "passing",
-        reviewCount: 0,
-        reviewState: "unreviewed",
-        reviewedByOthersCount: 0,
-        reviewedByViewer: false,
-      },
-      "marked",
-    ),
+    getPullRequestSignalBadges({
+      ciStatus: "passing",
+      reviewCount: 0,
+      reviewState: "unreviewed",
+      reviewedByOthersCount: 0,
+      reviewedByViewer: false,
+    }),
     [
       {
         className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
@@ -77,48 +74,29 @@ test("getPullRequestSignalBadges keeps only key PR signals", () => {
         className: "bg-chart-1/10 text-chart-1 border-chart-1/20",
         label: "checks passing",
       },
-      {
-        className: "bg-primary/10 text-primary border-primary/20",
-        label: "marked",
-      },
     ],
   );
 });
 
-test("getPullRequestDerivedQueueState marks reviewed pull requests awaiting follow-up", () => {
+test("getPullRequestQueueStatus marks reviewed pull requests awaiting follow-up", () => {
   assert.equal(
-    getPullRequestDerivedQueueState(
-      {
-        authoredByViewer: false,
-        hasUpdatesSinceViewerReview: true,
-        reviewedByViewer: true,
-      },
-      "reviewed",
-    ),
+    getPullRequestQueueStatus({
+      claimedByViewer: true,
+      hasUpdatesSinceViewerReview: true,
+      reviewedByViewer: true,
+    }),
     "awaiting_follow_up",
   );
 });
 
-test("getPullRequestSignalBadges surfaces awaiting follow-up for reviewed queue items", () => {
-  assert.deepEqual(
-    getPullRequestSignalBadges(
-      {
-        authoredByViewer: false,
-        ciStatus: "pending",
-        hasUpdatesSinceViewerReview: true,
-        reviewCount: 1,
-        reviewState: "reviewed_by_you",
-        reviewedByOthersCount: 0,
-        reviewedByViewer: true,
-      },
-      "reviewed",
-    ),
-    [
-      {
-        className: "bg-chart-2/10 text-chart-2 border-chart-2/20",
-        label: "awaiting follow-up",
-      },
-    ],
+test("getPullRequestQueueStatus returns claimed when the viewer owns the claim", () => {
+  assert.equal(
+    getPullRequestQueueStatus({
+      claimedByViewer: true,
+      hasUpdatesSinceViewerReview: false,
+      reviewedByViewer: false,
+    }),
+    "claimed",
   );
 });
 
@@ -290,29 +268,26 @@ test("filterPullRequestsByFocus narrows changes requested pull requests", () => 
   );
 });
 
-test("filterPullRequestsByFocus narrows marked pull requests", () => {
+test("filterPullRequestsByFocus narrows claimed pull requests", () => {
   const pullRequests = [
     {
-      id: "repo-one#12",
+      claimedByViewer: false,
+      hasUpdatesSinceViewerReview: false,
       status: "open",
+      reviewedByViewer: false,
     },
     {
-      id: "repo-two#8",
+      claimedByViewer: true,
+      hasUpdatesSinceViewerReview: false,
       status: "review_required",
+      reviewedByViewer: false,
     },
   ];
 
   assert.equal(
     filterPullRequestsByFocus(
       pullRequests as never,
-      "marked_for_review",
-      {
-        "repo-two#8": {
-          markedAt: "2026-03-18T20:00:00.000Z",
-          status: "marked",
-          updatedAt: "2026-03-18T20:00:00.000Z",
-        },
-      },
+      "claimed_by_you",
     ).length,
     1,
   );
@@ -321,44 +296,32 @@ test("filterPullRequestsByFocus narrows marked pull requests", () => {
 test("filterPullRequestsByFocus narrows queue state filters", () => {
   const pullRequests = [
     {
-      id: "repo-one#12",
+      claimedByViewer: true,
+      hasUpdatesSinceViewerReview: false,
       status: "open",
+      reviewedByViewer: false,
     },
     {
-      id: "repo-two#8",
+      claimedByViewer: false,
+      hasUpdatesSinceViewerReview: false,
       status: "review_required",
+      reviewedByViewer: true,
     },
     {
-      id: "repo-three#3",
+      claimedByViewer: false,
+      hasUpdatesSinceViewerReview: true,
       status: "approved",
+      reviewedByViewer: true,
     },
   ];
 
-  const watchlist = {
-    "repo-one#12": {
-      markedAt: "2026-03-18T20:00:00.000Z",
-      status: "marked" as const,
-      updatedAt: "2026-03-18T20:00:00.000Z",
-    },
-    "repo-two#8": {
-      markedAt: "2026-03-18T20:00:00.000Z",
-      status: "reviewed" as const,
-      updatedAt: "2026-03-18T20:00:00.000Z",
-    },
-    "repo-three#3": {
-      markedAt: "2026-03-18T20:00:00.000Z",
-      status: "reviewed" as const,
-      updatedAt: "2026-03-18T20:00:00.000Z",
-    },
-  };
-
   assert.equal(
-    filterPullRequestsByFocus(pullRequests as never, "my_queue", watchlist).length,
+    filterPullRequestsByFocus(pullRequests as never, "my_queue").length,
     3,
   );
   assert.equal(
-    filterPullRequestsByFocus(pullRequests as never, "reviewed", watchlist).length,
-    2,
+    filterPullRequestsByFocus(pullRequests as never, "reviewed").length,
+    1,
   );
 });
 

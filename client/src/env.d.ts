@@ -23,6 +23,10 @@ interface DevDeckDesktopApi {
     pullRequestNumber: number;
     repositorySlug: string;
   }): Promise<void>;
+  claimPullRequestReview(payload: {
+    pullRequestNumber: number;
+    repositorySlug: string;
+  }): Promise<void>;
   clearGitHubToken(): Promise<void>;
   copyToClipboard(value: string): Promise<void>;
   getGitHubAuthCapabilities(): Promise<{
@@ -44,6 +48,10 @@ interface DevDeckDesktopApi {
     pullRequestNumber: number;
     repositorySlug: string;
     reviewers: string[];
+  }): Promise<void>;
+  unclaimPullRequestReview(payload: {
+    pullRequestNumber: number;
+    repositorySlug: string;
   }): Promise<void>;
   pollGitHubDeviceAuth(deviceCode: string): Promise<{
     intervalSeconds?: number;
