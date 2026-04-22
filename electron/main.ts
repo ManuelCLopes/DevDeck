@@ -51,6 +51,10 @@ import {
   discoverWorkspace,
   loadWorkspaceSnapshot,
 } from "./workspace";
+import {
+  createGitWorktreeSession,
+  removeGitWorktreeSession,
+} from "./git-worktree";
 
 const execFileAsync = promisify(execFile);
 const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
@@ -844,6 +848,34 @@ ipcMain.handle("devdeck:open-in-code", async (_event, targetPath: string) => {
 
   await shell.openPath(targetPath);
 });
+
+ipcMain.handle(
+  "devdeck:create-git-worktree-session",
+  async (
+    _event,
+    payload: {
+      baseRef: string;
+      branchName: string;
+      repositoryPath: string;
+      sessionPath?: string | null;
+    },
+  ) => {
+    return createGitWorktreeSession(payload);
+  },
+);
+
+ipcMain.handle(
+  "devdeck:remove-git-worktree-session",
+  async (
+    _event,
+    payload: {
+      repositoryPath: string;
+      worktreePath: string;
+    },
+  ) => {
+    await removeGitWorktreeSession(payload);
+  },
+);
 
 ipcMain.handle("devdeck:copy-to-clipboard", async (_event, value: string) => {
   clipboard.writeText(value);

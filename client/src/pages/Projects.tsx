@@ -1,11 +1,20 @@
 import { Suspense, lazy, useMemo } from "react";
+import { useLocation } from "wouter";
 import AppLayout from "@/components/layout/AppLayout";
 import { PullRequestCiStatusIcon } from "@/components/pull-requests/PullRequestStatusIndicators";
+import SessionLaunchButton from "@/components/sessions/SessionLaunchButton";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
+import { navigateInApp } from "@/lib/app-navigation";
 import { getDesktopApi } from "@/lib/desktop";
+import {
+  buildCreateSessionPath,
+  DEV_SESSIONS_STORAGE_KEY,
+  findProjectDevSession,
+  normalizeDevSessions,
+} from "@/lib/dev-sessions";
 import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
 import {
   filterPullRequestsByDependabotVisibility,
@@ -35,6 +44,7 @@ const PullRequestDetailDialog = lazy(
 );
 
 export default function Projects() {
+  const [, setLocation] = useLocation();
   const [showDependabotPullRequests, setShowDependabotPullRequests] =
     usePersistentState<boolean>(SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY, true);
   const [searchQuery, setSearchQuery] = usePersistentState(
@@ -49,6 +59,9 @@ export default function Projects() {
     "devdeck:projects:selected-pr",
     null,
   );
+  const [devSessions] = usePersistentState(DEV_SESSIONS_STORAGE_KEY, [], {
+    deserialize: (value) => normalizeDevSessions(JSON.parse(value)),
+  });
   const { data: snapshot, isLoading } = useWorkspaceSnapshot();
   const desktopApi = getDesktopApi();
 
@@ -98,6 +111,9 @@ export default function Projects() {
     selectedProjectPullRequests.find(
       (pullRequest) => pullRequest.id === selectedPullRequestId,
     ) ?? null;
+  const selectedProjectSession = selectedProject
+    ? findProjectDevSession(devSessions, selectedProject.id)
+    : null;
 
   const openInTerminal = async (project: WorkspaceProject) => {
     await desktopApi?.openInTerminal(project.localPath);
@@ -131,6 +147,19 @@ export default function Projects() {
   const closeSelectedProject = () => {
     setSelectedProjectId(null);
     setSelectedPullRequestId(null);
+  };
+
+  const startSessionForProject = async (project: WorkspaceProject) => {
+    const existingSession = findProjectDevSession(devSessions, project.id);
+    if (existingSession && desktopApi?.openInCode) {
+      await desktopApi.openInCode(existingSession.localPath);
+      return;
+    }
+
+    navigateInApp(
+      existingSession ? "/sessions" : buildCreateSessionPath(project.id),
+      setLocation,
+    );
   };
 
   return (
@@ -252,6 +281,13 @@ export default function Projects() {
                         </Tooltip.Portal>
                       </Tooltip.Root>
                     </Tooltip.Provider>
+                    <SessionLaunchButton
+                      className="h-8 w-8 bg-white/80 backdrop-blur-sm border-border shadow-sm hover:bg-black/5"
+                      createPath={buildCreateSessionPath(selectedProject.id)}
+                      existingSession={selectedProjectSession}
+                      iconOnly
+                      onNavigate={(path) => navigateInApp(path, setLocation)}
+                    />
                     <Tooltip.Provider>
                       <Tooltip.Root>
                         <Tooltip.Trigger asChild>
@@ -384,6 +420,13 @@ export default function Projects() {
                 <div>
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</h3>
                   <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => void startSessionForProject(selectedProject)}
+                      className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-md hover:bg-secondary transition-colors text-foreground"
+                    >
+                      {selectedProjectSession ? "Open Session" : "Start Session"}
+                    </button>
                     <button
                       type="button"
                       onClick={() => void openInTerminal(selectedProject)}

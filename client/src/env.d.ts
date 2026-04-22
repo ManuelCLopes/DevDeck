@@ -6,6 +6,7 @@ import type {
   WorkspaceSelection,
   WorkspaceSnapshot,
 } from "@shared/workspace";
+import type { CreateGitWorktreeSessionResult } from "@shared/sessions";
 import type { WorkspaceMonitorPreferences } from "@shared/workspace-monitor";
 
 interface WorkspaceMonitorState {
@@ -31,6 +32,12 @@ interface DevDeckDesktopApi {
   }): Promise<void>;
   clearGitHubToken(): Promise<void>;
   copyToClipboard(value: string): Promise<void>;
+  createGitWorktreeSession(payload: {
+    baseRef: string;
+    branchName: string;
+    repositoryPath: string;
+    sessionPath?: string | null;
+  }): Promise<CreateGitWorktreeSessionResult>;
   getGitHubAuthCapabilities(): Promise<{
     deviceFlowAvailable: boolean;
     deviceFlowReason: string | null;
@@ -56,6 +63,10 @@ interface DevDeckDesktopApi {
     pullRequestNumber: number;
     repositorySlug: string;
     reviewers: string[];
+  }): Promise<void>;
+  removeGitWorktreeSession(payload: {
+    repositoryPath: string;
+    worktreePath: string;
   }): Promise<void>;
   unclaimPullRequestReview(payload: {
     pullRequestNumber: number;

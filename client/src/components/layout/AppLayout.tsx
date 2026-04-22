@@ -36,6 +36,7 @@ import {
 import { useWorkspaceAlerts } from "@/hooks/use-workspace-alerts";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { getDesktopApi } from "@/lib/desktop";
+import { buildCreateSessionPath } from "@/lib/dev-sessions";
 import { setPullRequestClaimed } from "@/lib/pull-request-actions";
 import { getOpenAddProjectsDialogEvent } from "@/lib/project-import-events";
 import { getPullRequestQueueStatus } from "@/lib/pull-request-utils";
@@ -62,6 +63,7 @@ import {
   HardDrive,
   MessageSquare,
   RefreshCw,
+  SquareTerminal,
   Users2,
 } from "lucide-react";
 
@@ -231,6 +233,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { href: "/", icon: LayoutGrid, label: "Overview" },
     { href: "/reviews", icon: MessageSquare, label: "Pull Requests" },
     { href: "/projects", icon: FolderGit2, label: "Repositories" },
+    { href: "/sessions", icon: SquareTerminal, label: "Sessions" },
     { href: "/activity", icon: Activity, label: "Activity Inbox" },
     { href: "/team", icon: Users2, label: "Team Insights" },
   ];
@@ -646,6 +649,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <MessageSquare className="w-4 h-4 text-primary" />
               <span className="font-medium">Open Pull Requests</span>
             </CommandItem>
+            <CommandItem value="open sessions workspace ops" onSelect={() => handleNavigate("/sessions")}>
+              <SquareTerminal className="w-4 h-4 text-primary" />
+              <span className="font-medium">Open Sessions</span>
+            </CommandItem>
             <CommandItem value="open activity inbox" onSelect={() => handleNavigate("/activity")}>
               <Activity className="w-4 h-4 text-primary" />
               <span className="font-medium">Open Activity Inbox</span>
@@ -709,6 +716,26 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   .slice(0, 3)
                   .map((project) => (
                     <CommandItem
+                      key={`session:${project.id}`}
+                      value={`start session ${project.name} worktree repository`}
+                      onSelect={() =>
+                        handleCommandAction(() =>
+                          handleNavigate(buildCreateSessionPath(project.id)),
+                        )
+                      }
+                    >
+                      <SquareTerminal className="w-4 h-4 text-primary" />
+                      <span className="truncate font-medium">
+                        Start Session for {project.name}
+                      </span>
+                      <CommandShortcut>Session</CommandShortcut>
+                    </CommandItem>
+                  ))}
+                {searchResults.projects
+                  .filter((project) => Boolean(project.localPath))
+                  .slice(0, 3)
+                  .map((project) => (
+                    <CommandItem
                       key={`finder:${project.id}`}
                       value={`reveal ${project.name} in finder`}
                       onSelect={() =>
@@ -754,6 +781,28 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <>
               <CommandSeparator />
               <CommandGroup heading="PR Actions">
+                {searchResults.pullRequests.slice(0, 3).map((pullRequest) => (
+                  <CommandItem
+                    key={`session-pr:${pullRequest.id}`}
+                    value={`review session ${pullRequest.title} ${pullRequest.repo}`}
+                    onSelect={() =>
+                      handleCommandAction(() =>
+                        handleNavigate(
+                          buildCreateSessionPath(
+                            pullRequest.projectId,
+                            pullRequest.id,
+                          ),
+                        ),
+                      )
+                    }
+                  >
+                    <SquareTerminal className="w-4 h-4 text-primary" />
+                    <span className="truncate font-medium">
+                      Start Session for #{pullRequest.number}
+                    </span>
+                    <CommandShortcut>Review</CommandShortcut>
+                  </CommandItem>
+                ))}
                 {searchResults.pullRequests.slice(0, 3).map((pullRequest) => (
                   <CommandItem
                     key={`view:${pullRequest.id}`}

@@ -7,6 +7,9 @@ import type {
   WorkspaceSelection,
   WorkspaceSnapshot,
 } from "../shared/workspace";
+import type {
+  CreateGitWorktreeSessionResult,
+} from "../shared/sessions";
 import type { WorkspaceMonitorPreferences } from "../shared/workspace-monitor";
 
 interface WorkspaceMonitorState {
@@ -49,6 +52,14 @@ const devdeck = {
   },
   clearGitHubToken(): Promise<void> {
     return ipcRenderer.invoke("devdeck:clear-github-token");
+  },
+  createGitWorktreeSession(payload: {
+    baseRef: string;
+    branchName: string;
+    repositoryPath: string;
+    sessionPath?: string | null;
+  }): Promise<CreateGitWorktreeSessionResult> {
+    return ipcRenderer.invoke("devdeck:create-git-worktree-session", payload);
   },
   loadWorkspaceSnapshot(selection: WorkspaceSelection): Promise<WorkspaceSnapshot> {
     return ipcRenderer.invoke("devdeck:load-workspace-snapshot", selection);
@@ -96,6 +107,12 @@ const devdeck = {
     reviewers: string[];
   }): Promise<void> {
     return ipcRenderer.invoke("devdeck:request-pull-request-reviewers", payload);
+  },
+  removeGitWorktreeSession(payload: {
+    repositoryPath: string;
+    worktreePath: string;
+  }): Promise<void> {
+    return ipcRenderer.invoke("devdeck:remove-git-worktree-session", payload);
   },
   unclaimPullRequestReview(payload: {
     pullRequestNumber: number;

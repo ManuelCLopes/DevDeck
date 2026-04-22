@@ -4,6 +4,7 @@ import {
   PullRequestCiStatusIcon,
   PullRequestListStatusIcon,
 } from "@/components/pull-requests/PullRequestStatusIndicators";
+import SessionLaunchButton from "@/components/sessions/SessionLaunchButton";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +19,12 @@ import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { navigateInApp } from "@/lib/app-navigation";
 import { getDesktopApi } from "@/lib/desktop";
+import {
+  buildCreateSessionPath,
+  DEV_SESSIONS_STORAGE_KEY,
+  findPullRequestDevSession,
+  normalizeDevSessions,
+} from "@/lib/dev-sessions";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import { setPullRequestClaimed } from "@/lib/pull-request-actions";
 import {
@@ -77,6 +84,9 @@ export default function Reviews() {
     "devdeck:reviews:repo-filters",
     [],
   );
+  const [devSessions] = usePersistentState(DEV_SESSIONS_STORAGE_KEY, [], {
+    deserialize: (value) => normalizeDevSessions(JSON.parse(value)),
+  });
   const [activeIndicatorDialog, setActiveIndicatorDialog] =
     useState<ReviewIndicatorDialogId | null>(null);
   const { data: snapshot, isLoading } = useWorkspaceSnapshot();
@@ -591,6 +601,21 @@ export default function Reviews() {
                                 }
                                 status={queueStatus}
                               />
+                              <SessionLaunchButton
+                                className="h-8 w-8"
+                                createPath={buildCreateSessionPath(
+                                  pullRequest.projectId,
+                                  pullRequest.id,
+                                )}
+                                existingSession={findPullRequestDevSession(
+                                  devSessions,
+                                  pullRequest.id,
+                                )}
+                                iconOnly
+                                onNavigate={(path) => navigateInApp(path, setLocation)}
+                                size="icon"
+                                variant="outline"
+                              />
                               <button
                                 type="button"
                                 onClick={() => void handleOpenPullRequest(pullRequest.url)}
@@ -748,6 +773,21 @@ export default function Reviews() {
                                       : undefined
                                   }
                                   status={queueStatus}
+                                />
+                                <SessionLaunchButton
+                                  className="h-8 w-8"
+                                  createPath={buildCreateSessionPath(
+                                    pullRequest.projectId,
+                                    pullRequest.id,
+                                  )}
+                                  existingSession={findPullRequestDevSession(
+                                    devSessions,
+                                    pullRequest.id,
+                                  )}
+                                  iconOnly
+                                  onNavigate={(path) => navigateInApp(path, setLocation)}
+                                  size="icon"
+                                  variant="outline"
                                 />
                               </div>
                               <button
@@ -962,7 +1002,7 @@ export default function Reviews() {
                                   className="flex flex-shrink-0 flex-wrap items-center gap-2 self-start"
                                   onClick={(event) => event.stopPropagation()}
                                 >
-                                  <PullRequestQueueControl
+                                <PullRequestQueueControl
                                     claimedReviewerLogin={
                                       pullRequest.claimedByViewer
                                         ? null
@@ -977,11 +1017,26 @@ export default function Reviews() {
                                             )
                                         : undefined
                                     }
-                                    status={queueStatus}
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleOpenPullRequest(pullRequest.url)}
+                                  status={queueStatus}
+                                />
+                                <SessionLaunchButton
+                                  className="h-8 w-8"
+                                  createPath={buildCreateSessionPath(
+                                    pullRequest.projectId,
+                                    pullRequest.id,
+                                  )}
+                                  existingSession={findPullRequestDevSession(
+                                    devSessions,
+                                    pullRequest.id,
+                                  )}
+                                  iconOnly
+                                  onNavigate={(path) => navigateInApp(path, setLocation)}
+                                  size="icon"
+                                  variant="outline"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => void handleOpenPullRequest(pullRequest.url)}
                                     className="inline-flex h-8 items-center rounded-md border border-border bg-white px-2 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-secondary"
                                   >
                                     <Github className="mr-1.5 h-3.5 w-3.5" />

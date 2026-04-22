@@ -7,6 +7,7 @@ import {
   PullRequestCiStatusIcon,
   PullRequestListStatusIcon,
 } from "@/components/pull-requests/PullRequestStatusIndicators";
+import SessionLaunchButton from "@/components/sessions/SessionLaunchButton";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,14 @@ import { toast } from "@/hooks/use-toast";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
+import { navigateInApp } from "@/lib/app-navigation";
 import { getDesktopApi } from "@/lib/desktop";
+import {
+  buildCreateSessionPath,
+  DEV_SESSIONS_STORAGE_KEY,
+  findPullRequestDevSession,
+  normalizeDevSessions,
+} from "@/lib/dev-sessions";
 import { setPullRequestClaimed } from "@/lib/pull-request-actions";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import { getCiStatusMeta } from "@/lib/project-health";
@@ -35,7 +43,7 @@ import {
 } from "@/lib/pull-request-utils";
 import { formatDistanceToNow } from "date-fns";
 import type { WorkspacePullRequestItem } from "@shared/workspace";
-import { Link, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import {
   Activity,
   ArrowUpRight,
@@ -66,6 +74,7 @@ type DashboardIndicatorDialogId =
 
 export default function Dashboard() {
   const formatCount = (value: number) => new Intl.NumberFormat().format(value);
+  const [, setLocation] = useLocation();
   const [showDependabotPullRequests, setShowDependabotPullRequests] =
     usePersistentState<boolean>(SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY, true);
   const [viewMode, setViewMode] = usePersistentState<"grid" | "list">(
@@ -81,6 +90,9 @@ export default function Dashboard() {
     useState<DashboardIndicatorDialogId | null>(null);
   const [selectedOverviewRepoFilters, setSelectedOverviewRepoFilters] =
     usePersistentState<string[]>("devdeck:dashboard:overview-repo-filters", []);
+  const [devSessions] = usePersistentState(DEV_SESSIONS_STORAGE_KEY, [], {
+    deserialize: (value) => normalizeDevSessions(JSON.parse(value)),
+  });
   const search = useSearch();
   const focusedProjectId = new URLSearchParams(search).get("project");
   const workspaceSelection = useWorkspaceSelection();
@@ -550,6 +562,21 @@ export default function Dashboard() {
                                   status={queueStatus}
                                 />
                               </div>
+                              <SessionLaunchButton
+                                className="h-8 w-8"
+                                createPath={buildCreateSessionPath(
+                                  pullRequest.projectId,
+                                  pullRequest.id,
+                                )}
+                                existingSession={findPullRequestDevSession(
+                                  devSessions,
+                                  pullRequest.id,
+                                )}
+                                iconOnly
+                                onNavigate={(path) => navigateInApp(path, setLocation)}
+                                size="icon"
+                                variant="outline"
+                              />
                               <button
                                 type="button"
                                 onClick={(event) => {
@@ -770,6 +797,21 @@ export default function Dashboard() {
                                   status={queueStatus}
                                 />
                               </div>
+                              <SessionLaunchButton
+                                className="h-8 w-8"
+                                createPath={buildCreateSessionPath(
+                                  pullRequest.projectId,
+                                  pullRequest.id,
+                                )}
+                                existingSession={findPullRequestDevSession(
+                                  devSessions,
+                                  pullRequest.id,
+                                )}
+                                iconOnly
+                                onNavigate={(path) => navigateInApp(path, setLocation)}
+                                size="icon"
+                                variant="outline"
+                              />
                               <button
                                 type="button"
                                 onClick={(event) => {
@@ -1076,6 +1118,21 @@ export default function Dashboard() {
                                       : undefined
                                   }
                                   status={queueStatus}
+                                />
+                                <SessionLaunchButton
+                                  className="h-8 w-8"
+                                  createPath={buildCreateSessionPath(
+                                    pullRequest.projectId,
+                                    pullRequest.id,
+                                  )}
+                                  existingSession={findPullRequestDevSession(
+                                    devSessions,
+                                    pullRequest.id,
+                                  )}
+                                  iconOnly
+                                  onNavigate={(path) => navigateInApp(path, setLocation)}
+                                  size="icon"
+                                  variant="outline"
                                 />
                                 <button
                                   type="button"
