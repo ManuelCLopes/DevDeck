@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearch } from "wouter";
+import type { DevSessionOperationalSnapshot } from "@shared/sessions";
 import AppLayout from "@/components/layout/AppLayout";
 import CreateSessionDialog from "@/components/sessions/CreateSessionDialog";
 import {
@@ -27,14 +28,17 @@ import {
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import { formatDistanceToNow } from "date-fns";
 import {
+  AlertCircle,
   Archive,
   FolderOpen,
   FolderTree,
   Github,
+  Loader2,
   RotateCcw,
   SquareTerminal,
   Trash2,
 } from "lucide-react";
+import OpenInCodeButton from "@/components/coding-tool/OpenInCodeButton";
 
 export default function Sessions() {
   const [, setLocation] = useLocation();
@@ -45,6 +49,10 @@ export default function Sessions() {
   const [pendingRemovalSession, setPendingRemovalSession] = useState<DevSession | null>(
     null,
   );
+  const [isLoadingSessionStatus, setIsLoadingSessionStatus] = useState(false);
+  const [sessionSnapshotsById, setSessionSnapshotsById] = useState<
+    Record<string, DevSessionOperationalSnapshot>
+  >({});
   const [sessions, setSessions] = usePersistentState<DevSession[]>(
     DEV_SESSIONS_STORAGE_KEY,
     [],
@@ -64,13 +72,98 @@ export default function Sessions() {
     }
   }, [shouldOpenCreateDialog]);
 
+  useEffect(() => {
+    if (!desktopApi?.inspectDevSessions) {
+      setSessionSnapshotsById({});
+      return;
+    }
+
+    if (sessions.length === 0) {
+      setSessionSnapshotsById({});
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingSessionStatus(true);
+
+    void desktopApi
+      .inspectDevSessions(
+        sessions.map((session) => ({
+          localPath: session.localPath,
+          repositoryPath: session.repositoryPath,
+          sessionId: session.id,
+        })),
+      )
+      .then((snapshots) => {
+        if (cancelled) {
+          return;
+        }
+
+        setSessionSnapshotsById(
+          Object.fromEntries(
+            snapshots.map((snapshot) => [snapshot.sessionId, snapshot]),
+          ),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSessionSnapshotsById({});
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingSessionStatus(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [desktopApi, sessions]);
+
   const sortedSessions = useMemo(() => sortDevSessions(sessions), [sessions]);
   const activeSessions = sortedSessions.filter((session) => session.status === "active");
   const archivedSessions = sortedSessions.filter(
     (session) => session.status === "archived",
   );
   const linkedPullRequests = snapshot?.pullRequests ?? [];
+  const linkedPullRequestsById = useMemo(
+    () => new Map(linkedPullRequests.map((pullRequest) => [pullRequest.id, pullRequest])),
+    [linkedPullRequests],
+  );
   const trackedProjects = snapshot?.projects ?? [];
+
+  const isReadyToCleanUp = (
+    session: DevSession,
+    sessionSnapshot: DevSessionOperationalSnapshot | undefined,
+  ) => {
+    if (!sessionSnapshot || session.kind !== "worktree") {
+      return false;
+    }
+
+    if (
+      !sessionSnapshot.exists ||
+      !sessionSnapshot.isRepository ||
+      sessionSnapshot.hasUncommittedChanges ||
+      sessionSnapshot.isDetached ||
+      !sessionSnapshot.currentBranch ||
+      sessionSnapshot.currentBranch === sessionSnapshot.defaultBranch
+    ) {
+      return false;
+    }
+
+    return sessionSnapshot.uniqueCommitCount === 0;
+  };
+
+  const dirtySessionCount = activeSessions.filter(
+    (session) => sessionSnapshotsById[session.id]?.hasUncommittedChanges,
+  ).length;
+  const behindSessionCount = activeSessions.filter(
+    (session) => (sessionSnapshotsById[session.id]?.behindBy ?? 0) > 0,
+  ).length;
+  const cleanupCandidateCount = activeSessions.filter((session) =>
+    isReadyToCleanUp(session, sessionSnapshotsById[session.id]),
+  ).length;
 
   const updateSession = (sessionId: string, updater: (session: DevSession) => DevSession) => {
     setSessions((currentSessions) =>
@@ -84,10 +177,6 @@ export default function Sessions() {
     setSessions((currentSessions) =>
       currentSessions.filter((session) => session.id !== sessionId),
     );
-  };
-
-  const openInCode = async (session: DevSession) => {
-    await desktopApi?.openInCode?.(session.localPath);
   };
 
   const openInTerminal = async (session: DevSession) => {
@@ -201,7 +290,7 @@ export default function Sessions() {
           </Button>
         </div>
 
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {[
             {
               label: "Active Sessions",
@@ -209,14 +298,19 @@ export default function Sessions() {
               value: activeSessions.length,
             },
             {
-              label: "Worktrees",
-              note: "isolated parallel branches",
-              value: activeSessions.filter((session) => session.kind === "worktree").length,
+              label: "Dirty Sessions",
+              note: "uncommitted local changes",
+              value: dirtySessionCount,
             },
             {
-              label: "Linked PRs",
-              note: "sessions carrying PR context",
-              value: activeSessions.filter((session) => session.linkedPullRequestId).length,
+              label: "Behind Upstream",
+              note: "need pull or rebase",
+              value: behindSessionCount,
+            },
+            {
+              label: "Ready To Clean Up",
+              note: "no unique work left in context",
+              value: cleanupCandidateCount,
             },
             {
               label: "Archived",
@@ -246,9 +340,15 @@ export default function Sessions() {
                 Active Sessions
               </h2>
               <p className="text-sm text-muted-foreground">
-                Treat these as launchable working contexts, not just folders.
+                Treat these as active working contexts, with live local git status.
               </p>
             </div>
+            {isLoadingSessionStatus ? (
+              <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Refreshing status…
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-4 space-y-3">
@@ -258,12 +358,24 @@ export default function Sessions() {
               </div>
             ) : (
               activeSessions.map((session) => {
-                const linkedPullRequest = linkedPullRequests.find(
-                  (pullRequest) => pullRequest.id === session.linkedPullRequestId,
-                );
+                const linkedPullRequest = session.linkedPullRequestId
+                  ? linkedPullRequestsById.get(session.linkedPullRequestId) ?? null
+                  : null;
                 const trackedProject = trackedProjects.find(
                   (project) => project.id === session.projectId,
                 );
+                const sessionSnapshot = sessionSnapshotsById[session.id];
+                const sessionUnavailable =
+                  sessionSnapshot &&
+                  (!sessionSnapshot.exists || !sessionSnapshot.isRepository);
+                const readyToCleanUp = isReadyToCleanUp(session, sessionSnapshot);
+                const lastCommitDistance =
+                  sessionSnapshot?.lastCommitCommittedAt
+                    ? formatDistanceToNow(
+                        new Date(sessionSnapshot.lastCommitCommittedAt),
+                        { addSuffix: true },
+                      )
+                    : null;
 
                 return (
                   <div
@@ -295,13 +407,64 @@ export default function Sessions() {
                             </button>
                           ) : null}
                         </div>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                          {sessionSnapshot ? (
+                            sessionUnavailable ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#cf222e]/20 bg-[#ffebe9] px-2.5 py-1 font-medium text-[#cf222e]">
+                                <AlertCircle className="h-3.5 w-3.5" />
+                                Session path unavailable
+                              </span>
+                            ) : (
+                              <>
+                                <span
+                                  className={`rounded-full border px-2.5 py-1 font-medium ${
+                                    sessionSnapshot.hasUncommittedChanges
+                                      ? "border-chart-3/20 bg-chart-3/10 text-chart-3"
+                                      : "border-chart-1/20 bg-chart-1/10 text-chart-1"
+                                  }`}
+                                >
+                                  {sessionSnapshot.hasUncommittedChanges ? "Dirty" : "Clean"}
+                                </span>
+                                {sessionSnapshot.hasUpstream ? (
+                                  <span className="rounded-full border border-border/60 bg-white px-2.5 py-1 font-medium text-muted-foreground">
+                                    {sessionSnapshot.aheadBy} ahead · {sessionSnapshot.behindBy} behind
+                                  </span>
+                                ) : (
+                                  <span className="rounded-full border border-border/60 bg-white px-2.5 py-1 font-medium text-muted-foreground">
+                                    No upstream
+                                  </span>
+                                )}
+                                {readyToCleanUp ? (
+                                  <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 font-medium text-primary">
+                                    Ready to clean up
+                                  </span>
+                                ) : null}
+                              </>
+                            )
+                          ) : null}
+                        </div>
 
                         <div>
                           <h3 className="text-base font-semibold text-foreground">
                             {session.label}
                           </h3>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            Branch <span className="font-medium text-foreground">{session.sessionBranchName}</span>
+                            Branch{" "}
+                            <span className="font-medium text-foreground">
+                              {sessionSnapshot?.currentBranch ??
+                                (sessionSnapshot?.isDetached
+                                  ? "detached"
+                                  : session.sessionBranchName)}
+                            </span>
+                            {sessionSnapshot?.currentBranch &&
+                            sessionSnapshot.currentBranch !== session.sessionBranchName ? (
+                              <>
+                                {" "}· tracked as{" "}
+                                <span className="font-medium text-foreground">
+                                  {session.sessionBranchName}
+                                </span>
+                              </>
+                            ) : null}
                             {session.sourceRef ? (
                               <>
                                 {" "}· from{" "}
@@ -315,28 +478,52 @@ export default function Sessions() {
                           <p className="break-all font-mono text-[11px] text-foreground">
                             {session.localPath}
                           </p>
-                          <p className="mt-1">
-                            Updated {formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })}
-                            {trackedProject?.remoteUrl ? " · remote linked" : " · local only"}
-                          </p>
+                          {sessionSnapshot?.lastCommitSubject ? (
+                            <>
+                              <p className="mt-1 break-words text-foreground">
+                                {sessionSnapshot.lastCommitShortSha ? (
+                                  <span className="font-mono text-[11px]">
+                                    {sessionSnapshot.lastCommitShortSha}
+                                  </span>
+                                ) : null}
+                                {sessionSnapshot.lastCommitShortSha ? " · " : ""}
+                                {sessionSnapshot.lastCommitSubject}
+                              </p>
+                              <p className="mt-1">
+                                Last commit {lastCommitDistance}
+                                {trackedProject?.remoteUrl ? " · remote linked" : " · local only"}
+                              </p>
+                            </>
+                          ) : (
+                            <p className="mt-1">
+                              Updated{" "}
+                              {formatDistanceToNow(new Date(session.updatedAt), {
+                                addSuffix: true,
+                              })}
+                              {trackedProject?.remoteUrl ? " · remote linked" : " · local only"}
+                            </p>
+                          )}
+                          {readyToCleanUp ? (
+                            <p className="mt-1 text-primary">
+                              No unique work remains in this branch context. Safe to delete when finished.
+                            </p>
+                          ) : null}
                         </div>
                       </div>
 
                       <div className="flex shrink-0 flex-wrap gap-2">
-                        <Button
-                          type="button"
+                        <OpenInCodeButton
+                          targetPath={session.localPath}
+                          disabled={Boolean(sessionUnavailable)}
                           variant="outline"
-                          onClick={() => void openInCode(session)}
-                          className="gap-1.5"
-                        >
-                          <FolderTree className="h-3.5 w-3.5" />
-                          Code
-                        </Button>
+                          size="sm"
+                        />
                         <Button
                           type="button"
                           variant="outline"
                           onClick={() => void openInTerminal(session)}
                           className="gap-1.5"
+                          disabled={Boolean(sessionUnavailable)}
                         >
                           <SquareTerminal className="h-3.5 w-3.5" />
                           Terminal
@@ -346,6 +533,7 @@ export default function Sessions() {
                           variant="outline"
                           onClick={() => void revealInFinder(session)}
                           className="gap-1.5"
+                          disabled={Boolean(sessionUnavailable)}
                         >
                           <FolderOpen className="h-3.5 w-3.5" />
                           Finder
@@ -378,7 +566,7 @@ export default function Sessions() {
                             className="gap-1.5 text-[#cf222e] hover:text-[#cf222e]"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
-                            Delete Worktree
+                            {readyToCleanUp ? "Clean Up" : "Delete Worktree"}
                           </Button>
                         ) : (
                           <Button
@@ -412,51 +600,54 @@ export default function Sessions() {
             </div>
 
             <div className="mt-4 space-y-3">
-              {archivedSessions.map((session) => (
-                <div
-                  key={session.id}
-                  className="flex flex-col gap-3 rounded-xl border border-border/60 bg-white/85 p-4 md:flex-row md:items-center md:justify-between"
-                >
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-foreground">{session.label}</h3>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {session.projectName} · {session.sessionBranchName} · archived{" "}
-                      {formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })}
-                    </p>
+              {archivedSessions.map((session) => {
+                const sessionSnapshot = sessionSnapshotsById[session.id];
+
+                return (
+                  <div
+                    key={session.id}
+                    className="flex flex-col gap-3 rounded-xl border border-border/60 bg-white/85 p-4 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-foreground">{session.label}</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {session.projectName} ·{" "}
+                        {sessionSnapshot?.currentBranch ?? session.sessionBranchName} · archived{" "}
+                        {formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handleRestoreSession(session.id)}
+                        className="gap-1.5"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Restore
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setPendingRemovalSession(session)}
+                        className="gap-1.5"
+                      >
+                        {session.kind === "worktree" ? (
+                          <>
+                            <FolderTree className="h-3.5 w-3.5" />
+                            Delete Worktree
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Remove
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => handleRestoreSession(session.id)}
-                      className="gap-1.5"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      Restore
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() =>
-                        setPendingRemovalSession(session)
-                      }
-                      className="gap-1.5"
-                    >
-                      {session.kind === "worktree" ? (
-                        <>
-                          <FolderTree className="h-3.5 w-3.5" />
-                          Delete Worktree
-                        </>
-                      ) : (
-                        <>
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Remove
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         ) : null}

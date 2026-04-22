@@ -9,11 +9,14 @@ import {
   setWorkspaceSelection,
 } from "@/lib/workspace-selection";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
+import { useCodingTool } from "@/hooks/use-coding-tool";
+import type { CodingToolId } from "@/lib/coding-tool";
 
 export function useProjectActions() {
   const [, setLocation] = useLocation();
   const workspaceSelection = useWorkspaceSelection();
   const desktopApi = getDesktopApi();
+  const codingTool = useCodingTool();
 
   const copyPath = async (projectPath: string) => {
     if (desktopApi?.copyToClipboard) {
@@ -24,8 +27,8 @@ export function useProjectActions() {
     await navigator.clipboard.writeText(projectPath);
   };
 
-  const openInCode = async (projectPath: string) => {
-    await desktopApi?.openInCode?.(projectPath);
+  const openInCode = async (projectPath: string, explicitTool?: CodingToolId) => {
+    await codingTool.openPreferredTool(projectPath, explicitTool);
   };
 
   const revealInFinder = async (projectPath: string) => {
@@ -52,6 +55,7 @@ export function useProjectActions() {
   };
 
   return {
+    codingTool,
     copyPath,
     openInCode,
     removeProject,

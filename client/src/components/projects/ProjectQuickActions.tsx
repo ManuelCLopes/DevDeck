@@ -1,7 +1,9 @@
 import type { MouseEvent } from "react";
 import { FolderOpen, Trash2 } from "lucide-react";
 import { useProjectActions } from "@/hooks/use-project-actions";
+import { getCodingToolLabel } from "@/lib/coding-tool";
 import vsCodeLogo from "@/assets/vscode.svg";
+import openCodeLogo from "@/assets/opencode.svg";
 
 interface ProjectQuickActionsProps {
   className?: string;
@@ -18,7 +20,11 @@ export default function ProjectQuickActions({
   projectName,
   projectPath,
 }: ProjectQuickActionsProps) {
-  const { openInCode, removeProject, revealInFinder } = useProjectActions();
+  const { codingTool, openInCode, removeProject, revealInFinder } = useProjectActions();
+  const { preferredTool, preferredToolShortLabel } = codingTool;
+  const brandLogo = preferredTool === "opencode" ? openCodeLogo : vsCodeLogo;
+  const toolLabel = getCodingToolLabel(preferredTool);
+
   const buttonClassName = compact
     ? "flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-white/90 text-muted-foreground shadow-sm transition-colors hover:bg-secondary hover:text-foreground"
     : "rounded-md border border-border/60 bg-white/90 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground shadow-sm transition-colors hover:bg-secondary hover:text-foreground";
@@ -47,18 +53,18 @@ export default function ProjectQuickActions({
         type="button"
         onClick={handleAction(() => openInCode(projectPath))}
         className={buttonClassName}
-        aria-label={`Open ${projectName} in VS Code`}
-        title="Open in VS Code"
+        aria-label={`Open ${projectName} in ${toolLabel}`}
+        title={`Open in ${toolLabel}`}
       >
         {compact ? (
           <img
-            src={vsCodeLogo}
+            src={brandLogo}
             alt=""
             aria-hidden="true"
             className="h-3.5 w-3.5 object-contain"
           />
         ) : (
-          "Code"
+          preferredToolShortLabel
         )}
       </button>
       <button

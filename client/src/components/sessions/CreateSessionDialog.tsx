@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
+import { useCodingTool } from "@/hooks/use-coding-tool";
 import { getDesktopApi } from "@/lib/desktop";
 import {
   buildDefaultSessionBranchName,
@@ -53,6 +54,7 @@ export default function CreateSessionDialog({
   pullRequests,
 }: CreateSessionDialogProps) {
   const desktopApi = getDesktopApi();
+  const { openPreferredTool, preferredToolLabel } = useCodingTool();
   const [sessionKind, setSessionKind] = useState<DevSessionKind>("existing_clone");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedPullRequestId, setSelectedPullRequestId] = useState("none");
@@ -188,14 +190,14 @@ export default function CreateSessionDialog({
 
     try {
       if (duplicateSession) {
-        if (desktopApi?.openInCode) {
-          await desktopApi.openInCode(duplicateSession.localPath);
+        if (desktopApi) {
+          await openPreferredTool(duplicateSession.localPath);
         }
 
         onOpenChange(false);
         toast({
-          title: desktopApi?.openInCode ? "Opened existing session" : "Session already active",
-          description: desktopApi?.openInCode
+          title: desktopApi ? `Opened existing session in ${preferredToolLabel}` : "Session already active",
+          description: desktopApi
             ? `${duplicateSession.label} is already active.`
             : `${duplicateSession.label} is already active in DevDeck.`,
         });

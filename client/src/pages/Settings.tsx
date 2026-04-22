@@ -25,8 +25,15 @@ import {
   Layers3,
   RotateCcw,
   Shield,
+  Terminal,
   Trash2,
 } from "lucide-react";
+import { useCodingTool } from "@/hooks/use-coding-tool";
+import {
+  getCodingToolInstallHint,
+  getCodingToolLabel,
+  type CodingToolId,
+} from "@/lib/coding-tool";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { useLocation } from "wouter";
 import { clearCompletedOnboarding } from "@/lib/onboarding-state";
@@ -76,6 +83,7 @@ export default function Settings() {
   const githubStatusMeta = getGitHubStatusMeta(githubStatus);
   const githubState = githubStatus?.state ?? "unsupported";
   const desktopApi = getDesktopApi();
+  const { availability, preferredTool } = useCodingTool();
 
   const persistWorkspaceSelection = async (
     nextSelection: WorkspaceSelection | null,
@@ -282,7 +290,9 @@ export default function Settings() {
       desc: string;
       id: Exclude<
         keyof AppPreferences,
-        "autoRefreshEnabled" | "autoRefreshIntervalSeconds"
+        | "autoRefreshEnabled"
+        | "autoRefreshIntervalSeconds"
+        | "preferredCodingTool"
       >;
       label: string;
     }>;
@@ -834,6 +844,80 @@ export default function Settings() {
                     <div className="rounded-md border border-border/60 bg-white px-3 py-2 text-sm text-foreground shadow-sm">
                       {lastWorkspaceSyncLabel}
                     </div>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="px-3 pt-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Coding Tool
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3 p-3 rounded-md transition-colors hover:bg-secondary/30 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <label
+                      htmlFor="preferredCodingTool"
+                      className="flex items-center gap-2 font-medium text-sm text-foreground cursor-pointer"
+                    >
+                      <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
+                      Preferred Coding Tool
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      DevDeck uses this tool for all "Open in…" actions across sessions and repositories.
+                    </p>
+                    {(["opencode", "vscode"] as CodingToolId[]).map((tool) => {
+                      const entry = availability[tool];
+                      if (entry?.available) {
+                        return null;
+                      }
+
+                      return (
+                        <p
+                          key={`hint:${tool}`}
+                          className="mt-1 text-[11px] text-muted-foreground"
+                        >
+                          <span className="font-medium text-foreground">{getCodingToolLabel(tool)}:</span>{" "}
+                          {entry?.reason ?? getCodingToolInstallHint(tool)}
+                        </p>
+                      );
+                    })}
+                  </div>
+                  <div className="flex min-w-[220px] flex-col items-end gap-1">
+                    <Select
+                      value={preferences.preferredCodingTool}
+                      onValueChange={(value) =>
+                        setPreference("preferredCodingTool", value as CodingToolId)
+                      }
+                    >
+                      <SelectTrigger id="preferredCodingTool" className="bg-white">
+                        <SelectValue placeholder="Choose tool" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem
+                          value="vscode"
+                          disabled={!availability.vscode?.available}
+                        >
+                          VS Code
+                          {!availability.vscode?.available ? " (not installed)" : ""}
+                        </SelectItem>
+                        <SelectItem
+                          value="opencode"
+                          disabled={!availability.opencode?.available}
+                        >
+                          OpenCode
+                          {!availability.opencode?.available ? " (not installed)" : ""}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {preferences.preferredCodingTool !== preferredTool ? (
+                      <p className="text-[10px] text-muted-foreground">
+                        Currently falling back to{" "}
+                        <span className="font-medium text-foreground">
+                          {getCodingToolLabel(preferredTool)}
+                        </span>{" "}
+                        because your preferred tool is unavailable.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </div>

@@ -36,6 +36,7 @@ import {
 import { useWorkspaceAlerts } from "@/hooks/use-workspace-alerts";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { getDesktopApi } from "@/lib/desktop";
+import { useCodingTool } from "@/hooks/use-coding-tool";
 import { buildCreateSessionPath } from "@/lib/dev-sessions";
 import { setPullRequestClaimed } from "@/lib/pull-request-actions";
 import { getOpenAddProjectsDialogEvent } from "@/lib/project-import-events";
@@ -93,6 +94,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     [workspaceSelection],
   );
   const desktopApi = getDesktopApi();
+  const { openPreferredTool, preferredToolShortLabel } = useCodingTool();
   const hiddenProjectIds = useMemo(
     () =>
       new Set(
@@ -697,18 +699,18 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   .map((project) => (
                     <CommandItem
                       key={`code:${project.id}`}
-                      value={`open ${project.name} in code vscode`}
+                      value={`open ${project.name} in code vscode opencode`}
                       onSelect={() =>
                         handleCommandAction(() =>
-                          desktopApi.openInCode(project.localPath),
+                          openPreferredTool(project.localPath),
                         )
                       }
                     >
                       <FolderGit2 className="w-4 h-4 text-primary" />
                       <span className="truncate font-medium">
-                        Open {project.name} in VS Code
+                        Open {project.name} in {preferredToolShortLabel}
                       </span>
-                      <CommandShortcut>Code</CommandShortcut>
+                      <CommandShortcut>{preferredToolShortLabel}</CommandShortcut>
                     </CommandItem>
                   ))}
                 {searchResults.projects

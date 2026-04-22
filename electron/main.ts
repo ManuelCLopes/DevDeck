@@ -53,8 +53,14 @@ import {
 } from "./workspace";
 import {
   createGitWorktreeSession,
+  inspectDevSessions,
   removeGitWorktreeSession,
 } from "./git-worktree";
+import {
+  getDesktopCodingToolAvailability,
+  openInOpenCode,
+  openInVsCode,
+} from "./coding-tool-launcher";
 
 const execFileAsync = promisify(execFile);
 const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
@@ -841,12 +847,26 @@ ipcMain.handle("devdeck:open-in-terminal", async (_event, targetPath: string) =>
 });
 
 ipcMain.handle("devdeck:open-in-code", async (_event, targetPath: string) => {
-  if (process.platform === "darwin") {
-    await execFileAsync("open", ["-a", "Visual Studio Code", targetPath]);
-    return;
-  }
+  try {
+    await openInVsCode(targetPath);
+  } catch (error) {
+    // Fall back to the OS default handler so users without the `code` CLI
+    // can still reveal the project in whatever default opens folders.
+    if (error instanceof Error && error.message.includes("code")) {
+      await shell.openPath(targetPath);
+      return;
+    }
 
-  await shell.openPath(targetPath);
+    throw error;
+  }
+});
+
+ipcMain.handle("devdeck:open-in-opencode", async (_event, targetPath: string) => {
+  await openInOpenCode(targetPath);
+});
+
+ipcMain.handle("devdeck:get-desktop-coding-tool-availability", async () => {
+  return getDesktopCodingToolAvailability();
 });
 
 ipcMain.handle(
@@ -874,6 +894,20 @@ ipcMain.handle(
     },
   ) => {
     await removeGitWorktreeSession(payload);
+  },
+);
+
+ipcMain.handle(
+  "devdeck:inspect-dev-sessions",
+  async (
+    _event,
+    payload: Array<{
+      localPath: string;
+      repositoryPath: string;
+      sessionId: string;
+    }>,
+  ) => {
+    return inspectDevSessions(payload);
   },
 );
 

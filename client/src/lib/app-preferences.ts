@@ -11,6 +11,7 @@ export interface AppPreferences {
   notifyApproved: boolean;
   notifyChangesRequested: boolean;
   notifyReviewRequired: boolean;
+  preferredCodingTool: "opencode" | "vscode";
   refreshOnWindowFocus: boolean;
   showMenuBarIcon: boolean;
 }
@@ -27,6 +28,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   notifyApproved: true,
   notifyChangesRequested: true,
   notifyReviewRequired: true,
+  preferredCodingTool: "vscode",
   refreshOnWindowFocus: true,
   showMenuBarIcon: true,
 };

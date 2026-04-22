@@ -9,6 +9,7 @@ import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { navigateInApp } from "@/lib/app-navigation";
 import { getDesktopApi } from "@/lib/desktop";
+import { useCodingTool } from "@/hooks/use-coding-tool";
 import {
   buildCreateSessionPath,
   DEV_SESSIONS_STORAGE_KEY,
@@ -64,6 +65,7 @@ export default function Projects() {
   });
   const { data: snapshot, isLoading } = useWorkspaceSnapshot();
   const desktopApi = getDesktopApi();
+  const codingTool = useCodingTool();
 
   const filteredProjects = useMemo(() => {
     const query = searchQuery.toLowerCase();
@@ -120,7 +122,7 @@ export default function Projects() {
   };
 
   const openInCode = async (project: WorkspaceProject) => {
-    await desktopApi?.openInCode?.(project.localPath);
+    await codingTool.openPreferredTool(project.localPath);
   };
 
   const revealInFinder = async (project: WorkspaceProject) => {
@@ -151,8 +153,8 @@ export default function Projects() {
 
   const startSessionForProject = async (project: WorkspaceProject) => {
     const existingSession = findProjectDevSession(devSessions, project.id);
-    if (existingSession && desktopApi?.openInCode) {
-      await desktopApi.openInCode(existingSession.localPath);
+    if (existingSession && desktopApi) {
+      await codingTool.openPreferredTool(existingSession.localPath);
       return;
     }
 
@@ -439,7 +441,7 @@ export default function Projects() {
                       onClick={() => void openInCode(selectedProject)}
                       className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-md hover:bg-secondary transition-colors text-foreground"
                     >
-                      Open in VS Code
+                      Open in {codingTool.preferredToolLabel}
                     </button>
                     <button
                       type="button"

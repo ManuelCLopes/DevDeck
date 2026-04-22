@@ -9,6 +9,8 @@ import type {
 } from "../shared/workspace";
 import type {
   CreateGitWorktreeSessionResult,
+  DevSessionOperationalSnapshot,
+  InspectDevSessionRequest,
 } from "../shared/sessions";
 import type { WorkspaceMonitorPreferences } from "../shared/workspace-monitor";
 
@@ -61,6 +63,11 @@ const devdeck = {
   }): Promise<CreateGitWorktreeSessionResult> {
     return ipcRenderer.invoke("devdeck:create-git-worktree-session", payload);
   },
+  inspectDevSessions(
+    payload: InspectDevSessionRequest[],
+  ): Promise<DevSessionOperationalSnapshot[]> {
+    return ipcRenderer.invoke("devdeck:inspect-dev-sessions", payload);
+  },
   loadWorkspaceSnapshot(selection: WorkspaceSelection): Promise<WorkspaceSnapshot> {
     return ipcRenderer.invoke("devdeck:load-workspace-snapshot", selection);
   },
@@ -94,6 +101,15 @@ const devdeck = {
   },
   openInCode(targetPath: string): Promise<void> {
     return ipcRenderer.invoke("devdeck:open-in-code", targetPath);
+  },
+  openInOpencode(targetPath: string): Promise<void> {
+    return ipcRenderer.invoke("devdeck:open-in-opencode", targetPath);
+  },
+  getDesktopCodingToolAvailability(): Promise<{
+    opencode: { available: boolean; reason: string | null };
+    vscode: { available: boolean; reason: string | null };
+  }> {
+    return ipcRenderer.invoke("devdeck:get-desktop-coding-tool-availability");
   },
   openInTerminal(targetPath: string): Promise<void> {
     return ipcRenderer.invoke("devdeck:open-in-terminal", targetPath);

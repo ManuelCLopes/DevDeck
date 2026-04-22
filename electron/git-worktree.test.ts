@@ -6,6 +6,7 @@ import test from "node:test";
 import { execFileSync } from "node:child_process";
 import {
   createGitWorktreeSession,
+  inspectDevSession,
   removeGitWorktreeSession,
   sanitizeWorktreeSegment,
 } from "./git-worktree";
@@ -113,6 +114,44 @@ test("removeGitWorktreeSession removes the created worktree path", async () => {
       ).includes(session.localPath),
       false,
     );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("inspectDevSession reports clean branch state and last commit", async () => {
+  const fixture = createFixtureRepository();
+
+  try {
+    const snapshot = await inspectDevSession({
+      localPath: fixture.repositoryPath,
+      repositoryPath: fixture.repositoryPath,
+      sessionId: "session-1",
+    });
+
+    assert.equal(snapshot.exists, true);
+    assert.equal(snapshot.isRepository, true);
+    assert.equal(snapshot.hasUncommittedChanges, false);
+    assert.equal(snapshot.lastCommitSubject, "initial");
+    assert.ok(snapshot.currentBranch);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("inspectDevSession reports uncommitted changes", async () => {
+  const fixture = createFixtureRepository();
+
+  try {
+    writeFileSync(path.join(fixture.repositoryPath, "README.md"), "hello\nchange\n", "utf8");
+
+    const snapshot = await inspectDevSession({
+      localPath: fixture.repositoryPath,
+      repositoryPath: fixture.repositoryPath,
+      sessionId: "session-2",
+    });
+
+    assert.equal(snapshot.hasUncommittedChanges, true);
   } finally {
     fixture.cleanup();
   }

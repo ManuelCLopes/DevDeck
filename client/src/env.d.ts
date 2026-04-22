@@ -6,7 +6,11 @@ import type {
   WorkspaceSelection,
   WorkspaceSnapshot,
 } from "@shared/workspace";
-import type { CreateGitWorktreeSessionResult } from "@shared/sessions";
+import type {
+  CreateGitWorktreeSessionResult,
+  DevSessionOperationalSnapshot,
+  InspectDevSessionRequest,
+} from "@shared/sessions";
 import type { WorkspaceMonitorPreferences } from "@shared/workspace-monitor";
 
 interface WorkspaceMonitorState {
@@ -32,12 +36,19 @@ interface DevDeckDesktopApi {
   }): Promise<void>;
   clearGitHubToken(): Promise<void>;
   copyToClipboard(value: string): Promise<void>;
+  getDesktopCodingToolAvailability(): Promise<{
+    opencode: { available: boolean; reason: string | null };
+    vscode: { available: boolean; reason: string | null };
+  }>;
   createGitWorktreeSession(payload: {
     baseRef: string;
     branchName: string;
     repositoryPath: string;
     sessionPath?: string | null;
   }): Promise<CreateGitWorktreeSessionResult>;
+  inspectDevSessions(
+    payload: InspectDevSessionRequest[],
+  ): Promise<DevSessionOperationalSnapshot[]>;
   getGitHubAuthCapabilities(): Promise<{
     deviceFlowAvailable: boolean;
     deviceFlowReason: string | null;
@@ -57,6 +68,7 @@ interface DevDeckDesktopApi {
   ): () => void;
   openExternal(targetUrl: string): Promise<void>;
   openInCode(targetPath: string): Promise<void>;
+  openInOpencode(targetPath: string): Promise<void>;
   openInTerminal(targetPath: string): Promise<void>;
   pickWorkspaceDirectory(): Promise<WorkspaceDiscoveryResult | null>;
   requestPullRequestReviewers(payload: {
