@@ -57,6 +57,7 @@ import {
   buildTerminalPanesStorageKey,
   buildTerminalWorkspaceScopeKey,
   getExpandedTerminalLayout,
+  sanitizeUnavailableTerminalPanes,
 } from "@/lib/terminal-workspace";
 import { navigateInApp } from "@/lib/app-navigation";
 import { useAppPreferences } from "@/lib/app-preferences";
@@ -174,6 +175,14 @@ export default function Terminals() {
   }, [desktopApi]);
 
   const defaultCwd = selectedSession?.localPath ?? ptyAvailability?.homeDir ?? undefined;
+  const availableShells = useMemo(
+    () =>
+      DEFAULT_QUICK_SHELLS.filter(
+        (shell) =>
+          shell.command !== "opencode" || codingToolAvailability.opencode.available,
+      ),
+    [codingToolAvailability.opencode.available],
+  );
   const initialPanes = useMemo(
     () =>
       buildInitialPanes({
@@ -362,9 +371,10 @@ export default function Terminals() {
         ) : (
           <TerminalWorkspace
             key={storageScopeKey}
-            availableShells={DEFAULT_QUICK_SHELLS}
+            availableShells={availableShells}
             defaultCwd={defaultCwd}
             initialPanes={initialPanes}
+            opencodeAvailable={codingToolAvailability.opencode.available}
             preferences={terminalPreferences}
             scopeKey={storageScopeKey}
             sessionLabel={selectedSession?.label ?? null}
@@ -379,6 +389,7 @@ interface TerminalWorkspaceProps {
   availableShells: Array<{ label: string; command: string; args?: string[] }>;
   defaultCwd?: string;
   initialPanes: TerminalPaneConfig[];
+  opencodeAvailable: boolean;
   preferences: import("@/lib/app-preferences").TerminalPreferences;
   scopeKey: string;
   sessionLabel: string | null;
@@ -388,6 +399,7 @@ function TerminalWorkspace({
   availableShells,
   defaultCwd,
   initialPanes,
+  opencodeAvailable,
   preferences,
   scopeKey,
   sessionLabel,
@@ -406,6 +418,12 @@ function TerminalWorkspace({
     buildTerminalPanesStorageKey(scopeKey),
     initialPanes,
   );
+
+  useEffect(() => {
+    setPanes((currentPanes) =>
+      sanitizeUnavailableTerminalPanes(currentPanes, { opencodeAvailable }),
+    );
+  }, [opencodeAvailable, setPanes]);
 
   useEffect(() => {
     setActivePaneId(initialPanes[0]?.id ?? null);

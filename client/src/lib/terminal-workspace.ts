@@ -88,6 +88,30 @@ export function normalizeTerminalPanes(value: unknown): TerminalPaneConfig[] {
     }));
 }
 
+export function sanitizeUnavailableTerminalPanes(
+  panes: TerminalPaneConfig[],
+  options: { opencodeAvailable: boolean },
+) {
+  let changed = false;
+
+  const sanitized = panes.map((pane) => {
+    const command = pane.command?.trim().toLowerCase();
+    if (command !== "opencode" || options.opencodeAvailable) {
+      return pane;
+    }
+
+    changed = true;
+    return {
+      ...pane,
+      args: undefined,
+      command: undefined,
+      label: pane.label === "OpenCode" ? "Shell" : pane.label,
+    } satisfies TerminalPaneConfig;
+  });
+
+  return changed ? sanitized : panes;
+}
+
 function getPaneToolLabel(pane: TerminalPaneConfig) {
   const command = pane.command?.toLowerCase() ?? "";
 

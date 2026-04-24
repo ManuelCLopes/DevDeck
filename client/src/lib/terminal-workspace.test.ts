@@ -6,6 +6,7 @@ import {
   buildTerminalWorkspaceScopeKey,
   getExpandedTerminalLayout,
   readStoredTerminalWorkspaceSummary,
+  sanitizeUnavailableTerminalPanes,
   summarizeTerminalWorkspace,
 } from "@/lib/terminal-workspace";
 
@@ -84,4 +85,41 @@ test("readStoredTerminalWorkspaceSummary reads persisted session workspaces", ()
   });
 
   delete (globalThis as { window?: unknown }).window;
+});
+
+test("sanitizeUnavailableTerminalPanes falls back from unavailable opencode panes", () => {
+  const sanitized = sanitizeUnavailableTerminalPanes(
+    [
+      {
+        args: ["."],
+        command: "opencode",
+        cwd: "/tmp/repo",
+        id: "1",
+        label: "OpenCode",
+      },
+      {
+        command: "/bin/zsh",
+        cwd: "/tmp/repo",
+        id: "2",
+        label: "Shell 2",
+      },
+    ],
+    { opencodeAvailable: false },
+  );
+
+  assert.deepEqual(sanitized, [
+    {
+      args: undefined,
+      command: undefined,
+      cwd: "/tmp/repo",
+      id: "1",
+      label: "Shell",
+    },
+    {
+      command: "/bin/zsh",
+      cwd: "/tmp/repo",
+      id: "2",
+      label: "Shell 2",
+    },
+  ]);
 });

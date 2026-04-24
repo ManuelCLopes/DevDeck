@@ -1,6 +1,8 @@
 import { app, ipcMain, webContents, type WebContents } from "electron";
+import { execFileSync } from "node:child_process";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import type { IPty } from "node-pty";
 import type {
   SpawnPtyRequest,
@@ -141,6 +143,42 @@ function resolveLabel(label: string | undefined, shell: string) {
   return base;
 }
 
+function commandExists(command: string) {
+  try {
+    execFileSync(process.platform === "win32" ? "where" : "which", [command], {
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function ensureLaunchableCommand(command: string) {
+  const trimmedCommand = command.trim();
+  if (!trimmedCommand) {
+    return;
+  }
+
+  const looksLikePath =
+    trimmedCommand.includes("/") || trimmedCommand.includes("\\");
+
+  if (looksLikePath) {
+    if (!existsSync(trimmedCommand)) {
+      throw new Error(
+        `Terminal command \`${trimmedCommand}\` was not found on disk.`,
+      );
+    }
+    return;
+  }
+
+  if (!commandExists(trimmedCommand)) {
+    throw new Error(
+      `Terminal command \`${trimmedCommand}\` is not available on this machine. Install it or change the pane command.`,
+    );
+  }
+}
+
 function disposeEntry(id: string, entry: Entry) {
   entries.delete(id);
   try {
@@ -191,13 +229,24 @@ function spawnPty(sender: WebContents, request: SpawnPtyRequest): SpawnPtyResult
   const cols = clampDimension(request.cols, 80, 40, 400);
   const rows = clampDimension(request.rows, 24, 10, 200);
 
-  const pty = ptyModule.spawn(shell, args, {
-    name: "xterm-256color",
-    cols,
-    rows,
-    cwd,
-    env: mergeEnv(request.env),
-  });
+  ensureLaunchableCommand(shell);
+
+  let pty: IPty;
+  try {
+    pty = ptyModule.spawn(shell, args, {
+      name: "xterm-256color",
+      cols,
+      rows,
+      cwd,
+      env: mergeEnv(request.env),
+    });
+  } catch (error) {
+    throw new Error(
+      `Failed to start terminal command \`${shell}\`: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 
   const id = randomUUID();
   const entry: Entry = {
