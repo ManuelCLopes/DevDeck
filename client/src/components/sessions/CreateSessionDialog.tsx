@@ -193,7 +193,7 @@ export default function CreateSessionDialog({
         onOpenChange(false);
         onSessionActivated?.(duplicateSession);
         toast({
-          title: "Session already active",
+          title: "OpenCode session already active",
           description: `${duplicateSession.label} is already active in DevDeck.`,
         });
         return;
@@ -246,17 +246,20 @@ export default function CreateSessionDialog({
       onOpenChange(false);
       onSessionActivated?.(nextSession);
       toast({
-        title: sessionKind === "worktree" ? "Worktree session created" : "Session created",
+        title:
+          sessionKind === "worktree"
+            ? "OpenCode worktree ready"
+            : "OpenCode session ready",
         description:
           sessionKind === "worktree"
-            ? `${selectedProject.name} is ready in a new worktree.`
+            ? `${selectedProject.name} is ready in a dedicated worktree for OpenCode.`
             : `${selectedProject.name} is ready from the linked clone.`,
       });
     } catch (error) {
       setCreationError(
         error instanceof Error
           ? error.message
-          : "DevDeck could not create that session.",
+          : "DevDeck could not create that OpenCode session.",
       );
     } finally {
       setIsCreating(false);
@@ -265,18 +268,18 @@ export default function CreateSessionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>New Session</DialogTitle>
+          <DialogTitle>New OpenCode Session</DialogTitle>
           <DialogDescription>
-            Launch an existing clone or create an isolated worktree for parallel work.
+            Prepare a repository for OpenCode using a linked clone or an isolated worktree.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
           {duplicateSession ? (
             <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
-              <p className="font-medium text-foreground">Session already active</p>
+              <p className="font-medium text-foreground">OpenCode session already active</p>
               <p className="mt-1 text-muted-foreground">
                 DevDeck already has an active session for this context at{" "}
                 <span className="font-mono text-[12px] text-foreground">
@@ -315,12 +318,12 @@ export default function CreateSessionDialog({
 
             <div className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Session Template
+                OpenCode Setup
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { id: "existing_clone", label: "Existing Clone" },
-                  { id: "worktree", label: "New Worktree" },
+                  { id: "existing_clone", label: "Linked Clone" },
+                  { id: "worktree", label: "Review Worktree" },
                 ].map((option) => (
                   <button
                     key={option.id}
@@ -373,7 +376,7 @@ export default function CreateSessionDialog({
 
             <div className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Session Label
+                OpenCode Session Name
               </p>
               <Input
                 value={label}
@@ -386,7 +389,7 @@ export default function CreateSessionDialog({
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {sessionKind === "worktree" ? "Session Branch" : "Launch Branch"}
+                {sessionKind === "worktree" ? "Worktree Branch" : "Open From Branch"}
               </p>
               <Input
                 value={sessionBranchName}
@@ -410,11 +413,11 @@ export default function CreateSessionDialog({
           <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 text-sm text-muted-foreground">
             {sessionKind === "worktree" ? (
               <p>
-                DevDeck will create a new sibling worktree from <span className="font-medium text-foreground">{sourceRef || "HEAD"}</span> using branch <span className="font-medium text-foreground">{sessionBranchName || "session"}</span>.
+                DevDeck will create a new sibling worktree from <span className="font-medium text-foreground">{sourceRef || "HEAD"}</span> using branch <span className="font-medium text-foreground">{sessionBranchName || "session"}</span>, ready for an isolated OpenCode session.
               </p>
             ) : (
               <p>
-                DevDeck will track the existing clone at <span className="font-medium break-all text-foreground">{selectedProject?.localPath ?? "the selected repository path"}</span>.
+                DevDeck will track the linked clone at <span className="font-medium break-all text-foreground">{selectedProject?.localPath ?? "the selected repository path"}</span> so you can reopen it quickly in OpenCode.
               </p>
             )}
           </div>
@@ -434,10 +437,10 @@ export default function CreateSessionDialog({
             {isCreating
               ? "Creating..."
               : duplicateSession
-                ? "Open Existing Session"
+                ? "Open Existing OpenCode Session"
                 : sessionKind === "worktree"
-                  ? "Create Worktree Session"
-                  : "Create Session"}
+                  ? "Create OpenCode Review Worktree"
+                  : "Create OpenCode Session"}
           </Button>
         </DialogFooter>
       </DialogContent>

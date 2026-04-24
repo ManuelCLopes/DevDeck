@@ -12,6 +12,7 @@ import { getDesktopApi } from "@/lib/desktop";
 import { useCodingTool } from "@/hooks/use-coding-tool";
 import {
   buildCreateSessionPath,
+  buildTerminalsPath,
   DEV_SESSIONS_STORAGE_KEY,
   findProjectDevSession,
   normalizeDevSessions,
@@ -153,8 +154,8 @@ export default function Projects() {
 
   const startSessionForProject = async (project: WorkspaceProject) => {
     const existingSession = findProjectDevSession(devSessions, project.id);
-    if (existingSession && desktopApi) {
-      await codingTool.openPreferredTool(existingSession.localPath);
+    if (existingSession) {
+      navigateInApp(buildTerminalsPath(existingSession.id), setLocation);
       return;
     }
 
@@ -427,7 +428,7 @@ export default function Projects() {
                       onClick={() => void startSessionForProject(selectedProject)}
                       className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-md hover:bg-secondary transition-colors text-foreground"
                     >
-                      {selectedProjectSession ? "Open Session" : "Start Session"}
+                      {selectedProjectSession ? "Open OpenCode Session" : "Start OpenCode Session"}
                     </button>
                     <button
                       type="button"

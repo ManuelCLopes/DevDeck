@@ -6,6 +6,7 @@ import {
   Paintbrush,
   PlusSquare,
   Play,
+  RotateCcw,
   TerminalSquare,
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
@@ -41,8 +42,6 @@ import {
   TerminalGrid,
   defaultLayoutForSaved,
   layoutCapacity,
-  type TerminalLayout,
-  type TerminalPaneConfig,
 } from "@/components/terminal/TerminalGrid";
 import {
   DEV_SESSIONS_STORAGE_KEY,
@@ -57,8 +56,10 @@ import {
   buildTerminalPanesStorageKey,
   buildTerminalWorkspaceScopeKey,
   getExpandedTerminalLayout,
+  normalizeTerminalPanes,
   sanitizeUnavailableTerminalPanes,
 } from "@/lib/terminal-workspace";
+import type { TerminalLayout, TerminalPaneConfig } from "@/lib/terminal-panes";
 import { navigateInApp } from "@/lib/app-navigation";
 import { useAppPreferences } from "@/lib/app-preferences";
 import { getDesktopApi } from "@/lib/desktop";
@@ -151,6 +152,7 @@ export default function Terminals() {
     if (!desktopApi?.terminal) {
       setPtyAvailability({
         available: false,
+        availableCommands: [],
         reason:
           "Embedded terminals require the DevDeck desktop app. Run `npm run dev` with Electron to use this page.",
         platform: null,
@@ -166,6 +168,7 @@ export default function Terminals() {
       .catch((error) =>
         setPtyAvailability({
           available: false,
+          availableCommands: [],
           reason: error instanceof Error ? error.message : String(error),
           platform: null,
           defaultShell: null,
@@ -179,9 +182,12 @@ export default function Terminals() {
     () =>
       DEFAULT_QUICK_SHELLS.filter(
         (shell) =>
-          shell.command !== "opencode" || codingToolAvailability.opencode.available,
+          (shell.command !== "opencode" || codingToolAvailability.opencode.available) &&
+          (ptyAvailability?.availableCommands.length
+            ? ptyAvailability.availableCommands.includes(shell.command)
+            : true),
       ),
-    [codingToolAvailability.opencode.available],
+    [codingToolAvailability.opencode.available, ptyAvailability?.availableCommands],
   );
   const initialPanes = useMemo(
     () =>
@@ -241,7 +247,7 @@ export default function Terminals() {
               <div className="rounded-xl border border-border/60 bg-white/75 p-3 shadow-sm backdrop-blur-md">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
-                    Session context
+                    OpenCode session
                   </span>
                   <button
                     type="button"
@@ -269,12 +275,12 @@ export default function Terminals() {
                   </span>
                   {selectedSession.kind === "worktree" ? (
                     <span className="rounded-full border border-border/60 bg-secondary/30 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                      Worktree
+                      Review worktree
                     </span>
                   ) : null}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <OpenInCodeButton targetPath={selectedSession.localPath} />
+                    <OpenInCodeButton targetPath={selectedSession.localPath} />
                   <Button
                     type="button"
                     variant="outline"
@@ -283,7 +289,7 @@ export default function Terminals() {
                     onClick={() => navigateInApp("/sessions", setLocation)}
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
-                    Back to Sessions
+                    Back to OpenCode Sessions
                   </Button>
                 </div>
               </div>
@@ -292,7 +298,7 @@ export default function Terminals() {
             {sessionMissing ? (
               <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
                 <AlertTriangle className="h-4 w-4" />
-                The requested session is no longer active. Showing the shared terminal workspace instead.
+                The requested OpenCode session is no longer active. Showing the shared terminals workspace instead.
               </div>
             ) : null}
           </div>
@@ -304,11 +310,11 @@ export default function Terminals() {
                 onValueChange={handleSessionChange}
               >
                 <SelectTrigger className="h-9 w-[240px] bg-white text-[12px]">
-                  <SelectValue placeholder="Choose session context" />
+                  <SelectValue placeholder="Choose OpenCode session" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={GLOBAL_TERMINAL_WORKSPACE_SCOPE}>
-                    Shared terminal workspace
+                    Shared terminals workspace
                   </SelectItem>
                   {activeSessions.map((session) => (
                     <SelectItem key={session.id} value={session.id}>
@@ -369,16 +375,19 @@ export default function Terminals() {
             </div>
           </div>
         ) : (
-          <TerminalWorkspace
-            key={storageScopeKey}
-            availableShells={availableShells}
-            defaultCwd={defaultCwd}
-            initialPanes={initialPanes}
-            opencodeAvailable={codingToolAvailability.opencode.available}
-            preferences={terminalPreferences}
-            scopeKey={storageScopeKey}
-            sessionLabel={selectedSession?.label ?? null}
-          />
+          <div className="flex flex-1 min-h-[420px] min-w-0 flex-col">
+            <TerminalWorkspace
+              key={storageScopeKey}
+              availableShells={availableShells}
+              availableCommands={ptyAvailability?.availableCommands ?? []}
+              defaultCwd={defaultCwd}
+              initialPanes={initialPanes}
+              opencodeAvailable={codingToolAvailability.opencode.available}
+              preferences={terminalPreferences}
+              scopeKey={storageScopeKey}
+              sessionLabel={selectedSession?.label ?? null}
+            />
+          </div>
         )}
       </div>
     </AppLayout>
@@ -386,6 +395,7 @@ export default function Terminals() {
 }
 
 interface TerminalWorkspaceProps {
+  availableCommands: string[];
   availableShells: Array<{ label: string; command: string; args?: string[] }>;
   defaultCwd?: string;
   initialPanes: TerminalPaneConfig[];
@@ -396,6 +406,7 @@ interface TerminalWorkspaceProps {
 }
 
 function TerminalWorkspace({
+  availableCommands,
   availableShells,
   defaultCwd,
   initialPanes,
@@ -417,13 +428,26 @@ function TerminalWorkspace({
   const [panes, setPanes] = usePersistentState<TerminalPaneConfig[]>(
     buildTerminalPanesStorageKey(scopeKey),
     initialPanes,
+    {
+      deserialize: (value) => normalizeTerminalPanes(JSON.parse(value)),
+    },
   );
 
   useEffect(() => {
-    setPanes((currentPanes) =>
-      sanitizeUnavailableTerminalPanes(currentPanes, { opencodeAvailable }),
-    );
-  }, [opencodeAvailable, setPanes]);
+    setPanes((currentPanes) => {
+      const normalizedPanes = normalizeTerminalPanes(currentPanes);
+      const recoveredPanes =
+        normalizedPanes.length > 0 ? normalizedPanes : initialPanes;
+      const sanitizedPanes = sanitizeUnavailableTerminalPanes(recoveredPanes, {
+        availableCommands,
+        opencodeAvailable,
+      });
+
+      return areTerminalPanesEqual(currentPanes, sanitizedPanes)
+        ? currentPanes
+        : sanitizedPanes;
+    });
+  }, [availableCommands, initialPanes, opencodeAvailable, setPanes]);
 
   useEffect(() => {
     setActivePaneId(initialPanes[0]?.id ?? null);
@@ -502,7 +526,7 @@ function TerminalWorkspace({
   );
 
   return (
-    <div className="flex-1 min-h-0 min-w-0">
+    <div className="flex h-full min-h-[420px] min-w-0 flex-1 flex-col">
       <TerminalGrid
         layout={layout}
         onLayoutChange={setLayout}
@@ -511,12 +535,63 @@ function TerminalWorkspace({
         preferences={preferences}
         availableShells={availableShells}
         defaultCwd={defaultCwd}
-        headerSlot={headerSlot}
+        headerSlot={
+          <div className="flex flex-wrap items-center gap-2">
+            {headerSlot}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-[12px]"
+              onClick={() => {
+                window.localStorage.removeItem(
+                  buildTerminalLayoutStorageKey(scopeKey),
+                );
+                window.localStorage.removeItem(
+                  buildTerminalPanesStorageKey(scopeKey),
+                );
+                setLayout("single");
+                setPanes(initialPanes);
+                setActivePaneId(initialPanes[0]?.id ?? null);
+                toast({
+                  title: "Terminal workspace reset",
+                  description:
+                    "The saved terminal layout was cleared for this workspace.",
+                });
+              }}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reset Workspace
+            </Button>
+          </div>
+        }
         activePaneId={activePaneId}
         onActivePaneIdChange={setActivePaneId}
       />
     </div>
   );
+}
+
+function areTerminalPanesEqual(
+  left: TerminalPaneConfig[],
+  right: TerminalPaneConfig[],
+) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((pane, index) => {
+    const candidate = right[index];
+    return (
+      pane.id === candidate.id &&
+      pane.label === candidate.label &&
+      pane.command === candidate.command &&
+      pane.cwd === candidate.cwd &&
+      pane.accent === candidate.accent &&
+      JSON.stringify(pane.args ?? []) === JSON.stringify(candidate.args ?? []) &&
+      JSON.stringify(pane.env ?? {}) === JSON.stringify(candidate.env ?? {})
+    );
+  });
 }
 
 interface QuickShellActionsProps {

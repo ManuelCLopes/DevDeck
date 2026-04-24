@@ -236,7 +236,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { href: "/", icon: LayoutGrid, label: "Overview" },
     { href: "/reviews", icon: MessageSquare, label: "Pull Requests" },
     { href: "/projects", icon: FolderGit2, label: "Repositories" },
-    { href: "/sessions", icon: SquareTerminal, label: "Sessions" },
+    { href: "/sessions", icon: SquareTerminal, label: "OpenCode Sessions" },
     { href: "/terminals", icon: TerminalSquare, label: "Terminals" },
     { href: "/activity", icon: Activity, label: "Activity Inbox" },
     { href: "/team", icon: Users2, label: "Team Insights" },
@@ -596,7 +596,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
           {/* Scrollable Content */}
           <div className="flex-1 overflow-x-hidden overflow-y-auto bg-white p-4 sm:p-6 lg:p-8 no-drag">
-            <div className="mx-auto w-full min-w-0 max-w-[1200px]">
+            <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1200px] flex-col">
               {children}
             </div>
           </div>
@@ -655,7 +655,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             </CommandItem>
             <CommandItem value="open sessions workspace ops" onSelect={() => handleNavigate("/sessions")}>
               <SquareTerminal className="w-4 h-4 text-primary" />
-              <span className="font-medium">Open Sessions</span>
+              <span className="font-medium">Open OpenCode Sessions</span>
             </CommandItem>
             <CommandItem
               value="open terminals embedded shell opencode"
@@ -728,7 +728,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   .map((project) => (
                     <CommandItem
                       key={`session:${project.id}`}
-                      value={`start session ${project.name} worktree repository`}
+                      value={`start opencode session ${project.name} worktree repository`}
                       onSelect={() =>
                         handleCommandAction(() =>
                           handleNavigate(buildCreateSessionPath(project.id)),
@@ -737,9 +737,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     >
                       <SquareTerminal className="w-4 h-4 text-primary" />
                       <span className="truncate font-medium">
-                        Start Session for {project.name}
+                        Start OpenCode for {project.name}
                       </span>
-                      <CommandShortcut>Session</CommandShortcut>
+                      <CommandShortcut>OpenCode</CommandShortcut>
                     </CommandItem>
                   ))}
                 {searchResults.projects
@@ -795,7 +795,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 {searchResults.pullRequests.slice(0, 3).map((pullRequest) => (
                   <CommandItem
                     key={`session-pr:${pullRequest.id}`}
-                    value={`review session ${pullRequest.title} ${pullRequest.repo}`}
+                      value={`start opencode review ${pullRequest.title} ${pullRequest.repo}`}
                     onSelect={() =>
                       handleCommandAction(() =>
                         handleNavigate(
@@ -809,9 +809,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   >
                     <SquareTerminal className="w-4 h-4 text-primary" />
                     <span className="truncate font-medium">
-                      Start Session for #{pullRequest.number}
+                      Start OpenCode for #{pullRequest.number}
                     </span>
-                    <CommandShortcut>Review</CommandShortcut>
+                    <CommandShortcut>OpenCode</CommandShortcut>
                   </CommandItem>
                 ))}
                 {searchResults.pullRequests.slice(0, 3).map((pullRequest) => (

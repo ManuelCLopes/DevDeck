@@ -44,7 +44,7 @@ test("buildDefaultSessionLabel adapts to worktree and existing clone templates",
       projectName: "DevDeck",
       pullRequestNumber: 42,
     }),
-    "Review #42 · Existing Clone",
+    "Review #42 · Linked Clone",
   );
 });
 
@@ -183,7 +183,7 @@ test("findDuplicateDevSession matches existing clone sessions by repository and 
     {
       id: "clone-pr",
       kind: "existing_clone",
-      label: "Review #42 · Existing Clone",
+      label: "Review #42 · Linked Clone",
       linkedPullRequestId: "pr-42",
       localPath: "/tmp/repo-1",
       projectId: "repo-1",

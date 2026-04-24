@@ -74,14 +74,14 @@ export function buildDefaultSessionLabel(options: {
   if (options.pullRequestNumber) {
     return options.kind === "worktree"
       ? `Review #${options.pullRequestNumber}`
-      : `Review #${options.pullRequestNumber} · Existing Clone`;
+      : `Review #${options.pullRequestNumber} · Linked Clone`;
   }
 
   if (options.kind === "worktree" && options.sessionBranchName) {
     return `${options.projectName} · ${options.sessionBranchName}`;
   }
 
-  return `${options.projectName} Session`;
+  return `${options.projectName} OpenCode`;
 }
 
 export function buildDefaultSessionBranchName(options: {
@@ -111,7 +111,7 @@ export function normalizeDevSessions(rawValue: unknown): DevSession[] {
         typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString(),
       id: typeof value.id === "string" ? value.id : createSessionId(),
       kind: (value.kind === "worktree" ? "worktree" : "existing_clone") as DevSessionKind,
-      label: typeof value.label === "string" ? value.label : "Session",
+      label: typeof value.label === "string" ? value.label : "OpenCode Session",
       linkedPullRequestId:
         typeof value.linkedPullRequestId === "string" ? value.linkedPullRequestId : null,
       linkedPullRequestNumber:

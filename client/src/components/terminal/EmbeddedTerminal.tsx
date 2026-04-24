@@ -4,10 +4,12 @@ import { AlertTriangle, RotateCcw, X } from "lucide-react";
 import { useEmbeddedTerminal } from "@/hooks/use-embedded-terminal";
 import type { TerminalPreferences } from "@/lib/app-preferences";
 import { getTerminalTheme } from "@/lib/terminal-theme";
+import type { TerminalPaneAccentDefinition } from "@/lib/terminal-panes";
 import { cn } from "@/lib/utils";
 
 interface EmbeddedTerminalProps {
   active?: boolean;
+  accent: TerminalPaneAccentDefinition;
   className?: string;
   command?: string;
   args?: string[];
@@ -21,6 +23,7 @@ interface EmbeddedTerminalProps {
 
 export function EmbeddedTerminal({
   active = false,
+  accent,
   className,
   command,
   args,
@@ -42,7 +45,7 @@ export function EmbeddedTerminal({
     });
   const theme = useMemo(() => getTerminalTheme(preferences.theme), [preferences.theme]);
   const displayLabel = info?.label ?? label ?? "shell";
-  const displayCwd = cwd ?? info?.shell ?? null;
+  const displayCwd = info?.cwd ?? cwd ?? info?.shell ?? null;
 
   useEffect(() => {
     if (active) {
@@ -72,18 +75,23 @@ export function EmbeddedTerminal({
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-border/60 bg-white/80 shadow-sm",
-        active ? "ring-1 ring-primary/40" : "ring-0",
+        "flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border bg-white/80 shadow-sm transition-colors",
+        accent.panelClassName,
+        active ? `ring-1 ${accent.ringClassName}` : "ring-0",
         className,
       )}
       onPointerDownCapture={() => {
         onFocusRequest?.();
       }}
     >
-      <header className="flex items-center gap-2 border-b border-border/60 bg-[#f6f6f4] px-3 py-1.5 text-[11px]">
+      <header
+        className={cn(
+          "flex items-center gap-2 border-b border-border/60 px-3 py-1.5 text-[11px]",
+          accent.headerClassName,
+        )}
+      >
         <div
-          className="h-2 w-2 rounded-full"
-          style={{ backgroundColor: theme.colors.cursor }}
+          className={cn("h-2 w-2 rounded-full", accent.dotClassName)}
           aria-hidden="true"
         />
         <span className="truncate font-medium text-foreground/85">

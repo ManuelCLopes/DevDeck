@@ -2,7 +2,7 @@ import { app, ipcMain, webContents, type WebContents } from "electron";
 import { execFileSync } from "node:child_process";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import type { IPty } from "node-pty";
 import type {
   SpawnPtyRequest,
@@ -35,6 +35,7 @@ interface Entry {
 const entries = new Map<string, Entry>();
 let nodePtyModule: typeof import("node-pty") | null = null;
 let nodePtyLoadError: Error | null = null;
+let ptySpawnProbeError: Error | null = null;
 
 function loadNodePty() {
   if (nodePtyModule) {
@@ -75,6 +76,32 @@ export function isNodePtyAvailable() {
   }
 }
 
+function probePtySpawnability() {
+  try {
+    const ptyModule = loadNodePty();
+    const probeShell =
+      process.platform === "win32" ? defaultShell() : "/bin/sh";
+    const probeArgs = process.platform === "win32" ? [] : ["-lc", "exit 0"];
+    const probe = ptyModule.spawn(probeShell, probeArgs, {
+      cols: 10,
+      rows: 5,
+      cwd: app.getPath("home"),
+      env: mergeEnv(undefined),
+      name: "xterm-256color",
+    });
+    probe.kill();
+    ptySpawnProbeError = null;
+    return true;
+  } catch (error) {
+    ptySpawnProbeError = new Error(
+      `node-pty is installed but cannot start shell processes: ${
+        error instanceof Error ? error.message : String(error)
+      }. Run \`npm run electron:rebuild\` and restart DevDeck.`,
+    );
+    return false;
+  }
+}
+
 function defaultShell() {
   if (process.platform === "win32") {
     // PowerShell is the sensible default on modern Windows. Users who want
@@ -102,7 +129,13 @@ function defaultShellArgs(shell: string) {
 
 function resolveCwd(requested: string | undefined) {
   if (requested && requested.trim().length > 0) {
-    return requested;
+    try {
+      if (existsSync(requested) && statSync(requested).isDirectory()) {
+        return requested;
+      }
+    } catch {
+      // Fall back to the home directory below.
+    }
   }
 
   return app.getPath("home");
@@ -152,6 +185,16 @@ function commandExists(command: string) {
   } catch {
     return false;
   }
+}
+
+function collectAvailableCommands(commands: string[]) {
+  return commands.filter((command, index, currentCommands) => {
+    if (currentCommands.indexOf(command) !== index) {
+      return false;
+    }
+
+    return commandExists(command);
+  });
 }
 
 function ensureLaunchableCommand(command: string) {
@@ -349,11 +392,23 @@ export function registerPtyIpc() {
   );
 
   ipcMain.handle("devdeck:pty:available", async () => {
+    const moduleAvailable = isNodePtyAvailable();
+    const spawnAvailable = moduleAvailable ? probePtySpawnability() : false;
+    const defaultShellCommand = defaultShell();
+    const availableCommands = collectAvailableCommands([
+      "opencode",
+      "claude",
+      defaultShellCommand,
+      "/bin/zsh",
+      "/bin/bash",
+    ]);
+
     return {
-      available: isNodePtyAvailable(),
-      reason: nodePtyLoadError?.message ?? null,
+      available: moduleAvailable && spawnAvailable,
+      availableCommands,
+      reason: nodePtyLoadError?.message ?? ptySpawnProbeError?.message ?? null,
       platform: process.platform,
-      defaultShell: defaultShell(),
+      defaultShell: defaultShellCommand,
       homeDir: os.homedir(),
     };
   });

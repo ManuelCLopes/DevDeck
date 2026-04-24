@@ -1,4 +1,9 @@
-import type { TerminalPaneConfig, TerminalLayout } from "@/components/terminal/TerminalGrid";
+import {
+  getDefaultTerminalPaneAccent,
+  type TerminalPaneAccent,
+  type TerminalPaneConfig,
+  type TerminalLayout,
+} from "@/lib/terminal-panes";
 
 export const GLOBAL_TERMINAL_WORKSPACE_SCOPE = "__global__";
 const DEFAULT_LAYOUT: TerminalLayout = "single";
@@ -85,18 +90,50 @@ export function normalizeTerminalPanes(value: unknown): TerminalPaneConfig[] {
               ),
             )
           : undefined,
+      accent: normalizeTerminalPaneAccent(candidate.accent, index),
     }));
+}
+
+function normalizeTerminalPaneAccent(
+  value: unknown,
+  index: number,
+): TerminalPaneAccent {
+  if (
+    value === "slate" ||
+    value === "blue" ||
+    value === "emerald" ||
+    value === "amber" ||
+    value === "rose" ||
+    value === "violet"
+  ) {
+    return value;
+  }
+
+  return getDefaultTerminalPaneAccent(index);
 }
 
 export function sanitizeUnavailableTerminalPanes(
   panes: TerminalPaneConfig[],
-  options: { opencodeAvailable: boolean },
+  options: { availableCommands: string[]; opencodeAvailable: boolean },
 ) {
   let changed = false;
+  const availableCommands = new Set(
+    options.availableCommands.map((command) => command.trim().toLowerCase()),
+  );
 
   const sanitized = panes.map((pane) => {
     const command = pane.command?.trim().toLowerCase();
-    if (command !== "opencode" || options.opencodeAvailable) {
+    const commandUnavailable =
+      command === "opencode"
+        ? !options.opencodeAvailable
+        : command
+          ? availableCommands.size > 0 &&
+            !command.includes("/") &&
+            !command.includes("\\") &&
+            !availableCommands.has(command)
+          : false;
+
+    if (!command || !commandUnavailable) {
       return pane;
     }
 
@@ -105,7 +142,10 @@ export function sanitizeUnavailableTerminalPanes(
       ...pane,
       args: undefined,
       command: undefined,
-      label: pane.label === "OpenCode" ? "Shell" : pane.label,
+      label:
+        pane.label === "OpenCode" || pane.label === "Claude"
+          ? "Shell"
+          : pane.label,
     } satisfies TerminalPaneConfig;
   });
 

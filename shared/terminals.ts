@@ -18,6 +18,7 @@ export interface SpawnPtyResult {
 
 export interface PtyAvailability {
   available: boolean;
+  availableCommands: string[];
   reason: string | null;
   platform: NodeJS.Platform | null;
   defaultShell: string | null;

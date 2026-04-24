@@ -13,6 +13,13 @@ import {
 } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
 import {
+  getDefaultTerminalPaneAccent,
+  getTerminalPaneAccentDefinition,
+  TERMINAL_PANE_ACCENTS,
+  type TerminalLayout,
+  type TerminalPaneConfig,
+} from "@/lib/terminal-panes";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -21,17 +28,6 @@ import {
 import { EmbeddedTerminal } from "@/components/terminal/EmbeddedTerminal";
 import type { TerminalPreferences } from "@/lib/app-preferences";
 import { cn } from "@/lib/utils";
-
-export type TerminalLayout = "single" | "columns" | "rows" | "grid";
-
-export interface TerminalPaneConfig {
-  id: string;
-  label: string;
-  command?: string;
-  args?: string[];
-  cwd?: string;
-  env?: Record<string, string>;
-}
 
 interface TerminalGridProps {
   activePaneId?: string | null;
@@ -127,6 +123,7 @@ export function createDefaultPane(
         : `pane-${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
     label: `Shell ${index + 1}`,
     cwd: defaultCwd,
+    accent: getDefaultTerminalPaneAccent(index),
   };
 }
 
@@ -202,15 +199,17 @@ export function TerminalGrid({
   }, [layout, onLayoutChange]);
 
   const renderPane = (pane: TerminalPaneConfig) => (
-    <TerminalPane
-      active={pane.id === activePaneId}
-      pane={pane}
-      preferences={preferences}
-      onUpdate={(updates) => handleUpdatePane(pane.id, updates)}
-      onFocus={() => setActivePaneId(pane.id)}
-      onClose={normalizedPanes.length > 1 ? handleShrinkLayout : undefined}
-      availableShells={availableShells}
-    />
+    <div className="h-full min-h-0 min-w-0">
+      <TerminalPane
+        active={pane.id === activePaneId}
+        pane={pane}
+        preferences={preferences}
+        onUpdate={(updates) => handleUpdatePane(pane.id, updates)}
+        onFocus={() => setActivePaneId(pane.id)}
+        onClose={normalizedPanes.length > 1 ? handleShrinkLayout : undefined}
+        availableShells={availableShells}
+      />
+    </div>
   );
 
   return (
@@ -221,48 +220,48 @@ export function TerminalGrid({
       </div>
       <div className="flex-1 min-h-0 min-w-0">
         {layout === "single" ? (
-          <div className="h-full">{renderPane(normalizedPanes[0])}</div>
+          <div className="h-full min-h-0 min-w-0">{renderPane(normalizedPanes[0])}</div>
         ) : layout === "columns" ? (
-          <ResizablePanelGroup direction="horizontal" className="gap-1">
-            <ResizablePanel defaultSize={50} minSize={15}>
+          <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 min-w-0 gap-1">
+            <ResizablePanel defaultSize={50} minSize={15} className="min-h-0 min-w-0">
               {renderPane(normalizedPanes[0])}
             </ResizablePanel>
             <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={50} minSize={15}>
+            <ResizablePanel defaultSize={50} minSize={15} className="min-h-0 min-w-0">
               {renderPane(normalizedPanes[1])}
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : layout === "rows" ? (
-          <ResizablePanelGroup direction="vertical" className="gap-1">
-            <ResizablePanel defaultSize={50} minSize={15}>
+          <ResizablePanelGroup direction="vertical" className="h-full min-h-0 min-w-0 gap-1">
+            <ResizablePanel defaultSize={50} minSize={15} className="min-h-0 min-w-0">
               {renderPane(normalizedPanes[0])}
             </ResizablePanel>
             <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={50} minSize={15}>
+            <ResizablePanel defaultSize={50} minSize={15} className="min-h-0 min-w-0">
               {renderPane(normalizedPanes[1])}
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (
-          <ResizablePanelGroup direction="vertical" className="gap-1">
-            <ResizablePanel defaultSize={50} minSize={15}>
-              <ResizablePanelGroup direction="horizontal" className="gap-1">
-                <ResizablePanel defaultSize={50} minSize={15}>
+          <ResizablePanelGroup direction="vertical" className="h-full min-h-0 min-w-0 gap-1">
+            <ResizablePanel defaultSize={50} minSize={15} className="min-h-0 min-w-0">
+              <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 min-w-0 gap-1">
+                <ResizablePanel defaultSize={50} minSize={15} className="min-h-0 min-w-0">
                   {renderPane(normalizedPanes[0])}
                 </ResizablePanel>
                 <ResizableHandle withHandle />
-                <ResizablePanel defaultSize={50} minSize={15}>
+                <ResizablePanel defaultSize={50} minSize={15} className="min-h-0 min-w-0">
                   {renderPane(normalizedPanes[1])}
                 </ResizablePanel>
               </ResizablePanelGroup>
             </ResizablePanel>
             <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={50} minSize={15}>
-              <ResizablePanelGroup direction="horizontal" className="gap-1">
-                <ResizablePanel defaultSize={50} minSize={15}>
+            <ResizablePanel defaultSize={50} minSize={15} className="min-h-0 min-w-0">
+              <ResizablePanelGroup direction="horizontal" className="h-full min-h-0 min-w-0 gap-1">
+                <ResizablePanel defaultSize={50} minSize={15} className="min-h-0 min-w-0">
                   {renderPane(normalizedPanes[2])}
                 </ResizablePanel>
                 <ResizableHandle withHandle />
-                <ResizablePanel defaultSize={50} minSize={15}>
+                <ResizablePanel defaultSize={50} minSize={15} className="min-h-0 min-w-0">
                   {renderPane(normalizedPanes[3])}
                 </ResizablePanel>
               </ResizablePanelGroup>
@@ -342,6 +341,7 @@ function TerminalPane({
 }: TerminalPaneProps) {
   const configPanelId = useId();
   const [showConfig, setShowConfig] = useState(false);
+  const accent = getTerminalPaneAccentDefinition(pane.accent);
 
   return (
     <div
@@ -424,6 +424,27 @@ function TerminalPane({
                 className="rounded-md border border-border/60 bg-white px-2 py-1 text-[12px] font-mono"
               />
             </label>
+            <div className="col-span-full flex flex-col gap-1">
+              <span className="text-muted-foreground">Accent</span>
+              <div className="flex flex-wrap gap-1.5">
+                {TERMINAL_PANE_ACCENTS.map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => onUpdate({ accent: option.key })}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-medium transition-colors",
+                      pane.accent === option.key
+                        ? `${option.panelClassName} ${option.headerClassName}`
+                        : "border-border/60 bg-white text-foreground/75 hover:bg-secondary",
+                    )}
+                  >
+                    <span className={cn("h-2 w-2 rounded-full", option.dotClassName)} />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           {availableShells && availableShells.length > 0 ? (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -453,6 +474,7 @@ function TerminalPane({
       <div className="flex-1 min-h-0 min-w-0">
         <EmbeddedTerminal
           active={active}
+          accent={accent}
           cwd={pane.cwd}
           command={pane.command}
           args={pane.args}

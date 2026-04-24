@@ -5,6 +5,7 @@ import {
   buildTerminalPanesStorageKey,
   buildTerminalWorkspaceScopeKey,
   getExpandedTerminalLayout,
+  normalizeTerminalPanes,
   readStoredTerminalWorkspaceSummary,
   sanitizeUnavailableTerminalPanes,
   summarizeTerminalWorkspace,
@@ -87,7 +88,7 @@ test("readStoredTerminalWorkspaceSummary reads persisted session workspaces", ()
   delete (globalThis as { window?: unknown }).window;
 });
 
-test("sanitizeUnavailableTerminalPanes falls back from unavailable opencode panes", () => {
+test("sanitizeUnavailableTerminalPanes falls back from unavailable tool panes", () => {
   const sanitized = sanitizeUnavailableTerminalPanes(
     [
       {
@@ -96,15 +97,24 @@ test("sanitizeUnavailableTerminalPanes falls back from unavailable opencode pane
         cwd: "/tmp/repo",
         id: "1",
         label: "OpenCode",
+        accent: "violet",
+      },
+      {
+        command: "claude",
+        cwd: "/tmp/repo",
+        id: "2",
+        label: "Claude",
+        accent: "blue",
       },
       {
         command: "/bin/zsh",
         cwd: "/tmp/repo",
-        id: "2",
-        label: "Shell 2",
+        id: "3",
+        label: "Shell 3",
+        accent: "amber",
       },
     ],
-    { opencodeAvailable: false },
+    { availableCommands: ["/bin/zsh"], opencodeAvailable: false },
   );
 
   assert.deepEqual(sanitized, [
@@ -114,12 +124,32 @@ test("sanitizeUnavailableTerminalPanes falls back from unavailable opencode pane
       cwd: "/tmp/repo",
       id: "1",
       label: "Shell",
+      accent: "violet",
+    },
+    {
+      command: undefined,
+      cwd: "/tmp/repo",
+      id: "2",
+      label: "Shell",
+      accent: "blue",
+      args: undefined,
     },
     {
       command: "/bin/zsh",
       cwd: "/tmp/repo",
-      id: "2",
-      label: "Shell 2",
+      id: "3",
+      label: "Shell 3",
+      accent: "amber",
     },
   ]);
+});
+
+test("normalizeTerminalPanes backfills pane accents for older saved layouts", () => {
+  const panes = normalizeTerminalPanes([
+    { id: "1", label: "Shell 1", cwd: "/tmp" },
+    { id: "2", label: "Shell 2", cwd: "/tmp", accent: "rose" },
+  ]);
+
+  assert.equal(panes[0]?.accent, "slate");
+  assert.equal(panes[1]?.accent, "rose");
 });

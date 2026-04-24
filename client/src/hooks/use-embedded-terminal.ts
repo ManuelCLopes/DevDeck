@@ -20,7 +20,13 @@ export interface UseEmbeddedTerminalOptions {
   env?: Record<string, string>;
   label?: string;
   preferences: TerminalPreferences;
-  onReady?: (info: { id: string; pid: number; shell: string; label: string }) => void;
+  onReady?: (info: {
+    cwd: string;
+    id: string;
+    pid: number;
+    shell: string;
+    label: string;
+  }) => void;
   onExit?: (info: { exitCode: number; signal: number | null }) => void;
 }
 
@@ -30,7 +36,13 @@ export interface EmbeddedTerminalHandle {
   restart: () => void;
   status: EmbeddedTerminalStatus;
   error: string | null;
-  info: { id: string; pid: number; shell: string; label: string } | null;
+  info: {
+    cwd: string;
+    id: string;
+    pid: number;
+    shell: string;
+    label: string;
+  } | null;
 }
 
 /**
