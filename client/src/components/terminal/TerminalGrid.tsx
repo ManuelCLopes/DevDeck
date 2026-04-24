@@ -40,6 +40,7 @@ interface TerminalGridProps {
   headerSlot?: React.ReactNode;
   availableShells?: Array<{ label: string; command: string; args?: string[] }>;
   defaultCwd?: string;
+  showLayoutPicker?: boolean;
 }
 
 const VALID_LAYOUTS: readonly TerminalLayout[] = [
@@ -138,6 +139,7 @@ export function TerminalGrid({
   headerSlot,
   availableShells,
   defaultCwd,
+  showLayoutPicker = true,
 }: TerminalGridProps) {
   const [internalActivePaneId, setInternalActivePaneId] = useState<string | null>(
     panes[0]?.id ?? null,
@@ -214,10 +216,14 @@ export function TerminalGrid({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
-      <div className="flex items-center gap-2 pb-2">
-        <LayoutPicker layout={layout} onChange={onLayoutChange} />
-        {headerSlot}
-      </div>
+      {showLayoutPicker || headerSlot ? (
+        <div className="flex items-center gap-2 pb-2">
+          {showLayoutPicker ? (
+            <LayoutPicker layout={layout} onChange={onLayoutChange} />
+          ) : null}
+          {headerSlot}
+        </div>
+      ) : null}
       <div className="flex-1 min-h-0 min-w-0">
         {layout === "single" ? (
           <div className="h-full min-h-0 min-w-0">{renderPane(normalizedPanes[0])}</div>
@@ -278,7 +284,7 @@ interface LayoutPickerProps {
   onChange: (layout: TerminalLayout) => void;
 }
 
-function LayoutPicker({ layout, onChange }: LayoutPickerProps) {
+export function LayoutPicker({ layout, onChange }: LayoutPickerProps) {
   const options: TerminalLayout[] = ["single", "columns", "rows", "grid"];
   const LayoutIcon = layoutIcon(layout);
 
@@ -359,11 +365,6 @@ function TerminalPane({
           <span className="truncate font-medium text-foreground/85">
             {pane.label}
           </span>
-          {pane.cwd ? (
-            <span className="truncate font-mono text-[10px]" title={pane.cwd}>
-              {pane.cwd}
-            </span>
-          ) : null}
         </div>
         <button
           type="button"

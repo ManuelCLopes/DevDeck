@@ -155,7 +155,10 @@ export default function Projects() {
   const startSessionForProject = async (project: WorkspaceProject) => {
     const existingSession = findProjectDevSession(devSessions, project.id);
     if (existingSession) {
-      navigateInApp(buildTerminalsPath(existingSession.id), setLocation);
+      navigateInApp(
+        buildTerminalsPath(existingSession.id, { launch: "opencode" }),
+        setLocation,
+      );
       return;
     }
 

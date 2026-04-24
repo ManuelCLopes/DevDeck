@@ -80,7 +80,7 @@ function probePtySpawnability() {
   try {
     const ptyModule = loadNodePty();
     const probeShell =
-      process.platform === "win32" ? defaultShell() : "/bin/sh";
+      process.platform === "win32" ? defaultShell() : "/bin/zsh";
     const probeArgs = process.platform === "win32" ? [] : ["-lc", "exit 0"];
     const probe = ptyModule.spawn(probeShell, probeArgs, {
       cols: 10,
@@ -109,7 +109,7 @@ function defaultShell() {
     return process.env.COMSPEC ?? "powershell.exe";
   }
 
-  return process.env.SHELL ?? "/bin/zsh";
+  return "/bin/zsh";
 }
 
 function defaultShellArgs(shell: string) {
@@ -121,7 +121,7 @@ function defaultShellArgs(shell: string) {
   // otherwise tools the user expects (opencode, claude, codex) won't be
   // on PATH inside the embedded terminal.
   const shellName = shell.split("/").pop() ?? shell;
-  if (shellName === "bash" || shellName === "zsh") {
+  if (shellName === "zsh") {
     return ["-l"];
   }
   return [];
@@ -400,7 +400,6 @@ export function registerPtyIpc() {
       "claude",
       defaultShellCommand,
       "/bin/zsh",
-      "/bin/bash",
     ]);
 
     return {

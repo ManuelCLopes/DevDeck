@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import {
   AlertTriangle,
   ExternalLink,
   Paintbrush,
   PlusSquare,
-  Play,
-  RotateCcw,
   TerminalSquare,
+  X,
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import OpenInCodeButton from "@/components/coding-tool/OpenInCodeButton";
@@ -39,6 +38,7 @@ import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { toast } from "@/hooks/use-toast";
 import {
   createDefaultPane,
+  LayoutPicker,
   TerminalGrid,
   defaultLayoutForSaved,
   layoutCapacity,
@@ -84,11 +84,11 @@ const DEFAULT_QUICK_SHELLS: Array<{
   { label: "OpenCode", command: "opencode", args: ["."] },
   { label: "Claude", command: "claude" },
   { label: "zsh", command: "/bin/zsh", args: ["-l"] },
-  { label: "bash", command: "/bin/bash", args: ["-l"] },
 ];
 
 function buildInitialPanes(options: {
   defaultCwd?: string;
+  opencodeSessionId?: string | null;
   preferredTool: "opencode" | "vscode";
   selectedSession: DevSession | null;
   shouldStartInOpenCode: boolean;
@@ -103,7 +103,7 @@ function buildInitialPanes(options: {
   if (options.shouldStartInOpenCode) {
     pane.label = "OpenCode";
     pane.command = "opencode";
-    pane.args = ["."];
+    pane.args = buildOpenCodeSessionArgs(options.opencodeSessionId);
   }
 
   if (!pane.cwd && options.defaultCwd) {
@@ -120,6 +120,14 @@ function buildInitialPanes(options: {
   return [pane];
 }
 
+function buildOpenCodeSessionArgs(sessionId?: string | null) {
+  if (sessionId) {
+    return ["--session", sessionId];
+  }
+
+  return ["."];
+}
+
 export default function Terminals() {
   const [, setLocation] = useLocation();
   const search = useSearch();
@@ -128,12 +136,14 @@ export default function Terminals() {
   const { data: snapshot } = useWorkspaceSnapshot();
   const desktopApi = getDesktopApi();
   const [ptyAvailability, setPtyAvailability] = useState<PtyAvailability | null>(null);
+  const [dismissedWarnings, setDismissedWarnings] = useState<Record<string, true>>({});
   const [sessions] = usePersistentState<DevSession[]>(DEV_SESSIONS_STORAGE_KEY, [], {
     deserialize: (value) => normalizeDevSessions(JSON.parse(value)),
   });
   const terminalPreferences = preferences.terminal;
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const requestedSessionId = searchParams.get("session");
+  const requestedLaunch = searchParams.get("launch");
   const activeSessions = useMemo(
     () => sortDevSessions(sessions).filter((session) => session.status === "active"),
     [sessions],
@@ -147,6 +157,20 @@ export default function Terminals() {
     : null;
   const sessionMissing = Boolean(requestedSessionId && !selectedSession);
   const storageScopeKey = buildTerminalWorkspaceScopeKey(selectedSession?.id);
+  const [layout, setLayout] = usePersistentState<TerminalLayout>(
+    buildTerminalLayoutStorageKey(storageScopeKey),
+    "single",
+    {
+      deserialize: (value) => defaultLayoutForSaved(JSON.parse(value)),
+    },
+  );
+  const [panes, setPanes] = usePersistentState<TerminalPaneConfig[]>(
+    buildTerminalPanesStorageKey(storageScopeKey),
+    initialPanesPlaceholder(),
+    {
+      deserialize: (value) => normalizeTerminalPanes(JSON.parse(value)),
+    },
+  );
 
   useEffect(() => {
     if (!desktopApi?.terminal) {
@@ -193,6 +217,7 @@ export default function Terminals() {
     () =>
       buildInitialPanes({
         defaultCwd,
+        opencodeSessionId: selectedSession?.id,
         preferredTool,
         selectedSession,
         shouldStartInOpenCode:
@@ -202,11 +227,48 @@ export default function Terminals() {
       }),
     [codingToolAvailability.opencode.available, defaultCwd, preferredTool, selectedSession],
   );
+  const ptyAvailabilityPending = ptyAvailability === null;
   const ptyBlocked = Boolean(ptyAvailability && !ptyAvailability.available);
+  const sanitizedPanes = useMemo(
+    () =>
+      sanitizeUnavailableTerminalPanes(
+        normalizeTerminalPanes(panes).length > 0 ? normalizeTerminalPanes(panes) : initialPanes,
+        {
+          availableCommands: ptyAvailability?.availableCommands ?? [],
+          opencodeAvailable: codingToolAvailability.opencode.available,
+        },
+      ),
+    [
+      codingToolAvailability.opencode.available,
+      initialPanes,
+      panes,
+      ptyAvailability?.availableCommands,
+    ],
+  );
+  const openCodeFallbackWarningKey =
+    selectedSession &&
+    requestedLaunch === "opencode" &&
+    !codingToolAvailability.opencode.available
+      ? `opencode-fallback:${selectedSession.id}`
+      : null;
+
+  useEffect(() => {
+    if (sanitizedPanes.length === 0) {
+      return;
+    }
+
+    setPanes((currentPanes) =>
+      areTerminalPanesEqual(normalizeTerminalPanes(currentPanes), sanitizedPanes)
+        ? currentPanes
+        : sanitizedPanes,
+    );
+  }, [sanitizedPanes, setPanes]);
 
   const handleSessionChange = (value: string) => {
     navigateInApp(
-      value === GLOBAL_TERMINAL_WORKSPACE_SCOPE ? "/terminals" : buildTerminalsPath(value),
+      value === GLOBAL_TERMINAL_WORKSPACE_SCOPE
+        ? "/terminals"
+        : buildTerminalsPath(value, { launch: "opencode" }),
       setLocation,
     );
   };
@@ -224,63 +286,159 @@ export default function Terminals() {
     window.open(linkedPullRequest.url, "_blank", "noopener,noreferrer");
   };
 
+  const addPaneWithShell = (shell: {
+    label: string;
+    command: string;
+    args?: string[];
+  }) => {
+    const currentCapacity = layoutCapacity(layout);
+    if (layout === "grid" && sanitizedPanes.length >= currentCapacity) {
+      toast({
+        title: "Terminal grid is full",
+        description: "Use an existing pane or change the layout before adding another tool.",
+      });
+      return;
+    }
+
+    const nextLayout = getExpandedTerminalLayout(layout);
+    const nextPane: TerminalPaneConfig = {
+      ...createDefaultPane(sanitizedPanes.length, defaultCwd),
+      label: shell.label,
+      command: shell.command,
+      args: shell.args,
+      cwd: defaultCwd,
+    };
+
+    setLayout(nextLayout);
+    setPanes((currentPanes) => [...currentPanes, nextPane]);
+  };
+
   return (
     <AppLayout>
       <div className="flex h-full min-h-0 min-w-0 flex-col">
-        <header className="flex flex-wrap items-start justify-between gap-3 pb-4">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
-                <TerminalSquare className="h-4 w-4" />
-              </div>
-              <div>
-                <h1 className="text-sm font-semibold">Terminals</h1>
-                <p className="text-[11px] text-muted-foreground">
-                  {selectedSession
-                    ? "This terminal workspace is pinned to one active session and remembers its own pane layout."
-                    : "Up to four embedded PTY sessions — resize, relaunch, and personalize."}
-                </p>
+        <header className="flex flex-col gap-4 pb-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <TerminalSquare className="h-4 w-4" />
+                </div>
+                <div>
+                  <h1 className="text-sm font-semibold">Terminals</h1>
+                  <p className="text-[11px] text-muted-foreground">
+                    {selectedSession
+                      ? "This terminal workspace is pinned to one active session and remembers its own pane layout."
+                      : "Up to four embedded PTY sessions — resize, relaunch, and personalize."}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {selectedSession ? (
-              <div className="rounded-xl border border-border/60 bg-white/75 p-3 shadow-sm backdrop-blur-md">
+            <div className="flex flex-wrap items-center gap-2 xl:min-w-[360px] xl:justify-end">
+              {activeSessions.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
-                    OpenCode session
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigateInApp(
-                        `/?project=${encodeURIComponent(selectedSession.projectId)}`,
-                        setLocation,
-                      )
-                    }
-                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${getProjectTagClassName(selectedSession.projectName)}`}
+                  <Select
+                    value={selectedSession?.id ?? GLOBAL_TERMINAL_WORKSPACE_SCOPE}
+                    onValueChange={handleSessionChange}
                   >
-                    {selectedSession.projectName}
-                  </button>
-                  {linkedPullRequest ? (
+                    <SelectTrigger className="h-9 w-[280px] bg-white text-[12px]">
+                      <SelectValue placeholder="Choose OpenCode session" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={GLOBAL_TERMINAL_WORKSPACE_SCOPE}>
+                        Shared terminals workspace
+                      </SelectItem>
+                      {activeSessions.map((session) => (
+                        <SelectItem key={session.id} value={session.id}>
+                          {session.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              <TerminalPersonalization
+                iconOnly
+                value={terminalPreferences}
+                onFontSizeChange={(fontSize) =>
+                  setPreference("terminal", {
+                    ...terminalPreferences,
+                    fontSize: clampFontSize(fontSize),
+                  })
+                }
+                onFontFamilyChange={(fontFamily) =>
+                  setPreference("terminal", { ...terminalPreferences, fontFamily })
+                }
+                onThemeChange={(theme) =>
+                  setPreference("terminal", { ...terminalPreferences, theme })
+                }
+                onCursorStyleChange={(cursorStyle) =>
+                  setPreference("terminal", { ...terminalPreferences, cursorStyle })
+                }
+                onCursorBlinkChange={(cursorBlink) =>
+                  setPreference("terminal", { ...terminalPreferences, cursorBlink })
+                }
+                onScrollbackChange={(scrollback) =>
+                  setPreference("terminal", {
+                    ...terminalPreferences,
+                    scrollback: clampScrollback(scrollback),
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          {selectedSession ? (
+            <div className="w-full rounded-xl border border-border/60 bg-white/75 p-4 shadow-sm backdrop-blur-md">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                    <span className="font-medium uppercase tracking-wide text-muted-foreground">
+                      OpenCode Session
+                    </span>
+                    <span className="font-mono text-foreground">
+                      {selectedSession.id}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => void openLinkedPullRequest()}
-                      className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary"
+                      onClick={() =>
+                        navigateInApp(
+                          `/?project=${encodeURIComponent(selectedSession.projectId)}`,
+                          setLocation,
+                        )
+                      }
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${getProjectTagClassName(selectedSession.projectName)}`}
                     >
-                      PR #{linkedPullRequest.number}
+                      {selectedSession.projectName}
                     </button>
-                  ) : null}
-                  <span className="rounded-full border border-border/60 bg-secondary/30 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                    {selectedSession.sessionBranchName}
-                  </span>
-                  {selectedSession.kind === "worktree" ? (
                     <span className="rounded-full border border-border/60 bg-secondary/30 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                      Review worktree
+                      {selectedSession.sessionBranchName}
                     </span>
-                  ) : null}
+                    {selectedSession.kind === "worktree" ? (
+                      <span className="rounded-full border border-border/60 bg-secondary/30 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                        Review worktree
+                      </span>
+                    ) : null}
+                    {linkedPullRequest ? (
+                      <button
+                        type="button"
+                        onClick={() => void openLinkedPullRequest()}
+                        className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary"
+                      >
+                        PR #{linkedPullRequest.number}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <OpenInCodeButton targetPath={selectedSession.localPath} />
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  <LayoutPicker layout={layout} onChange={setLayout} />
+                  <QuickShellActions
+                    availableShells={availableShells}
+                    onAddPane={addPaneWithShell}
+                  />
+                  <OpenInCodeButton targetPath={selectedSession.localPath} />
                   <Button
                     type="button"
                     variant="outline"
@@ -293,68 +451,53 @@ export default function Terminals() {
                   </Button>
                 </div>
               </div>
-            ) : null}
+            </div>
+          ) : null}
 
-            {sessionMissing ? (
-              <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
-                <AlertTriangle className="h-4 w-4" />
-                The requested OpenCode session is no longer active. Showing the shared terminals workspace instead.
+          {sessionMissing ? (
+            <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+              <AlertTriangle className="h-4 w-4" />
+              The requested OpenCode session is no longer active. Showing the shared terminals workspace instead.
+            </div>
+          ) : null}
+
+          {selectedSession &&
+          requestedLaunch === "opencode" &&
+          !codingToolAvailability.opencode.available &&
+          openCodeFallbackWarningKey &&
+          !dismissedWarnings[openCodeFallbackWarningKey] ? (
+            <div className="flex w-full items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+              <div className="flex min-w-0 items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="min-w-0">
+                  OpenCode CLI is not available on this machine, so DevDeck opened a shell in this session folder instead.
+                </span>
               </div>
-            ) : null}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {activeSessions.length > 0 ? (
-              <Select
-                value={selectedSession?.id ?? GLOBAL_TERMINAL_WORKSPACE_SCOPE}
-                onValueChange={handleSessionChange}
+              <button
+                type="button"
+                onClick={() =>
+                  setDismissedWarnings((currentWarnings) => ({
+                    ...currentWarnings,
+                    [openCodeFallbackWarningKey]: true,
+                  }))
+                }
+                className="shrink-0 rounded p-1 text-amber-900/70 hover:bg-amber-100 hover:text-amber-950"
+                aria-label="Dismiss warning"
+                title="Dismiss warning"
               >
-                <SelectTrigger className="h-9 w-[240px] bg-white text-[12px]">
-                  <SelectValue placeholder="Choose OpenCode session" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={GLOBAL_TERMINAL_WORKSPACE_SCOPE}>
-                    Shared terminals workspace
-                  </SelectItem>
-                  {activeSessions.map((session) => (
-                    <SelectItem key={session.id} value={session.id}>
-                      {session.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : null}
-            <TerminalPersonalization
-              value={terminalPreferences}
-              onFontSizeChange={(fontSize) =>
-                setPreference("terminal", {
-                  ...terminalPreferences,
-                  fontSize: clampFontSize(fontSize),
-                })
-              }
-              onFontFamilyChange={(fontFamily) =>
-                setPreference("terminal", { ...terminalPreferences, fontFamily })
-              }
-              onThemeChange={(theme) =>
-                setPreference("terminal", { ...terminalPreferences, theme })
-              }
-              onCursorStyleChange={(cursorStyle) =>
-                setPreference("terminal", { ...terminalPreferences, cursorStyle })
-              }
-              onCursorBlinkChange={(cursorBlink) =>
-                setPreference("terminal", { ...terminalPreferences, cursorBlink })
-              }
-              onScrollbackChange={(scrollback) =>
-                setPreference("terminal", {
-                  ...terminalPreferences,
-                  scrollback: clampScrollback(scrollback),
-                })
-              }
-            />
-          </div>
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : null}
         </header>
 
-        {ptyBlocked ? (
+        {ptyAvailabilityPending ? (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="rounded-lg border border-border/60 bg-white/75 px-4 py-3 text-[12px] text-muted-foreground shadow-sm">
+              Checking embedded terminal support…
+            </div>
+          </div>
+        ) : ptyBlocked ? (
           <div className="flex flex-1 items-center justify-center">
             <div className="max-w-md space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-[12px] text-amber-900">
               <div className="flex items-center gap-2 font-semibold">
@@ -382,10 +525,16 @@ export default function Terminals() {
               availableCommands={ptyAvailability?.availableCommands ?? []}
               defaultCwd={defaultCwd}
               initialPanes={initialPanes}
+              layout={layout}
               opencodeAvailable={codingToolAvailability.opencode.available}
+              panes={sanitizedPanes.length > 0 ? sanitizedPanes : initialPanes}
               preferences={terminalPreferences}
+              requestedLaunch={requestedLaunch}
+              requestedSessionId={selectedSession?.id ?? null}
+              selectedSession={selectedSession}
+              setLayout={setLayout}
+              setPanes={setPanes}
               scopeKey={storageScopeKey}
-              sessionLabel={selectedSession?.label ?? null}
             />
           </div>
         )}
@@ -399,10 +548,16 @@ interface TerminalWorkspaceProps {
   availableShells: Array<{ label: string; command: string; args?: string[] }>;
   defaultCwd?: string;
   initialPanes: TerminalPaneConfig[];
+  layout: TerminalLayout;
   opencodeAvailable: boolean;
+  panes: TerminalPaneConfig[];
   preferences: import("@/lib/app-preferences").TerminalPreferences;
+  requestedLaunch: string | null;
+  requestedSessionId: string | null;
+  selectedSession: DevSession | null;
+  setLayout: (layout: TerminalLayout) => void;
+  setPanes: React.Dispatch<React.SetStateAction<TerminalPaneConfig[]>>;
   scopeKey: string;
-  sessionLabel: string | null;
 }
 
 function TerminalWorkspace({
@@ -410,73 +565,81 @@ function TerminalWorkspace({
   availableShells,
   defaultCwd,
   initialPanes,
+  layout,
   opencodeAvailable,
+  panes,
   preferences,
+  requestedLaunch,
+  requestedSessionId,
+  selectedSession,
+  setLayout,
+  setPanes,
   scopeKey,
-  sessionLabel,
 }: TerminalWorkspaceProps) {
+  const appliedLaunchRef = useRef<string | null>(null);
   const [activePaneId, setActivePaneId] = useState<string | null>(
     initialPanes[0]?.id ?? null,
   );
-  const [layout, setLayout] = usePersistentState<TerminalLayout>(
-    buildTerminalLayoutStorageKey(scopeKey),
-    "single",
-    {
-      deserialize: (value) => defaultLayoutForSaved(JSON.parse(value)),
-    },
-  );
-  const [panes, setPanes] = usePersistentState<TerminalPaneConfig[]>(
-    buildTerminalPanesStorageKey(scopeKey),
-    initialPanes,
-    {
-      deserialize: (value) => normalizeTerminalPanes(JSON.parse(value)),
-    },
-  );
-
-  useEffect(() => {
-    setPanes((currentPanes) => {
-      const normalizedPanes = normalizeTerminalPanes(currentPanes);
-      const recoveredPanes =
-        normalizedPanes.length > 0 ? normalizedPanes : initialPanes;
-      const sanitizedPanes = sanitizeUnavailableTerminalPanes(recoveredPanes, {
-        availableCommands,
-        opencodeAvailable,
-      });
-
-      return areTerminalPanesEqual(currentPanes, sanitizedPanes)
-        ? currentPanes
-        : sanitizedPanes;
-    });
-  }, [availableCommands, initialPanes, opencodeAvailable, setPanes]);
 
   useEffect(() => {
     setActivePaneId(initialPanes[0]?.id ?? null);
   }, [scopeKey, initialPanes]);
 
-  const replaceActivePaneWithShell = (shell: {
-    label: string;
-    command: string;
-    args?: string[];
-  }) => {
-    const targetPaneId = activePaneId ?? panes[0]?.id ?? initialPanes[0]?.id ?? null;
-    if (!targetPaneId) {
+  useEffect(() => {
+    const launchKey =
+      requestedLaunch === "opencode" && opencodeAvailable
+        ? `${scopeKey}:opencode`
+        : null;
+
+    if (!launchKey) {
+      appliedLaunchRef.current = null;
       return;
     }
 
-    setPanes((currentPanes) =>
-      currentPanes.map((pane) =>
-        pane.id === targetPaneId
+    if (appliedLaunchRef.current === launchKey) {
+      return;
+    }
+
+    appliedLaunchRef.current = launchKey;
+    let nextActivePaneId: string | null = null;
+    setPanes((currentPanes) => {
+      const normalizedPanes = normalizeTerminalPanes(currentPanes);
+      const recoveredPanes =
+        normalizedPanes.length > 0 ? normalizedPanes : initialPanes;
+      const targetPane =
+        recoveredPanes.find((pane) => pane.id === activePaneId) ?? recoveredPanes[0];
+
+      if (!targetPane) {
+        return recoveredPanes;
+      }
+
+      nextActivePaneId = targetPane.id;
+
+      return recoveredPanes.map((pane) =>
+        pane.id === targetPane.id
           ? {
               ...pane,
-              label: shell.label,
-              command: shell.command,
-              args: shell.args,
+              args: buildOpenCodeSessionArgs(requestedSessionId),
+              command: "opencode",
               cwd: pane.cwd ?? defaultCwd,
+              label: "OpenCode",
             }
           : pane,
-      ),
-    );
-  };
+      );
+    });
+    if (nextActivePaneId) {
+      setActivePaneId(nextActivePaneId);
+    }
+  }, [
+    activePaneId,
+    defaultCwd,
+    initialPanes,
+    opencodeAvailable,
+    requestedLaunch,
+    requestedSessionId,
+    scopeKey,
+    setPanes,
+  ]);
 
   const addPaneWithShell = (shell: {
     label: string;
@@ -493,37 +656,17 @@ function TerminalWorkspace({
     }
 
     const nextLayout = getExpandedTerminalLayout(layout);
-    const nextPane = {
+    const nextPane: TerminalPaneConfig = {
       ...createDefaultPane(panes.length, defaultCwd),
       label: shell.label,
       command: shell.command,
       args: shell.args,
       cwd: defaultCwd,
-    } satisfies TerminalPaneConfig;
+    };
 
     setLayout(nextLayout);
-    setPanes((currentPanes) => [...currentPanes, nextPane]);
-    setActivePaneId(nextPane.id);
+    setPanes((currentPanes) => [...normalizeTerminalPanes(currentPanes), nextPane]);
   };
-
-  const headerSlot = sessionLabel ? (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
-        {sessionLabel}
-      </div>
-      <QuickShellActions
-        availableShells={availableShells}
-        onAddPane={addPaneWithShell}
-        onReplacePane={replaceActivePaneWithShell}
-      />
-    </div>
-  ) : (
-    <QuickShellActions
-      availableShells={availableShells}
-      onAddPane={addPaneWithShell}
-      onReplacePane={replaceActivePaneWithShell}
-    />
-  );
 
   return (
     <div className="flex h-full min-h-[420px] min-w-0 flex-1 flex-col">
@@ -535,41 +678,24 @@ function TerminalWorkspace({
         preferences={preferences}
         availableShells={availableShells}
         defaultCwd={defaultCwd}
+        showLayoutPicker={!selectedSession}
         headerSlot={
-          <div className="flex flex-wrap items-center gap-2">
-            {headerSlot}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-[12px]"
-              onClick={() => {
-                window.localStorage.removeItem(
-                  buildTerminalLayoutStorageKey(scopeKey),
-                );
-                window.localStorage.removeItem(
-                  buildTerminalPanesStorageKey(scopeKey),
-                );
-                setLayout("single");
-                setPanes(initialPanes);
-                setActivePaneId(initialPanes[0]?.id ?? null);
-                toast({
-                  title: "Terminal workspace reset",
-                  description:
-                    "The saved terminal layout was cleared for this workspace.",
-                });
-              }}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Reset Workspace
-            </Button>
-          </div>
+          selectedSession ? null : (
+            <QuickShellActions
+              availableShells={availableShells}
+              onAddPane={addPaneWithShell}
+            />
+          )
         }
         activePaneId={activePaneId}
         onActivePaneIdChange={setActivePaneId}
       />
     </div>
   );
+}
+
+function initialPanesPlaceholder() {
+  return [] as TerminalPaneConfig[];
 }
 
 function areTerminalPanesEqual(
@@ -601,62 +727,52 @@ interface QuickShellActionsProps {
     command: string;
     args?: string[];
   }) => void;
-  onReplacePane: (shell: {
-    label: string;
-    command: string;
-    args?: string[];
-  }) => void;
 }
 
 function QuickShellActions({
   availableShells,
   onAddPane,
-  onReplacePane,
 }: QuickShellActionsProps) {
+  const singleShell = availableShells.length === 1 ? availableShells[0] : null;
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-2 text-[12px]">
-            <Play className="h-3.5 w-3.5" />
-            Launch in Active Pane
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {availableShells.map((shell) => (
-            <DropdownMenuItem
-              key={`replace-${shell.label}`}
-              onSelect={() => onReplacePane(shell)}
-            >
-              {shell.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-2 text-[12px]">
-            <PlusSquare className="h-3.5 w-3.5" />
-            Split with…
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {availableShells.map((shell) => (
-            <DropdownMenuItem
-              key={`add-${shell.label}`}
-              onSelect={() => onAddPane(shell)}
-            >
-              {shell.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {singleShell ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 text-[12px]"
+          onClick={() => onAddPane(singleShell)}
+        >
+          <PlusSquare className="h-3.5 w-3.5" />
+          Split Pane
+        </Button>
+      ) : (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2 text-[12px]">
+              <PlusSquare className="h-3.5 w-3.5" />
+              Split with…
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {availableShells.map((shell) => (
+              <DropdownMenuItem
+                key={`add-${shell.label}`}
+                onSelect={() => onAddPane(shell)}
+              >
+                {shell.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   );
 }
 
 interface TerminalPersonalizationProps {
+  iconOnly?: boolean;
   value: import("@/lib/app-preferences").TerminalPreferences;
   onFontSizeChange: (fontSize: number) => void;
   onFontFamilyChange: (fontFamily: TerminalFontFamilyKey) => void;
@@ -668,6 +784,7 @@ interface TerminalPersonalizationProps {
 
 function TerminalPersonalization(props: TerminalPersonalizationProps) {
   const {
+    iconOnly = false,
     value,
     onFontSizeChange,
     onFontFamilyChange,
@@ -680,9 +797,15 @@ function TerminalPersonalization(props: TerminalPersonalizationProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2 text-[12px]">
+        <Button
+          variant="outline"
+          size="sm"
+          className={iconOnly ? "h-9 w-9 px-0" : "gap-2 text-[12px]"}
+          aria-label="Personalize terminals"
+          title="Personalize terminals"
+        >
           <Paintbrush className="h-3.5 w-3.5" />
-          Personalize
+          {iconOnly ? null : "Personalize"}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 space-y-4 text-[12px]">

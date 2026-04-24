@@ -29,7 +29,7 @@ export default function SessionLaunchButton({
   const handleClick = async () => {
     if (existingSession) {
       onBeforeNavigate?.();
-      onNavigate(buildTerminalsPath(existingSession.id));
+      onNavigate(buildTerminalsPath(existingSession.id, { launch: "opencode" }));
       return;
     }
 

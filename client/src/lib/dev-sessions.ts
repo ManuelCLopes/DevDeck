@@ -55,13 +55,19 @@ export function buildCreateSessionPath(
   return `/sessions?${params.toString()}`;
 }
 
-export function buildTerminalsPath(sessionId?: string | null) {
+export function buildTerminalsPath(
+  sessionId?: string | null,
+  options?: { launch?: "opencode" },
+) {
   if (!sessionId) {
     return "/terminals";
   }
 
   const params = new URLSearchParams();
   params.set("session", sessionId);
+  if (options?.launch) {
+    params.set("launch", options.launch);
+  }
   return `/terminals?${params.toString()}`;
 }
 

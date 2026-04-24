@@ -29,11 +29,6 @@ import {
 } from "@/lib/dev-sessions";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import {
-  buildTerminalWorkspaceScopeKey,
-} from "@/lib/terminal-workspace";
-import { formatDistanceToNow } from "date-fns";
-import {
-  AlertCircle,
   Archive,
   FolderTree,
   Github,
@@ -132,34 +127,11 @@ export default function Sessions() {
     (session) => session.status === "archived",
   );
   const linkedPullRequests = snapshot?.pullRequests ?? [];
-  const trackedProjects = snapshot?.projects ?? [];
   const linkedPullRequestsById = useMemo(
     () => new Map(linkedPullRequests.map((pullRequest) => [pullRequest.id, pullRequest])),
     [linkedPullRequests],
   );
   const formatCount = (value: number) => new Intl.NumberFormat().format(value);
-
-  const isReadyToCleanUp = (
-    session: DevSession,
-    sessionSnapshot: DevSessionOperationalSnapshot | undefined,
-  ) => {
-    if (!sessionSnapshot || session.kind !== "worktree") {
-      return false;
-    }
-
-    if (
-      !sessionSnapshot.exists ||
-      !sessionSnapshot.isRepository ||
-      sessionSnapshot.hasUncommittedChanges ||
-      sessionSnapshot.isDetached ||
-      !sessionSnapshot.currentBranch ||
-      sessionSnapshot.currentBranch === sessionSnapshot.defaultBranch
-    ) {
-      return false;
-    }
-
-    return sessionSnapshot.uniqueCommitCount === 0;
-  };
 
   const updateSession = (sessionId: string, updater: (session: DevSession) => DevSession) => {
     setSessions((currentSessions) =>
@@ -176,7 +148,7 @@ export default function Sessions() {
   };
 
   const openEmbeddedTerminal = (session: DevSession) => {
-    navigateInApp(buildTerminalsPath(session.id), setLocation);
+    navigateInApp(buildTerminalsPath(session.id, { launch: "opencode" }), setLocation);
   };
 
   const openLinkedPullRequest = async (session: DevSession) => {
@@ -273,75 +245,13 @@ export default function Sessions() {
     const sessionSnapshot = sessionSnapshotsById[session.id];
     const sessionUnavailable =
       sessionSnapshot && (!sessionSnapshot.exists || !sessionSnapshot.isRepository);
-    const readyToCleanUp = isReadyToCleanUp(session, sessionSnapshot);
-    const updatedAtLabel = formatDistanceToNow(new Date(session.updatedAt), {
-      addSuffix: true,
-    });
-    const lastCommitDistance =
-      sessionSnapshot?.lastCommitCommittedAt
-        ? formatDistanceToNow(new Date(sessionSnapshot.lastCommitCommittedAt), {
-            addSuffix: true,
-          })
-        : null;
-    const branchLabel =
-      sessionSnapshot?.currentBranch ??
-      (sessionSnapshot?.isDetached ? "detached" : session.sessionBranchName);
-
     return (
       <div
         key={session.id}
         className="grid gap-4 border-t border-border/50 px-4 py-4 first:border-t-0 md:grid-cols-[minmax(0,2.4fr)_minmax(0,1.2fr)_auto] md:items-center"
       >
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-semibold text-foreground">{session.label}</h3>
-            <span className="rounded-full border border-border/60 bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-              {session.kind === "worktree" ? "Review Worktree" : "Linked Clone"}
-            </span>
-            {linkedPullRequest ? (
-              <button
-                type="button"
-                onClick={() => void openLinkedPullRequest(session)}
-                className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
-              >
-                PR #{linkedPullRequest.number}
-              </button>
-            ) : null}
-            {sessionUnavailable ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-[#cf222e]/20 bg-[#ffebe9] px-2 py-0.5 text-[10px] font-medium text-[#cf222e]">
-                <AlertCircle className="h-3 w-3" />
-                Path unavailable
-              </span>
-            ) : null}
-            {readyToCleanUp ? (
-              <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                Ready to clean up
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            OpenCode session ID{" "}
-            <span className="font-mono text-[11px] text-foreground">{session.id}</span>
-            {" · "}Branch <span className="font-medium text-foreground">{branchLabel}</span>
-            {session.sourceRef ? (
-              <>
-                {" "}· from <span className="font-medium text-foreground">{session.sourceRef}</span>
-              </>
-            ) : null}
-            {" "}· updated {updatedAtLabel}
-          </p>
-          {sessionSnapshot?.lastCommitSubject ? (
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-              {sessionSnapshot.lastCommitShortSha ? (
-                <span className="font-mono text-[11px] text-foreground">
-                  {sessionSnapshot.lastCommitShortSha}
-                </span>
-              ) : null}
-              {sessionSnapshot.lastCommitShortSha ? " · " : ""}
-              {sessionSnapshot.lastCommitSubject}
-              {lastCommitDistance ? ` · ${lastCommitDistance}` : ""}
-            </p>
-          ) : null}
+          <span className="font-mono text-[12px] text-foreground">{session.id}</span>
         </div>
 
         <div className="min-w-0">
@@ -460,7 +370,7 @@ export default function Sessions() {
                 Active OpenCode Sessions
               </h2>
               <p className="text-sm text-muted-foreground">
-                Session title, repository, and direct access to the terminal workspace.
+                Session ID, repository, and direct access to the terminal workspace.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -528,13 +438,16 @@ export default function Sessions() {
         initialPullRequestId={initialPullRequestId}
         onOpenChange={closeCreateDialog}
         onSessionActivated={(session) =>
-          navigateInApp(buildTerminalsPath(session.id), setLocation)
+          navigateInApp(
+            buildTerminalsPath(session.id, { launch: "opencode" }),
+            setLocation,
+          )
         }
         onSessionCreated={(session) =>
           setSessions((currentSessions) => [session, ...currentSessions])
         }
         open={isCreateDialogOpen}
-        projects={trackedProjects}
+        projects={snapshot?.projects ?? []}
         pullRequests={linkedPullRequests}
       />
       <AlertDialog
