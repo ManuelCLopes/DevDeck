@@ -21,7 +21,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { useCodingTool } from "@/hooks/use-coding-tool";
 import { getDesktopApi } from "@/lib/desktop";
 import {
   buildDefaultSessionBranchName,
@@ -37,6 +36,7 @@ interface CreateSessionDialogProps {
   initialProjectId?: string | null;
   initialPullRequestId?: string | null;
   onOpenChange: (open: boolean) => void;
+  onSessionActivated?: (session: DevSession) => void;
   onSessionCreated: (session: DevSession) => void;
   open: boolean;
   projects: WorkspaceProject[];
@@ -48,13 +48,13 @@ export default function CreateSessionDialog({
   initialProjectId = null,
   initialPullRequestId = null,
   onOpenChange,
+  onSessionActivated,
   onSessionCreated,
   open,
   projects,
   pullRequests,
 }: CreateSessionDialogProps) {
   const desktopApi = getDesktopApi();
-  const { openPreferredTool, preferredToolLabel } = useCodingTool();
   const [sessionKind, setSessionKind] = useState<DevSessionKind>("existing_clone");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedPullRequestId, setSelectedPullRequestId] = useState("none");
@@ -190,16 +190,11 @@ export default function CreateSessionDialog({
 
     try {
       if (duplicateSession) {
-        if (desktopApi) {
-          await openPreferredTool(duplicateSession.localPath);
-        }
-
         onOpenChange(false);
+        onSessionActivated?.(duplicateSession);
         toast({
-          title: desktopApi ? `Opened existing session in ${preferredToolLabel}` : "Session already active",
-          description: desktopApi
-            ? `${duplicateSession.label} is already active.`
-            : `${duplicateSession.label} is already active in DevDeck.`,
+          title: "Session already active",
+          description: `${duplicateSession.label} is already active in DevDeck.`,
         });
         return;
       }
@@ -249,6 +244,7 @@ export default function CreateSessionDialog({
 
       onSessionCreated(nextSession);
       onOpenChange(false);
+      onSessionActivated?.(nextSession);
       toast({
         title: sessionKind === "worktree" ? "Worktree session created" : "Session created",
         description:

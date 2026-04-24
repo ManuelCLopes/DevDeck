@@ -19,7 +19,7 @@ const sharedConfig = {
   platform: "node" as const,
   sourcemap: true,
   target: "node20",
-  external: ["electron"],
+  external: ["electron", "node-pty"],
 };
 
 async function run() {

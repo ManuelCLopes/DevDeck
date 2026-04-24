@@ -20,12 +20,17 @@ import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { navigateInApp } from "@/lib/app-navigation";
 import { getDesktopApi } from "@/lib/desktop";
 import {
+  buildTerminalsPath,
   DEV_SESSIONS_STORAGE_KEY,
   normalizeDevSessions,
   sortDevSessions,
   type DevSession,
 } from "@/lib/dev-sessions";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
+import {
+  buildTerminalWorkspaceScopeKey,
+  readStoredTerminalWorkspaceSummary,
+} from "@/lib/terminal-workspace";
 import { formatDistanceToNow } from "date-fns";
 import {
   AlertCircle,
@@ -179,8 +184,8 @@ export default function Sessions() {
     );
   };
 
-  const openInTerminal = async (session: DevSession) => {
-    await desktopApi?.openInTerminal?.(session.localPath);
+  const openEmbeddedTerminal = (session: DevSession) => {
+    navigateInApp(buildTerminalsPath(session.id), setLocation);
   };
 
   const revealInFinder = async (session: DevSession) => {
@@ -365,6 +370,9 @@ export default function Sessions() {
                   (project) => project.id === session.projectId,
                 );
                 const sessionSnapshot = sessionSnapshotsById[session.id];
+                const terminalSummary = readStoredTerminalWorkspaceSummary(
+                  buildTerminalWorkspaceScopeKey(session.id),
+                );
                 const sessionUnavailable =
                   sessionSnapshot &&
                   (!sessionSnapshot.exists || !sessionSnapshot.isRepository);
@@ -441,6 +449,13 @@ export default function Sessions() {
                                 ) : null}
                               </>
                             )
+                          ) : null}
+                          {terminalSummary ? (
+                            <span className="rounded-full border border-border/60 bg-white px-2.5 py-1 font-medium text-muted-foreground">
+                              {terminalSummary.paneCount} pane
+                              {terminalSummary.paneCount === 1 ? "" : "s"} ·{" "}
+                              {terminalSummary.toolLabels.join(" + ")}
+                            </span>
                           ) : null}
                         </div>
 
@@ -521,7 +536,7 @@ export default function Sessions() {
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={() => void openInTerminal(session)}
+                          onClick={() => openEmbeddedTerminal(session)}
                           className="gap-1.5"
                           disabled={Boolean(sessionUnavailable)}
                         >
@@ -653,56 +668,59 @@ export default function Sessions() {
         ) : null}
       </div>
 
-        <CreateSessionDialog
-          existingSessions={sessions}
-          initialProjectId={initialProjectId}
-          initialPullRequestId={initialPullRequestId}
-          onOpenChange={closeCreateDialog}
+      <CreateSessionDialog
+        existingSessions={sessions}
+        initialProjectId={initialProjectId}
+        initialPullRequestId={initialPullRequestId}
+        onOpenChange={closeCreateDialog}
+        onSessionActivated={(session) =>
+          navigateInApp(buildTerminalsPath(session.id), setLocation)
+        }
         onSessionCreated={(session) =>
           setSessions((currentSessions) => [session, ...currentSessions])
         }
         open={isCreateDialogOpen}
         projects={trackedProjects}
         pullRequests={linkedPullRequests}
-        />
-        <AlertDialog
-          open={Boolean(pendingRemovalSession)}
-          onOpenChange={(open) => {
-            if (!open) {
-              setPendingRemovalSession(null);
-            }
-          }}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {pendingRemovalSession?.kind === "worktree"
-                  ? "Delete worktree session?"
-                  : "Remove session from DevDeck?"}
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                {pendingRemovalSession?.kind === "worktree"
-                  ? `This removes ${pendingRemovalSession?.label} from DevDeck and deletes the worktree at ${pendingRemovalSession?.localPath}.`
-                  : `This removes ${pendingRemovalSession?.label} from DevDeck, but leaves the repository files untouched.`}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                className={
-                  pendingRemovalSession?.kind === "worktree"
-                    ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    : undefined
-                }
-                onClick={() => void confirmRemoval()}
-              >
-                {pendingRemovalSession?.kind === "worktree"
-                  ? "Delete Worktree"
-                  : "Remove Session"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+      />
+      <AlertDialog
+        open={Boolean(pendingRemovalSession)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingRemovalSession(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingRemovalSession?.kind === "worktree"
+                ? "Delete worktree session?"
+                : "Remove session from DevDeck?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingRemovalSession?.kind === "worktree"
+                ? `This removes ${pendingRemovalSession?.label} from DevDeck and deletes the worktree at ${pendingRemovalSession?.localPath}.`
+                : `This removes ${pendingRemovalSession?.label} from DevDeck, but leaves the repository files untouched.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={
+                pendingRemovalSession?.kind === "worktree"
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : undefined
+              }
+              onClick={() => void confirmRemoval()}
+            >
+              {pendingRemovalSession?.kind === "worktree"
+                ? "Delete Worktree"
+                : "Remove Session"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

@@ -61,6 +61,7 @@ import {
   openInOpenCode,
   openInVsCode,
 } from "./coding-tool-launcher";
+import { registerPtyIpc } from "./pty";
 
 const execFileAsync = promisify(execFile);
 const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
@@ -1125,6 +1126,8 @@ ipcMain.handle(
     }
   },
 );
+
+registerPtyIpc();
 
 app.whenReady().then(() => {
   syncMacAppIdentity();

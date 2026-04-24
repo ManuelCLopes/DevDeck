@@ -65,6 +65,7 @@ import {
   MessageSquare,
   RefreshCw,
   SquareTerminal,
+  TerminalSquare,
   Users2,
 } from "lucide-react";
 
@@ -236,6 +237,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { href: "/reviews", icon: MessageSquare, label: "Pull Requests" },
     { href: "/projects", icon: FolderGit2, label: "Repositories" },
     { href: "/sessions", icon: SquareTerminal, label: "Sessions" },
+    { href: "/terminals", icon: TerminalSquare, label: "Terminals" },
     { href: "/activity", icon: Activity, label: "Activity Inbox" },
     { href: "/team", icon: Users2, label: "Team Insights" },
   ];
@@ -654,6 +656,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <CommandItem value="open sessions workspace ops" onSelect={() => handleNavigate("/sessions")}>
               <SquareTerminal className="w-4 h-4 text-primary" />
               <span className="font-medium">Open Sessions</span>
+            </CommandItem>
+            <CommandItem
+              value="open terminals embedded shell opencode"
+              onSelect={() => handleNavigate("/terminals")}
+            >
+              <TerminalSquare className="w-4 h-4 text-primary" />
+              <span className="font-medium">Open Terminals</span>
             </CommandItem>
             <CommandItem value="open activity inbox" onSelect={() => handleNavigate("/activity")}>
               <Activity className="w-4 h-4 text-primary" />

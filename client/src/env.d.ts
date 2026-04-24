@@ -11,6 +11,13 @@ import type {
   DevSessionOperationalSnapshot,
   InspectDevSessionRequest,
 } from "@shared/sessions";
+import type {
+  PtyAvailability,
+  PtyDataPayload,
+  PtyExitPayload,
+  SpawnPtyRequest,
+  SpawnPtyResult,
+} from "@shared/terminals";
 import type { WorkspaceMonitorPreferences } from "@shared/workspace-monitor";
 
 interface WorkspaceMonitorState {
@@ -102,6 +109,15 @@ interface DevDeckDesktopApi {
     verificationUri: string;
   }>;
   syncWorkspaceMonitorState(state: WorkspaceMonitorState): Promise<void>;
+  terminal: {
+    available(): Promise<PtyAvailability>;
+    spawn(request: SpawnPtyRequest): Promise<SpawnPtyResult>;
+    write(payload: { id: string; data: string }): Promise<void>;
+    resize(payload: { id: string; cols: number; rows: number }): Promise<void>;
+    kill(payload: { id: string }): Promise<void>;
+    onData(listener: (payload: PtyDataPayload) => void): () => void;
+    onExit(listener: (payload: PtyExitPayload) => void): () => void;
+  };
   windowControls: {
     close(): Promise<void>;
     minimize(): Promise<void>;

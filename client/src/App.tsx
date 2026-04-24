@@ -21,6 +21,7 @@ const Activity = lazy(() => import("@/pages/Activity"));
 const Sessions = lazy(() => import("@/pages/Sessions"));
 const TeamInsights = lazy(() => import("@/pages/TeamInsights"));
 const Projects = lazy(() => import("@/pages/Projects"));
+const Terminals = lazy(() => import("@/pages/Terminals"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
 
 function AppLoadingScreen() {
@@ -78,6 +79,7 @@ function AppRouter() {
         <Route path="/sessions">{() => <Sessions />}</Route>
         <Route path="/team">{() => <TeamInsights />}</Route>
         <Route path="/projects">{() => <Projects />}</Route>
+        <Route path="/terminals">{() => <Terminals />}</Route>
         <Route path="/activity">{() => <Activity />}</Route>
         <Route path="/settings">{() => <Settings />}</Route>
         <Route>{() => <NotFound />}</Route>

@@ -1,9 +1,7 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { SquareTerminal } from "lucide-react";
 import { Button, type ButtonProps } from "@/components/ui/button";
-import { getDesktopApi } from "@/lib/desktop";
-import { useCodingTool } from "@/hooks/use-coding-tool";
-import type { DevSession } from "@/lib/dev-sessions";
+import { buildTerminalsPath, type DevSession } from "@/lib/dev-sessions";
 
 interface SessionLaunchButtonProps {
   className?: string;
@@ -26,13 +24,12 @@ export default function SessionLaunchButton({
   size = "icon",
   variant = "outline",
 }: SessionLaunchButtonProps) {
-  const desktopApi = getDesktopApi();
-  const { openPreferredTool } = useCodingTool();
   const actionLabel = existingSession ? "Open Session" : "Start Session";
 
   const handleClick = async () => {
-    if (existingSession && desktopApi) {
-      await openPreferredTool(existingSession.localPath);
+    if (existingSession) {
+      onBeforeNavigate?.();
+      onNavigate(buildTerminalsPath(existingSession.id));
       return;
     }
 

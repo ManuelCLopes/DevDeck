@@ -12,6 +12,11 @@ import type {
   DevSessionOperationalSnapshot,
   InspectDevSessionRequest,
 } from "../shared/sessions";
+import type {
+  PtyAvailability,
+  SpawnPtyRequest,
+  SpawnPtyResult,
+} from "../shared/terminals";
 import type { WorkspaceMonitorPreferences } from "../shared/workspace-monitor";
 
 interface WorkspaceMonitorState {
@@ -172,6 +177,49 @@ const devdeck = {
   },
   setLaunchAtLogin(enabled: boolean): Promise<void> {
     return ipcRenderer.invoke("devdeck:set-launch-at-login", enabled);
+  },
+  terminal: {
+    available(): Promise<PtyAvailability> {
+      return ipcRenderer.invoke("devdeck:pty:available");
+    },
+    spawn(request: SpawnPtyRequest): Promise<SpawnPtyResult> {
+      return ipcRenderer.invoke("devdeck:pty:spawn", request);
+    },
+    write(payload: { id: string; data: string }): Promise<void> {
+      return ipcRenderer.invoke("devdeck:pty:write", payload);
+    },
+    resize(payload: { id: string; cols: number; rows: number }): Promise<void> {
+      return ipcRenderer.invoke("devdeck:pty:resize", payload);
+    },
+    kill(payload: { id: string }): Promise<void> {
+      return ipcRenderer.invoke("devdeck:pty:kill", payload);
+    },
+    onData(listener: (payload: { id: string; chunk: string }) => void) {
+      const wrapped = (
+        _event: Electron.IpcRendererEvent,
+        payload: { id: string; chunk: string },
+      ) => listener(payload);
+      ipcRenderer.on("devdeck:pty:data", wrapped);
+      return () => {
+        ipcRenderer.removeListener("devdeck:pty:data", wrapped);
+      };
+    },
+    onExit(
+      listener: (payload: {
+        id: string;
+        exitCode: number;
+        signal: number | null;
+      }) => void,
+    ) {
+      const wrapped = (
+        _event: Electron.IpcRendererEvent,
+        payload: { id: string; exitCode: number; signal: number | null },
+      ) => listener(payload);
+      ipcRenderer.on("devdeck:pty:exit", wrapped);
+      return () => {
+        ipcRenderer.removeListener("devdeck:pty:exit", wrapped);
+      };
+    },
   },
   windowControls: {
     close(): Promise<void> {

@@ -1,6 +1,25 @@
 import { useMemo } from "react";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 
+export type TerminalThemeName = "devdeck" | "dark" | "light" | "solarized";
+export type TerminalCursorStyle = "block" | "bar" | "underline";
+export type TerminalFontFamilyKey =
+  | "sf-mono"
+  | "jetbrains-mono"
+  | "fira-code"
+  | "menlo"
+  | "ibm-plex-mono";
+
+export interface TerminalPreferences {
+  cursorBlink: boolean;
+  cursorStyle: TerminalCursorStyle;
+  defaultShell: string | null;
+  fontFamily: TerminalFontFamilyKey;
+  fontSize: number;
+  scrollback: number;
+  theme: TerminalThemeName;
+}
+
 export interface AppPreferences {
   alertFailingBuilds: boolean;
   autoRefreshEnabled: boolean;
@@ -14,7 +33,18 @@ export interface AppPreferences {
   preferredCodingTool: "opencode" | "vscode";
   refreshOnWindowFocus: boolean;
   showMenuBarIcon: boolean;
+  terminal: TerminalPreferences;
 }
+
+export const DEFAULT_TERMINAL_PREFERENCES: TerminalPreferences = {
+  cursorBlink: true,
+  cursorStyle: "block",
+  defaultShell: null,
+  fontFamily: "sf-mono",
+  fontSize: 13,
+  scrollback: 5000,
+  theme: "devdeck",
+};
 
 const APP_PREFERENCES_KEY = "devdeck_app_preferences";
 
@@ -31,14 +61,21 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   preferredCodingTool: "vscode",
   refreshOnWindowFocus: true,
   showMenuBarIcon: true,
+  terminal: DEFAULT_TERMINAL_PREFERENCES,
 };
 
 function mergeAppPreferences(
   rawPreferences: Partial<AppPreferences> | null | undefined,
 ) {
+  const mergedTerminal: TerminalPreferences = {
+    ...DEFAULT_TERMINAL_PREFERENCES,
+    ...((rawPreferences?.terminal ?? {}) as Partial<TerminalPreferences>),
+  };
+
   return {
     ...DEFAULT_APP_PREFERENCES,
     ...(rawPreferences ?? {}),
+    terminal: mergedTerminal,
   };
 }
 

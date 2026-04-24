@@ -55,6 +55,16 @@ export function buildCreateSessionPath(
   return `/sessions?${params.toString()}`;
 }
 
+export function buildTerminalsPath(sessionId?: string | null) {
+  if (!sessionId) {
+    return "/terminals";
+  }
+
+  const params = new URLSearchParams();
+  params.set("session", sessionId);
+  return `/terminals?${params.toString()}`;
+}
+
 export function buildDefaultSessionLabel(options: {
   kind: DevSessionKind;
   projectName: string;

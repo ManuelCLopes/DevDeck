@@ -293,6 +293,7 @@ export default function Settings() {
         | "autoRefreshEnabled"
         | "autoRefreshIntervalSeconds"
         | "preferredCodingTool"
+        | "terminal"
       >;
       label: string;
     }>;
