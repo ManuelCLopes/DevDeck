@@ -1,3 +1,5 @@
+import type { TerminalThemeName } from "@/lib/app-preferences";
+
 export type TerminalLayout = "single" | "columns" | "rows" | "grid";
 
 export type TerminalPaneAccent =
@@ -25,6 +27,7 @@ export interface TerminalPaneConfig {
   cwd?: string;
   env?: Record<string, string>;
   accent?: TerminalPaneAccent;
+  theme?: TerminalThemeName;
 }
 
 export const TERMINAL_PANE_ACCENTS: TerminalPaneAccentDefinition[] = [

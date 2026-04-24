@@ -4,6 +4,7 @@ import {
   type TerminalPaneConfig,
   type TerminalLayout,
 } from "@/lib/terminal-panes";
+import type { TerminalThemeName } from "@/lib/app-preferences";
 
 export const GLOBAL_TERMINAL_WORKSPACE_SCOPE = "__global__";
 const DEFAULT_LAYOUT: TerminalLayout = "single";
@@ -91,6 +92,7 @@ export function normalizeTerminalPanes(value: unknown): TerminalPaneConfig[] {
             )
           : undefined,
       accent: normalizeTerminalPaneAccent(candidate.accent, index),
+      theme: normalizeTerminalPaneTheme(candidate.theme),
     }));
 }
 
@@ -110,6 +112,21 @@ function normalizeTerminalPaneAccent(
   }
 
   return getDefaultTerminalPaneAccent(index);
+}
+
+function normalizeTerminalPaneTheme(
+  value: unknown,
+): TerminalThemeName | undefined {
+  if (
+    value === "devdeck" ||
+    value === "dark" ||
+    value === "light" ||
+    value === "solarized"
+  ) {
+    return value;
+  }
+
+  return undefined;
 }
 
 export function sanitizeUnavailableTerminalPanes(

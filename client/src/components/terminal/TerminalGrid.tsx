@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EmbeddedTerminal } from "@/components/terminal/EmbeddedTerminal";
 import type { TerminalPreferences } from "@/lib/app-preferences";
+import { TERMINAL_THEMES } from "@/lib/terminal-theme";
 import { cn } from "@/lib/utils";
 
 interface TerminalGridProps {
@@ -446,6 +447,42 @@ function TerminalPane({
                 ))}
               </div>
             </div>
+            <div className="col-span-full flex flex-col gap-1">
+              <span className="text-muted-foreground">Theme</span>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onUpdate({ theme: undefined })}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-medium transition-colors",
+                    !pane.theme
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border/60 bg-white text-foreground/75 hover:bg-secondary",
+                  )}
+                >
+                  Global
+                </button>
+                {TERMINAL_THEMES.map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => onUpdate({ theme: option.key })}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-medium transition-colors",
+                      pane.theme === option.key
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border/60 bg-white text-foreground/75 hover:bg-secondary",
+                    )}
+                  >
+                    <span
+                      className="inline-block h-2 w-2 rounded-full border border-black/10"
+                      style={{ backgroundColor: option.colors.background }}
+                    />
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           {availableShells && availableShells.length > 0 ? (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -482,6 +519,7 @@ function TerminalPane({
           env={pane.env}
           label={pane.label}
           preferences={preferences}
+          themeOverride={pane.theme}
           onClose={onClose}
           onFocusRequest={onFocus}
         />

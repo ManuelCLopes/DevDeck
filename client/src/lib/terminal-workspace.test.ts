@@ -147,9 +147,11 @@ test("sanitizeUnavailableTerminalPanes falls back from unavailable tool panes", 
 test("normalizeTerminalPanes backfills pane accents for older saved layouts", () => {
   const panes = normalizeTerminalPanes([
     { id: "1", label: "Shell 1", cwd: "/tmp" },
-    { id: "2", label: "Shell 2", cwd: "/tmp", accent: "rose" },
+    { id: "2", label: "Shell 2", cwd: "/tmp", accent: "rose", theme: "dark" },
   ]);
 
   assert.equal(panes[0]?.accent, "slate");
+  assert.equal(panes[0]?.theme, undefined);
   assert.equal(panes[1]?.accent, "rose");
+  assert.equal(panes[1]?.theme, "dark");
 });

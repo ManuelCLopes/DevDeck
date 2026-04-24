@@ -714,6 +714,7 @@ function areTerminalPanesEqual(
       pane.command === candidate.command &&
       pane.cwd === candidate.cwd &&
       pane.accent === candidate.accent &&
+      pane.theme === candidate.theme &&
       JSON.stringify(pane.args ?? []) === JSON.stringify(candidate.args ?? []) &&
       JSON.stringify(pane.env ?? {}) === JSON.stringify(candidate.env ?? {})
     );
