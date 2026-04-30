@@ -768,28 +768,21 @@ export default function Terminals() {
             className={cn(
               "flex flex-1 min-h-[420px] min-w-0 flex-col",
               isFocusMode &&
-                "fixed inset-0 z-[90] min-h-0 bg-[#fbfbfb] p-4 sm:p-6 lg:p-8",
+                "fixed inset-0 z-[90] min-h-0 bg-[#fbfbfb] p-3 sm:p-4 lg:p-5",
             )}
           >
             {isFocusMode ? (
-              <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-white/85 px-3 py-2 shadow-sm backdrop-blur-md">
-                <div className="min-w-0">
-                  <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Focus Mode
-                  </div>
-                  <div className="truncate text-sm font-medium text-foreground">
-                    {selectedSession?.label ?? "Shared terminals workspace"}
-                  </div>
-                </div>
+              <div className="pointer-events-none absolute right-3 top-3 z-[100] sm:right-4 sm:top-4 lg:right-5 lg:top-5">
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
-                  className="gap-1.5"
+                  size="icon"
+                  className="pointer-events-auto h-9 w-9 rounded-full bg-white/92 shadow-sm backdrop-blur-md"
                   onClick={() => setIsFocusMode(false)}
+                  aria-label="Exit focus mode"
+                  title="Exit focus mode"
                 >
-                  <Minimize2 className="h-3.5 w-3.5" />
-                  Exit Focus
+                  <Minimize2 className="h-4 w-4" />
                 </Button>
               </div>
             ) : null}
