@@ -515,16 +515,14 @@ export default function Terminals() {
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {selectedSession.resolvedProjectName ? (
-                      <span
-                        className={getProjectTagClassName(
-                          selectedSession.resolvedProjectName,
-                          "px-2.5 py-1",
-                        )}
-                      >
-                        {selectedSession.resolvedProjectName}
-                      </span>
-                    ) : null}
+                    <span
+                      className={getProjectTagClassName(
+                        selectedSession.resolvedProjectName ?? "Global context",
+                        "px-2.5 py-1",
+                      )}
+                    >
+                      {selectedSession.resolvedProjectName ?? "Global context"}
+                    </span>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">

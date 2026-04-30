@@ -169,11 +169,11 @@ export default function Sessions() {
         <div className="min-w-0">
           <span
             className={getProjectTagClassName(
-              session.resolvedProjectName ?? "Repository",
+              session.resolvedProjectName ?? "Global context",
               "px-2.5 py-1",
             )}
           >
-            {session.resolvedProjectName ?? "Repository"}
+            {session.resolvedProjectName ?? "Global context"}
           </span>
         </div>
 
@@ -236,7 +236,7 @@ export default function Sessions() {
               OpenCode Sessions
             </h1>
             <p className="text-sm text-muted-foreground">
-              Sessions appear here automatically when you start OpenCode from a repository or pull request. Rename them, open them, or archive them.
+              Sessions appear here automatically when OpenCode creates them. Rename them, open them, or archive them.
             </p>
             {opencodeAvailable ? null : (
               <p className="mt-2 text-xs text-muted-foreground">
@@ -254,7 +254,7 @@ export default function Sessions() {
               </h2>
               <p className="text-sm text-muted-foreground">
                 {opencodeAvailable
-                  ? "Sessions DevDeck launched through OpenCode appear here."
+                  ? "Real OpenCode sessions appear here, whether they started inside a tracked repository or from a general terminal context."
                   : "This page is unavailable until DevDeck can access the OpenCode CLI on this machine."}
               </p>
             </div>
@@ -310,14 +310,14 @@ export default function Sessions() {
               </div>
             ) : activeSessions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border/60 bg-secondary/20 px-4 py-10 text-center text-sm text-muted-foreground">
-                No OpenCode sessions yet. Start OpenCode in a tracked repository and DevDeck will list the real session here.
+                No OpenCode sessions yet. Start OpenCode from any terminal context and DevDeck will list the real session here.
               </div>
             ) : (
               <>
                 <div className="hidden gap-4 border-b border-border/50 bg-secondary/30 px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground md:grid md:grid-cols-[180px_minmax(0,1.6fr)_minmax(0,1fr)_auto]">
                   <div>Session</div>
                   <div>Name</div>
-                  <div>Repository</div>
+                  <div>Context</div>
                   <div className="text-right">Access</div>
                 </div>
                 {activeSessions.map((session) => renderSessionRow(session))}
@@ -346,7 +346,7 @@ export default function Sessions() {
               <div className="hidden gap-4 border-b border-border/50 bg-secondary/30 px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground md:grid md:grid-cols-[180px_minmax(0,1.6fr)_minmax(0,1fr)_auto]">
                 <div>Session</div>
                 <div>Name</div>
-                <div>Repository</div>
+                <div>Context</div>
                 <div className="text-right">Access</div>
               </div>
               {archivedSessions.map((session) => renderSessionRow(session, { archived: true }))}
