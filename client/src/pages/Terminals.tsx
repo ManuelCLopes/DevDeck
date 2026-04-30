@@ -45,6 +45,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useCodingTool } from "@/hooks/use-coding-tool";
+import { useOpenCodeSessions } from "@/hooks/use-opencode-sessions";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { toast } from "@/hooks/use-toast";
@@ -57,13 +58,7 @@ import {
   layoutCapacity,
 } from "@/components/terminal/TerminalGrid";
 import {
-  buildAutomaticOpenCodeSession,
-  DEV_SESSIONS_STORAGE_KEY,
   buildTerminalsPath,
-  findTrackedProjectForPath,
-  normalizeDevSessions,
-  sortDevSessions,
-  type DevSession,
 } from "@/lib/dev-sessions";
 import {
   GLOBAL_TERMINAL_WORKSPACE_SCOPE,
@@ -91,6 +86,7 @@ import type {
   TerminalFontFamilyKey,
   TerminalThemeName,
 } from "@/lib/app-preferences";
+import type { OpenCodeSessionView } from "@/hooks/use-opencode-sessions";
 import type { PtyAvailability } from "@shared/terminals";
 const DEFAULT_QUICK_SHELLS: Array<{
   label: string;
@@ -102,19 +98,20 @@ const DEFAULT_QUICK_SHELLS: Array<{
   { label: "zsh", command: "/bin/zsh", args: ["-l"] },
 ];
 const DEVDECK_OPENCODE_SESSION_ID_ENV = "DEVDECK_OPENCODE_SESSION_ID";
+const ARCHIVED_OPENCODE_SESSIONS_STORAGE_KEY = "devdeck:archived-opencode-session-ids";
 
 function buildInitialPanes(options: {
   defaultCwd?: string;
   opencodeSessionId?: string | null;
   preferredTool: "opencode" | "vscode";
-  selectedSession: DevSession | null;
+  selectedSession: OpenCodeSessionView | null;
   shouldStartInOpenCode: boolean;
 }): TerminalPaneConfig[] {
   const pane = createDefaultPane(0, options.defaultCwd);
 
   if (options.selectedSession) {
-    pane.label = options.selectedSession.label;
-    pane.cwd = options.selectedSession.localPath;
+    pane.label = options.selectedSession.title;
+    pane.cwd = options.selectedSession.projectPath ?? options.defaultCwd;
   }
 
   if (options.shouldStartInOpenCode) {
@@ -150,12 +147,13 @@ export default function Terminals() {
   const search = useSearch();
   const { preferences, setPreference } = useAppPreferences();
   const { availability: codingToolAvailability, preferredTool } = useCodingTool();
+  const { isLoading: opencodeSessionsLoading, sessions: opencodeSessions } =
+    useOpenCodeSessions();
   const { data: snapshot } = useWorkspaceSnapshot();
   const desktopApi = getDesktopApi();
   const [ptyAvailability, setPtyAvailability] = useState<PtyAvailability | null>(null);
   const [dismissedWarnings, setDismissedWarnings] = useState<Record<string, true>>({});
   const [isFocusMode, setIsFocusMode] = useState(false);
-  const recoveredOpenCodePaneIdsRef = useRef<Set<string>>(new Set());
   const [paneRuntimeStates, setPaneRuntimeStates] = useState<
     Record<string, TerminalPaneRuntimeState>
   >({});
@@ -163,26 +161,31 @@ export default function Terminals() {
     nextLayout: TerminalLayout;
     panes: Array<{ id: string; label: string }>;
   } | null>(null);
-  const [sessions, setSessions] = usePersistentState<DevSession[]>(DEV_SESSIONS_STORAGE_KEY, [], {
-    deserialize: (value) => normalizeDevSessions(JSON.parse(value)),
-  });
+  const [archivedSessionIds] = usePersistentState<string[]>(
+    ARCHIVED_OPENCODE_SESSIONS_STORAGE_KEY,
+    [],
+  );
   const terminalPreferences = preferences.terminal;
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
+  const requestedProjectId = searchParams.get("project");
   const requestedSessionId = searchParams.get("session");
   const requestedLaunch = searchParams.get("launch");
+  const archivedSessionIdSet = useMemo(
+    () => new Set(archivedSessionIds),
+    [archivedSessionIds],
+  );
   const activeSessions = useMemo(
-    () => sortDevSessions(sessions).filter((session) => session.status === "active"),
-    [sessions],
+    () => opencodeSessions.filter((session) => !archivedSessionIdSet.has(session.id)),
+    [archivedSessionIdSet, opencodeSessions],
   );
   const selectedSession =
-    activeSessions.find((session) => session.id === requestedSessionId) ?? null;
-  const linkedPullRequest = selectedSession?.linkedPullRequestId
-    ? snapshot?.pullRequests.find(
-        (pullRequest) => pullRequest.id === selectedSession.linkedPullRequestId,
-      ) ?? null
-    : null;
+    opencodeSessions.find((session) => session.id === requestedSessionId) ?? null;
   const trackedProjects = snapshot?.projects ?? [];
-  const sessionMissing = Boolean(requestedSessionId && !selectedSession);
+  const requestedProject =
+    trackedProjects.find((project) => project.id === requestedProjectId) ?? null;
+  const sessionMissing = Boolean(
+    requestedSessionId && !selectedSession && !opencodeSessionsLoading,
+  );
   const storageScopeKey = buildTerminalWorkspaceScopeKey(selectedSession?.id);
   const [layout, setLayout] = usePersistentState<TerminalLayout>(
     buildTerminalLayoutStorageKey(storageScopeKey),
@@ -228,7 +231,11 @@ export default function Terminals() {
       );
   }, [desktopApi]);
 
-  const defaultCwd = selectedSession?.localPath ?? ptyAvailability?.homeDir ?? undefined;
+  const defaultCwd =
+    selectedSession?.projectPath ??
+    requestedProject?.localPath ??
+    ptyAvailability?.homeDir ??
+    undefined;
   const availableShells = useMemo(
     () =>
       DEFAULT_QUICK_SHELLS.filter(
@@ -311,82 +318,6 @@ export default function Terminals() {
     );
   }, [sanitizedPanes, setPanes]);
 
-  useEffect(() => {
-    if (!codingToolAvailability.opencode.available) {
-      return;
-    }
-
-    if (selectedSession) {
-      return;
-    }
-
-    const normalizedPanes = normalizeTerminalPanes(panes);
-    if (normalizedPanes.length === 0) {
-      return;
-    }
-
-    const recoveredSessions: DevSession[] = [];
-    let nextPanes = normalizedPanes;
-
-    normalizedPanes.forEach((pane) => {
-      if (pane.command !== "opencode") {
-        return;
-      }
-
-      if (pane.env?.[DEVDECK_OPENCODE_SESSION_ID_ENV]) {
-        return;
-      }
-
-      if (recoveredOpenCodePaneIdsRef.current.has(pane.id)) {
-        return;
-      }
-
-      const matchedProject = findTrackedProjectForPath(
-        trackedProjects,
-        paneRuntimeStates[pane.id]?.info?.cwd ?? pane.cwd ?? defaultCwd ?? null,
-      );
-      if (!matchedProject) {
-        return;
-      }
-
-      const nextSession = buildAutomaticOpenCodeSession(matchedProject);
-      recoveredOpenCodePaneIdsRef.current.add(pane.id);
-      recoveredSessions.push(nextSession);
-      nextPanes = nextPanes.map((candidate) =>
-        candidate.id === pane.id
-          ? {
-              ...candidate,
-              args: buildOpenCodeSessionArgs(nextSession.id),
-              env: {
-                ...(candidate.env ?? {}),
-                [DEVDECK_OPENCODE_SESSION_ID_ENV]: nextSession.id,
-              },
-            }
-          : candidate,
-      );
-    });
-
-    if (recoveredSessions.length === 0) {
-      return;
-    }
-
-    setSessions((currentSessions) => [...recoveredSessions, ...currentSessions]);
-    setPanes((currentPanes) =>
-      areTerminalPanesEqual(normalizeTerminalPanes(currentPanes), nextPanes)
-        ? currentPanes
-        : nextPanes,
-    );
-  }, [
-    codingToolAvailability.opencode.available,
-    defaultCwd,
-    paneRuntimeStates,
-    panes,
-    selectedSession,
-    setPanes,
-    setSessions,
-    trackedProjects,
-  ]);
-
   const handleSessionChange = (value: string) => {
     navigateInApp(
       value === GLOBAL_TERMINAL_WORKSPACE_SCOPE
@@ -395,68 +326,6 @@ export default function Terminals() {
       setLocation,
     );
   };
-
-  const openLinkedPullRequest = async () => {
-    if (!linkedPullRequest) {
-      return;
-    }
-
-    if (desktopApi) {
-      await desktopApi.openExternal(linkedPullRequest.url);
-      return;
-    }
-
-    window.open(linkedPullRequest.url, "_blank", "noopener,noreferrer");
-  };
-
-  const createAutomaticSessionFromPath = useCallback(
-    (candidatePath?: string | null) => {
-      if (!codingToolAvailability.opencode.available) {
-        return null;
-      }
-
-      const matchedProject = findTrackedProjectForPath(
-        trackedProjects,
-        candidatePath ?? defaultCwd ?? null,
-      );
-
-      if (!matchedProject) {
-        toast({
-          title: "Tracked repository required",
-          description:
-            "OpenCode sessions can only be created from a tracked repository context.",
-          variant: "destructive",
-        });
-        return null;
-      }
-
-      const nextSession = buildAutomaticOpenCodeSession(matchedProject);
-      setSessions((currentSessions) => [nextSession, ...currentSessions]);
-      return nextSession;
-    },
-    [
-      codingToolAvailability.opencode.available,
-      defaultCwd,
-      setSessions,
-      trackedProjects,
-    ],
-  );
-
-  const launchAutomaticSessionFromPath = useCallback(
-    (candidatePath?: string | null) => {
-      const nextSession = createAutomaticSessionFromPath(candidatePath);
-      if (!nextSession) {
-        return false;
-      }
-
-      navigateInApp(
-        buildTerminalsPath(nextSession.id, { launch: "opencode" }),
-        setLocation,
-      );
-      return true;
-    },
-    [createAutomaticSessionFromPath, setLocation],
-  );
 
   const addPaneWithShell = (shell: {
     label: string;
@@ -490,7 +359,7 @@ export default function Terminals() {
       command: shell.command,
       args: shell.args,
       env: "env" in shell ? shell.env : undefined,
-      cwd: selectedSession?.localPath ?? defaultCwd,
+      cwd: selectedSession?.projectPath ?? defaultCwd,
     };
 
     setLayout(nextLayout);
@@ -584,7 +453,7 @@ export default function Terminals() {
                       </SelectItem>
                       {activeSessions.map((session) => (
                         <SelectItem key={session.id} value={session.id}>
-                          {session.label}
+                          {session.title}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -646,34 +515,15 @@ export default function Terminals() {
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        navigateInApp(
-                          `/?project=${encodeURIComponent(selectedSession.projectId)}`,
-                          setLocation,
-                        )
-                      }
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${getProjectTagClassName(selectedSession.projectName)}`}
-                    >
-                      {selectedSession.projectName}
-                    </button>
-                    <span className="rounded-full border border-border/60 bg-secondary/30 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                      {selectedSession.sessionBranchName}
-                    </span>
-                    {selectedSession.kind === "worktree" ? (
-                      <span className="rounded-full border border-border/60 bg-secondary/30 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                        Review worktree
-                      </span>
-                    ) : null}
-                    {linkedPullRequest ? (
-                      <button
-                        type="button"
-                        onClick={() => void openLinkedPullRequest()}
-                        className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary"
+                    {selectedSession.resolvedProjectName ? (
+                      <span
+                        className={getProjectTagClassName(
+                          selectedSession.resolvedProjectName,
+                          "px-2.5 py-1",
+                        )}
                       >
-                        PR #{linkedPullRequest.number}
-                      </button>
+                        {selectedSession.resolvedProjectName}
+                      </span>
                     ) : null}
                   </div>
                 </div>
@@ -683,7 +533,9 @@ export default function Terminals() {
                     availableShells={availableShells}
                     onAddPane={addPaneWithShell}
                   />
-                  <OpenInCodeButton targetPath={selectedSession.localPath} />
+                  {selectedSession.projectPath ? (
+                    <OpenInCodeButton targetPath={selectedSession.projectPath} />
+                  ) : null}
                   <Button
                     type="button"
                     variant="outline"
@@ -801,7 +653,6 @@ export default function Terminals() {
               requestedLaunch={requestedLaunch}
               requestedSessionId={selectedSession?.id ?? null}
               selectedSession={selectedSession}
-              onLaunchAutomaticSession={launchAutomaticSessionFromPath}
               paneRuntimeStates={paneRuntimeStates}
               setLayout={setLayout}
               setPanes={setPanes}
@@ -876,7 +727,6 @@ function areTerminalPaneRuntimeStatesEqual(
 interface TerminalWorkspaceProps {
   availableCommands: string[];
   availableShells: Array<{ label: string; command: string; args?: string[] }>;
-  onLaunchAutomaticSession: (cwd?: string | null) => boolean;
   defaultCwd?: string;
   initialPanes: TerminalPaneConfig[];
   layout: TerminalLayout;
@@ -888,7 +738,7 @@ interface TerminalWorkspaceProps {
   preferences: import("@/lib/app-preferences").TerminalPreferences;
   requestedLaunch: string | null;
   requestedSessionId: string | null;
-  selectedSession: DevSession | null;
+  selectedSession: OpenCodeSessionView | null;
   setLayout: (layout: TerminalLayout) => void;
   setPanes: React.Dispatch<React.SetStateAction<TerminalPaneConfig[]>>;
   scopeKey: string;
@@ -897,7 +747,6 @@ interface TerminalWorkspaceProps {
 function TerminalWorkspace({
   availableCommands,
   availableShells,
-  onLaunchAutomaticSession,
   defaultCwd,
   initialPanes,
   layout,
@@ -1007,12 +856,6 @@ function TerminalWorkspace({
             [DEVDECK_OPENCODE_SESSION_ID_ENV]: selectedSession.id,
           },
         };
-      } else {
-        if (onLaunchAutomaticSession(activePaneCwd)) {
-          return;
-        }
-
-        return;
       }
     }
 
@@ -1031,7 +874,7 @@ function TerminalWorkspace({
       label: shell.label,
       command: shell.command,
       args: shell.args,
-      cwd: selectedSession?.localPath ?? activePaneCwd ?? defaultCwd,
+      cwd: selectedSession?.projectPath ?? activePaneCwd ?? defaultCwd,
     };
 
     setLayout(nextLayout);

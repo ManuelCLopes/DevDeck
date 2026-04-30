@@ -157,19 +157,7 @@ export default function Projects() {
       return;
     }
 
-    const existingSession = findProjectDevSession(devSessions, project.id);
-    if (existingSession) {
-      navigateInApp(
-        buildTerminalsPath(existingSession.id, { launch: "opencode" }),
-        setLocation,
-      );
-      return;
-    }
-
-    navigateInApp(
-      existingSession ? "/sessions" : buildCreateSessionPath(project.id),
-      setLocation,
-    );
+    navigateInApp(buildCreateSessionPath(project.id), setLocation);
   };
 
   return (

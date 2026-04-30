@@ -10,6 +10,7 @@ import type {
   DevSessionOperationalSnapshot,
   InspectDevSessionRequest,
 } from "../shared/sessions";
+import type { OpenCodeSessionRecord } from "../shared/opencode-sessions";
 import type {
   PtyAvailability,
   SpawnPtyRequest,
@@ -145,8 +146,20 @@ const devdeck = {
   listGitHubRepositories(): Promise<GitHubRepositoryCandidate[]> {
     return ipcRenderer.invoke("devdeck:list-github-repositories");
   },
+  listOpenCodeSessions(): Promise<OpenCodeSessionRecord[]> {
+    return ipcRenderer.invoke("devdeck:list-opencode-sessions");
+  },
   pollGitHubDeviceAuth(deviceCode: string) {
     return ipcRenderer.invoke("devdeck:poll-github-device-auth", deviceCode);
+  },
+  renameOpenCodeSession(
+    sessionId: string,
+    title: string,
+  ): Promise<OpenCodeSessionRecord> {
+    return ipcRenderer.invoke("devdeck:rename-opencode-session", {
+      sessionId,
+      title,
+    });
   },
   saveGitHubToken(token: string) {
     return ipcRenderer.invoke("devdeck:save-github-token", token);

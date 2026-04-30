@@ -1,24 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useSearch } from "wouter";
-import type { DevSessionOperationalSnapshot } from "@shared/sessions";
+import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
+import type { OpenCodeSessionRecord } from "@shared/opencode-sessions";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { usePersistentState } from "@/hooks/use-persistent-state";
+import { useOpenCodeSessions } from "@/hooks/use-opencode-sessions";
 import { toast } from "@/hooks/use-toast";
-import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import { navigateInApp } from "@/lib/app-navigation";
-import { useCodingTool } from "@/hooks/use-coding-tool";
 import { getDesktopApi } from "@/lib/desktop";
-import {
-  buildTerminalsPath,
-  buildDefaultSessionLabel,
-  createSessionId,
-  DEV_SESSIONS_STORAGE_KEY,
-  findDuplicateDevSession,
-  normalizeDevSessions,
-  sortDevSessions,
-  type DevSession,
-} from "@/lib/dev-sessions";
+import { buildTerminalsPath } from "@/lib/dev-sessions";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import {
   AlertTriangle,
@@ -30,114 +20,51 @@ import {
   X,
 } from "lucide-react";
 
+const ARCHIVED_OPENCODE_SESSIONS_STORAGE_KEY = "devdeck:archived-opencode-session-ids";
+
 export default function Sessions() {
   const [, setLocation] = useLocation();
-  const search = useSearch();
-  const { data: snapshot } = useWorkspaceSnapshot();
-  const { availability: codingToolAvailability } = useCodingTool();
+  const { error, isAvailable: opencodeAvailable, isLoading, refresh, sessions } =
+    useOpenCodeSessions();
   const desktopApi = getDesktopApi();
-  const autoCreateHandledKeyRef = useRef<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [draftLabel, setDraftLabel] = useState("");
-  const [sessionSnapshotsById, setSessionSnapshotsById] = useState<
-    Record<string, DevSessionOperationalSnapshot>
-  >({});
-  const [sessions, setSessions] = usePersistentState<DevSession[]>(
-    DEV_SESSIONS_STORAGE_KEY,
+  const [archivedSessionIds, setArchivedSessionIds] = usePersistentState<string[]>(
+    ARCHIVED_OPENCODE_SESSIONS_STORAGE_KEY,
     [],
-    {
-      deserialize: (value) => normalizeDevSessions(JSON.parse(value)),
-    },
+  );
+  const archivedSessionIdSet = useMemo(
+    () => new Set(archivedSessionIds),
+    [archivedSessionIds],
+  );
+  const activeSessions = useMemo(
+    () => sessions.filter((session) => !archivedSessionIdSet.has(session.id)),
+    [archivedSessionIdSet, sessions],
+  );
+  const archivedSessions = useMemo(
+    () => sessions.filter((session) => archivedSessionIdSet.has(session.id)),
+    [archivedSessionIdSet, sessions],
   );
 
-  const searchParams = useMemo(() => new URLSearchParams(search), [search]);
-  const shouldAutoCreateSession = searchParams.get("create") === "1";
-  const initialProjectId = searchParams.get("project");
-  const initialPullRequestId = searchParams.get("pr");
-  const opencodeAvailable = codingToolAvailability.opencode.available;
-
-  useEffect(() => {
-    if (!desktopApi?.inspectDevSessions) {
-      setSessionSnapshotsById({});
-      return;
-    }
-
-    if (sessions.length === 0) {
-      setSessionSnapshotsById({});
-      return;
-    }
-
-    let cancelled = false;
-
-    void desktopApi
-      .inspectDevSessions(
-        sessions.map((session) => ({
-          localPath: session.localPath,
-          repositoryPath: session.repositoryPath,
-          sessionId: session.id,
-        })),
-      )
-      .then((snapshots) => {
-        if (cancelled) {
-          return;
-        }
-
-        setSessionSnapshotsById(
-          Object.fromEntries(
-            snapshots.map((snapshot) => [snapshot.sessionId, snapshot]),
-          ),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSessionSnapshotsById({});
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [desktopApi, sessions]);
-
-  const sortedSessions = useMemo(() => sortDevSessions(sessions), [sessions]);
-  const activeSessions = sortedSessions.filter((session) => session.status === "active");
-  const archivedSessions = sortedSessions.filter(
-    (session) => session.status === "archived",
-  );
-  const linkedPullRequests = snapshot?.pullRequests ?? [];
-  const trackedProjects = snapshot?.projects ?? [];
-
-  const updateSession = (sessionId: string, updater: (session: DevSession) => DevSession) => {
-    setSessions((currentSessions) =>
-      currentSessions.map((session) =>
-        session.id === sessionId ? updater(session) : session,
-      ),
-    );
-  };
-
-  const openEmbeddedTerminal = (session: DevSession) => {
+  const openEmbeddedTerminal = (session: OpenCodeSessionRecord) => {
     navigateInApp(buildTerminalsPath(session.id, { launch: "opencode" }), setLocation);
   };
 
   const handleArchiveSession = (sessionId: string) => {
-    updateSession(sessionId, (session) => ({
-      ...session,
-      status: "archived",
-      updatedAt: new Date().toISOString(),
-    }));
+    setArchivedSessionIds((currentIds) =>
+      currentIds.includes(sessionId) ? currentIds : [...currentIds, sessionId],
+    );
   };
 
   const handleRestoreSession = (sessionId: string) => {
-    updateSession(sessionId, (session) => ({
-      ...session,
-      status: "active",
-      updatedAt: new Date().toISOString(),
-    }));
+    setArchivedSessionIds((currentIds) =>
+      currentIds.filter((currentId) => currentId !== sessionId),
+    );
   };
 
-  const beginEditingSession = (session: DevSession) => {
+  const beginEditingSession = (session: OpenCodeSessionRecord) => {
     setEditingSessionId(session.id);
-    setDraftLabel(session.label);
+    setDraftLabel(session.title);
   };
 
   const cancelEditingSession = () => {
@@ -145,7 +72,7 @@ export default function Sessions() {
     setDraftLabel("");
   };
 
-  const saveSessionLabel = (sessionId: string) => {
+  const saveSessionLabel = async (sessionId: string) => {
     const nextLabel = draftLabel.trim();
     if (!nextLabel) {
       toast({
@@ -156,121 +83,28 @@ export default function Sessions() {
       return;
     }
 
-    updateSession(sessionId, (session) => ({
-      ...session,
-      label: nextLabel,
-      updatedAt: new Date().toISOString(),
-    }));
-    cancelEditingSession();
+    if (!desktopApi?.renameOpenCodeSession) {
+      return;
+    }
+
+    try {
+      await desktopApi.renameOpenCodeSession(sessionId, nextLabel);
+      cancelEditingSession();
+      await refresh();
+    } catch (error) {
+      toast({
+        title: "Could not rename session",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    }
   };
 
-  useEffect(() => {
-    if (shouldAutoCreateSession && !opencodeAvailable) {
-      toast({
-        title: "OpenCode is unavailable",
-        description:
-          "DevDeck cannot create or list OpenCode sessions until the OpenCode CLI is installed and visible on PATH.",
-        variant: "destructive",
-      });
-      navigateInApp("/sessions", setLocation);
-      return;
-    }
-
-    if (!shouldAutoCreateSession) {
-      autoCreateHandledKeyRef.current = null;
-      return;
-    }
-
-    if (!snapshot || !initialProjectId) {
-      return;
-    }
-
-    const targetProject = trackedProjects.find((project) => project.id === initialProjectId);
-    if (!targetProject?.localPath) {
-      if (autoCreateHandledKeyRef.current === "missing-project") {
-        return;
-      }
-
-      autoCreateHandledKeyRef.current = "missing-project";
-      toast({
-        title: "Repository not available",
-        description:
-          "DevDeck could not start an OpenCode session because the linked local repository was not found.",
-        variant: "destructive",
-      });
-      navigateInApp("/sessions", setLocation);
-      return;
-    }
-
-    const targetPullRequest =
-      initialPullRequestId != null
-        ? linkedPullRequests.find((pullRequest) => pullRequest.id === initialPullRequestId) ??
-          null
-        : null;
-
-    const autoCreateKey = `${targetProject.id}:${targetPullRequest?.id ?? "none"}`;
-    if (autoCreateHandledKeyRef.current === autoCreateKey) {
-      return;
-    }
-
-    autoCreateHandledKeyRef.current = autoCreateKey;
-
-    const existingSession = findDuplicateDevSession(sessions, {
-      kind: "existing_clone",
-      linkedPullRequestId: targetPullRequest?.id ?? null,
-      projectId: targetProject.id,
-    });
-    if (existingSession) {
-      navigateInApp(buildTerminalsPath(existingSession.id, { launch: "opencode" }), setLocation);
-      return;
-    }
-
-    const sessionBranchName = targetPullRequest?.headBranch ?? targetProject.currentBranch;
-    const now = new Date().toISOString();
-    const nextSession: DevSession = {
-      createdAt: now,
-      id: createSessionId(),
-      kind: "existing_clone",
-      label: buildDefaultSessionLabel({
-        kind: "existing_clone",
-        projectName: targetProject.name,
-        pullRequestNumber: targetPullRequest?.number ?? null,
-        sessionBranchName,
-      }),
-      linkedPullRequestId: targetPullRequest?.id ?? null,
-      linkedPullRequestNumber: targetPullRequest?.number ?? null,
-      linkedPullRequestTitle: targetPullRequest?.title ?? null,
-      localPath: targetProject.localPath,
-      projectId: targetProject.id,
-      projectName: targetProject.name,
-      repositoryPath: targetProject.localPath,
-      repositorySlug: targetPullRequest?.repositorySlug ?? null,
-      sessionBranchName,
-      sourceRef: targetPullRequest?.headBranch ?? targetProject.currentBranch,
-      status: "active",
-      updatedAt: now,
-    };
-
-    setSessions((currentSessions) => [nextSession, ...currentSessions]);
-    navigateInApp(buildTerminalsPath(nextSession.id, { launch: "opencode" }), setLocation);
-  }, [
-    initialProjectId,
-    initialPullRequestId,
-    linkedPullRequests,
-    sessions,
-    setLocation,
-    setSessions,
-    shouldAutoCreateSession,
-    snapshot,
-    trackedProjects,
-    opencodeAvailable,
-  ]);
-
-  const renderSessionRow = (session: DevSession, options?: { archived?: boolean }) => {
+  const renderSessionRow = (
+    session: OpenCodeSessionRecord & { resolvedProjectName: string | null },
+    options?: { archived?: boolean },
+  ) => {
     const archived = options?.archived ?? false;
-    const sessionSnapshot = sessionSnapshotsById[session.id];
-    const sessionUnavailable =
-      sessionSnapshot && (!sessionSnapshot.exists || !sessionSnapshot.isRepository);
     const isEditing = editingSessionId === session.id;
 
     return (
@@ -307,7 +141,7 @@ export default function Sessions() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={() => saveSessionLabel(session.id)}
+                onClick={() => void saveSessionLabel(session.id)}
                 title="Save name"
               >
                 <Check className="h-4 w-4" />
@@ -326,20 +160,20 @@ export default function Sessions() {
           ) : (
             <div className="min-w-0">
               <div className="truncate text-sm font-medium text-foreground">
-                {session.label}
+                {session.title}
               </div>
-              {sessionUnavailable ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Local repository unavailable
-                </p>
-              ) : null}
             </div>
           )}
         </div>
 
         <div className="min-w-0">
-          <span className={getProjectTagClassName(session.projectName, "px-2.5 py-1")}>
-            {session.projectName}
+          <span
+            className={getProjectTagClassName(
+              session.resolvedProjectName ?? "Repository",
+              "px-2.5 py-1",
+            )}
+          >
+            {session.resolvedProjectName ?? "Repository"}
           </span>
         </div>
 
@@ -349,7 +183,6 @@ export default function Sessions() {
             onClick={() => openEmbeddedTerminal(session)}
             className="gap-1.5"
             size="sm"
-            disabled={Boolean(sessionUnavailable)}
           >
             <SquareTerminal className="h-3.5 w-3.5" />
             Open in Terminals
@@ -427,7 +260,11 @@ export default function Sessions() {
             </div>
             <div className="flex items-center gap-3">
               <span className="rounded-full border border-border/60 bg-secondary px-2.5 py-1 text-[11px] font-medium text-foreground">
-                {opencodeAvailable ? `${activeSessions.length} active` : "Unavailable"}
+                {isLoading
+                  ? "Loading…"
+                  : opencodeAvailable
+                    ? `${activeSessions.length} active`
+                    : "Unavailable"}
               </span>
             </div>
           </div>
@@ -452,9 +289,28 @@ export default function Sessions() {
                   sessions opened through a real OpenCode runtime.
                 </p>
               </div>
+            ) : error ? (
+              <div className="space-y-3 px-4 py-10 text-center">
+                <div className="mx-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700">
+                  <AlertTriangle className="h-4 w-4" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">
+                    Could not load OpenCode sessions
+                  </p>
+                  <p className="text-sm text-muted-foreground">{error}</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={() => void refresh()}>
+                  Retry
+                </Button>
+              </div>
+            ) : isLoading ? (
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                Loading OpenCode sessions…
+              </div>
             ) : activeSessions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border/60 bg-secondary/20 px-4 py-10 text-center text-sm text-muted-foreground">
-                No OpenCode sessions yet. Start OpenCode from a repository or pull request and DevDeck will add the linked session here.
+                No OpenCode sessions yet. Start OpenCode in a tracked repository and DevDeck will list the real session here.
               </div>
             ) : (
               <>
@@ -474,13 +330,13 @@ export default function Sessions() {
           <section className="rounded-2xl border border-border/60 bg-white/70 p-5 shadow-sm backdrop-blur-md">
             <div className="flex items-end justify-between gap-4">
               <div>
-              <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                Archived OpenCode Sessions
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Archived sessions stay available until you restore them.
-              </p>
-            </div>
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                  Archived OpenCode Sessions
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Archived sessions stay available until you restore them.
+                </p>
+              </div>
               <span className="rounded-full border border-border/60 bg-secondary px-2.5 py-1 text-[11px] font-medium text-foreground">
                 {archivedSessions.length} archived
               </span>

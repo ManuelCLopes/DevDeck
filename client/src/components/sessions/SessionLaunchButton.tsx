@@ -3,12 +3,11 @@ import { SquareTerminal } from "lucide-react";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import { useCodingTool } from "@/hooks/use-coding-tool";
 import { getCodingToolInstallHint } from "@/lib/coding-tool";
-import { buildTerminalsPath, type DevSession } from "@/lib/dev-sessions";
 
 interface SessionLaunchButtonProps {
   className?: string;
   createPath: string;
-  existingSession?: DevSession | null;
+  existingSession?: unknown;
   iconOnly?: boolean;
   onBeforeNavigate?: () => void;
   onNavigate: (path: string) => void;
@@ -19,7 +18,7 @@ interface SessionLaunchButtonProps {
 export default function SessionLaunchButton({
   className,
   createPath,
-  existingSession = null,
+  existingSession: _existingSession,
   iconOnly = false,
   onBeforeNavigate,
   onNavigate,
@@ -37,14 +36,8 @@ export default function SessionLaunchButton({
       return;
     }
 
-    if (existingSession) {
-      onBeforeNavigate?.();
-      onNavigate(buildTerminalsPath(existingSession.id, { launch: "opencode" }));
-      return;
-    }
-
     onBeforeNavigate?.();
-    onNavigate(existingSession ? "/sessions" : createPath);
+    onNavigate(createPath);
   };
 
   return (

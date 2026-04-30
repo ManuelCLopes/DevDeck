@@ -55,6 +55,11 @@ import {
   openInOpenCode,
   openInVsCode,
 } from "./coding-tool-launcher";
+import {
+  isOpenCodeCliAvailable,
+  listOpenCodeSessions,
+  renameOpenCodeSession,
+} from "./opencode-sessions";
 import { registerPtyIpc } from "./pty";
 
 const execFileAsync = promisify(execFile);
@@ -669,6 +674,33 @@ ipcMain.handle("devdeck:open-in-opencode", async (_event, targetPath: string) =>
 ipcMain.handle("devdeck:get-desktop-coding-tool-availability", async () => {
   return getDesktopCodingToolAvailability();
 });
+
+ipcMain.handle("devdeck:list-opencode-sessions", async () => {
+  if (!(await isOpenCodeCliAvailable())) {
+    return [];
+  }
+
+  return listOpenCodeSessions();
+});
+
+ipcMain.handle(
+  "devdeck:rename-opencode-session",
+  async (
+    _event,
+    payload: {
+      sessionId: string;
+      title: string;
+    },
+  ) => {
+    if (!(await isOpenCodeCliAvailable())) {
+      throw new Error(
+        "OpenCode CLI is not available on this machine. Install it and restart DevDeck.",
+      );
+    }
+
+    return renameOpenCodeSession(payload.sessionId, payload.title);
+  },
+);
 
 ipcMain.handle(
   "devdeck:create-git-worktree-session",

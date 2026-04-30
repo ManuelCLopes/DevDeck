@@ -16,7 +16,7 @@ import {
 test("buildCreateSessionPath includes project and pull request query params", () => {
   assert.equal(
     buildCreateSessionPath("repo-1", "pr-7"),
-    "/sessions?create=1&project=repo-1&pr=pr-7",
+    "/terminals?launch=opencode&project=repo-1&pr=pr-7",
   );
 });
 

@@ -9,6 +9,7 @@ import type {
   DevSessionOperationalSnapshot,
   InspectDevSessionRequest,
 } from "@shared/sessions";
+import type { OpenCodeSessionRecord } from "@shared/opencode-sessions";
 import type {
   PtyAvailability,
   PtyDataPayload,
@@ -69,6 +70,7 @@ interface DevDeckDesktopApi {
   openInCode(targetPath: string): Promise<void>;
   openInOpencode(targetPath: string): Promise<void>;
   openInTerminal(targetPath: string): Promise<void>;
+  listOpenCodeSessions(): Promise<OpenCodeSessionRecord[]>;
   pickWorkspaceDirectory(): Promise<WorkspaceDiscoveryResult | null>;
   requestPullRequestReviewers(payload: {
     pullRequestNumber: number;
@@ -90,6 +92,10 @@ interface DevDeckDesktopApi {
     viewerLogin?: string;
   }>;
   saveGitHubToken(token: string): Promise<{ viewerLogin: string }>;
+  renameOpenCodeSession(
+    sessionId: string,
+    title: string,
+  ): Promise<OpenCodeSessionRecord>;
   setLaunchAtLogin(enabled: boolean): Promise<void>;
   showItemInFinder(targetPath: string): Promise<void>;
   showNotification(payload: { body?: string; title: string }): Promise<void>;

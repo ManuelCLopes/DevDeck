@@ -46,7 +46,7 @@ export function buildCreateSessionPath(
   pullRequestId?: string | null,
 ) {
   const params = new URLSearchParams();
-  params.set("create", "1");
+  params.set("launch", "opencode");
   if (projectId) {
     params.set("project", projectId);
   }
@@ -54,7 +54,7 @@ export function buildCreateSessionPath(
     params.set("pr", pullRequestId);
   }
 
-  return `/sessions?${params.toString()}`;
+  return `/terminals?${params.toString()}`;
 }
 
 export function buildTerminalsPath(
