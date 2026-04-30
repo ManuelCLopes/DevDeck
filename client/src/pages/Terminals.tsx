@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import {
   AlertTriangle,
+  Maximize2,
+  Minimize2,
   ExternalLink,
   Paintbrush,
   PlusSquare,
@@ -10,6 +12,16 @@ import {
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import OpenInCodeButton from "@/components/coding-tool/OpenInCodeButton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -40,6 +52,7 @@ import {
   createDefaultPane,
   LayoutPicker,
   TerminalGrid,
+  type TerminalPaneRuntimeState,
   defaultLayoutForSaved,
   layoutCapacity,
 } from "@/components/terminal/TerminalGrid";
@@ -64,6 +77,7 @@ import { navigateInApp } from "@/lib/app-navigation";
 import { useAppPreferences } from "@/lib/app-preferences";
 import { getDesktopApi } from "@/lib/desktop";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
+import { cn } from "@/lib/utils";
 import {
   TERMINAL_FONT_FAMILIES,
   TERMINAL_THEMES,
@@ -137,6 +151,14 @@ export default function Terminals() {
   const desktopApi = getDesktopApi();
   const [ptyAvailability, setPtyAvailability] = useState<PtyAvailability | null>(null);
   const [dismissedWarnings, setDismissedWarnings] = useState<Record<string, true>>({});
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [paneRuntimeStates, setPaneRuntimeStates] = useState<
+    Record<string, TerminalPaneRuntimeState>
+  >({});
+  const [pendingLayoutChange, setPendingLayoutChange] = useState<{
+    nextLayout: TerminalLayout;
+    panes: Array<{ id: string; label: string }>;
+  } | null>(null);
   const [sessions] = usePersistentState<DevSession[]>(DEV_SESSIONS_STORAGE_KEY, [], {
     deserialize: (value) => normalizeDevSessions(JSON.parse(value)),
   });
@@ -253,6 +275,26 @@ export default function Terminals() {
       : null;
 
   useEffect(() => {
+    if (!isFocusMode) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setIsFocusMode(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFocusMode]);
+
+  useEffect(() => {
+    setPaneRuntimeStates({});
+  }, [storageScopeKey]);
+
+  useEffect(() => {
     if (sanitizedPanes.length === 0) {
       return;
     }
@@ -313,9 +355,42 @@ export default function Terminals() {
     setPanes((currentPanes) => [...currentPanes, nextPane]);
   };
 
+  const requestLayoutChange = (nextLayout: TerminalLayout) => {
+    if (nextLayout === layout) {
+      return;
+    }
+
+    const currentCapacity = layoutCapacity(layout);
+    const nextCapacity = layoutCapacity(nextLayout);
+    if (nextCapacity >= currentCapacity) {
+      setLayout(nextLayout);
+      return;
+    }
+
+    const currentPanes =
+      normalizeTerminalPanes(sanitizedPanes).length > 0
+        ? normalizeTerminalPanes(sanitizedPanes)
+        : initialPanes;
+    const panesAtRisk = currentPanes
+      .slice(nextCapacity)
+      .filter((pane) => {
+        const runtime = paneRuntimeStates[pane.id];
+        return runtime?.status === "ready" || runtime?.status === "starting";
+      })
+      .map((pane) => ({ id: pane.id, label: pane.label }));
+
+    if (panesAtRisk.length === 0) {
+      setLayout(nextLayout);
+      return;
+    }
+
+    setPendingLayoutChange({ nextLayout, panes: panesAtRisk });
+  };
+
   return (
     <AppLayout>
       <div className="flex h-full min-h-0 min-w-0 flex-col">
+        {!isFocusMode ? (
         <header className="flex flex-col gap-4 pb-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0 flex-1">
@@ -385,6 +460,17 @@ export default function Terminals() {
                   })
                 }
               />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-9 w-9"
+                onClick={() => setIsFocusMode(true)}
+                aria-label="Enter terminal focus mode"
+                title="Enter focus mode"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </Button>
             </div>
           </div>
 
@@ -433,7 +519,7 @@ export default function Terminals() {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                  <LayoutPicker layout={layout} onChange={setLayout} />
+                  <LayoutPicker layout={layout} onChange={requestLayoutChange} />
                   <QuickShellActions
                     availableShells={availableShells}
                     onAddPane={addPaneWithShell}
@@ -490,6 +576,7 @@ export default function Terminals() {
             </div>
           ) : null}
         </header>
+        ) : null}
 
         {ptyAvailabilityPending ? (
           <div className="flex flex-1 items-center justify-center">
@@ -518,7 +605,35 @@ export default function Terminals() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-1 min-h-[420px] min-w-0 flex-col">
+          <div
+            className={cn(
+              "flex flex-1 min-h-[420px] min-w-0 flex-col",
+              isFocusMode &&
+                "fixed inset-0 z-[90] min-h-0 bg-[#fbfbfb] p-4 sm:p-6 lg:p-8",
+            )}
+          >
+            {isFocusMode ? (
+              <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-white/85 px-3 py-2 shadow-sm backdrop-blur-md">
+                <div className="min-w-0">
+                  <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Focus Mode
+                  </div>
+                  <div className="truncate text-sm font-medium text-foreground">
+                    {selectedSession?.label ?? "Shared terminals workspace"}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setIsFocusMode(false)}
+                >
+                  <Minimize2 className="h-3.5 w-3.5" />
+                  Exit Focus
+                </Button>
+              </div>
+            ) : null}
             <TerminalWorkspace
               key={storageScopeKey}
               availableShells={availableShells}
@@ -526,6 +641,13 @@ export default function Terminals() {
               defaultCwd={defaultCwd}
               initialPanes={initialPanes}
               layout={layout}
+              onLayoutRequestChange={requestLayoutChange}
+              onPaneRuntimeStateChange={(paneId, state) =>
+                setPaneRuntimeStates((currentStates) => ({
+                  ...currentStates,
+                  [paneId]: state,
+                }))
+              }
               opencodeAvailable={codingToolAvailability.opencode.available}
               panes={sanitizedPanes.length > 0 ? sanitizedPanes : initialPanes}
               preferences={terminalPreferences}
@@ -539,6 +661,45 @@ export default function Terminals() {
           </div>
         )}
       </div>
+      <AlertDialog
+        open={Boolean(pendingLayoutChange)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingLayoutChange(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close active terminal panes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingLayoutChange?.panes.length === 1
+                ? `The terminal "${pendingLayoutChange.panes[0]?.label}" is still active and its context will be lost if you continue.`
+                : "Some active terminal panes are still running and their contexts will be lost if you continue."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {pendingLayoutChange?.panes.length ? (
+            <div className="rounded-md border border-border/60 bg-secondary/30 px-3 py-2 text-[12px] text-muted-foreground">
+              {pendingLayoutChange.panes.map((pane) => pane.label).join(" · ")}
+            </div>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep layout</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!pendingLayoutChange) {
+                  return;
+                }
+
+                setLayout(pendingLayoutChange.nextLayout);
+                setPendingLayoutChange(null);
+              }}
+            >
+              Change layout
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
@@ -549,6 +710,8 @@ interface TerminalWorkspaceProps {
   defaultCwd?: string;
   initialPanes: TerminalPaneConfig[];
   layout: TerminalLayout;
+  onLayoutRequestChange: (layout: TerminalLayout) => void;
+  onPaneRuntimeStateChange: (paneId: string, state: TerminalPaneRuntimeState) => void;
   opencodeAvailable: boolean;
   panes: TerminalPaneConfig[];
   preferences: import("@/lib/app-preferences").TerminalPreferences;
@@ -566,6 +729,8 @@ function TerminalWorkspace({
   defaultCwd,
   initialPanes,
   layout,
+  onLayoutRequestChange,
+  onPaneRuntimeStateChange,
   opencodeAvailable,
   panes,
   preferences,
@@ -672,7 +837,8 @@ function TerminalWorkspace({
     <div className="flex h-full min-h-[420px] min-w-0 flex-1 flex-col">
       <TerminalGrid
         layout={layout}
-        onLayoutChange={setLayout}
+        onLayoutChange={onLayoutRequestChange}
+        onPaneRuntimeStateChange={onPaneRuntimeStateChange}
         panes={panes}
         onPanesChange={setPanes}
         preferences={preferences}

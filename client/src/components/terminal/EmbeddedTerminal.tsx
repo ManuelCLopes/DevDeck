@@ -1,7 +1,10 @@
 import { useEffect, useMemo } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { AlertTriangle, RotateCcw, X } from "lucide-react";
-import { useEmbeddedTerminal } from "@/hooks/use-embedded-terminal";
+import {
+  useEmbeddedTerminal,
+  type EmbeddedTerminalStatus,
+} from "@/hooks/use-embedded-terminal";
 import type { TerminalPreferences, TerminalThemeName } from "@/lib/app-preferences";
 import { getTerminalTheme } from "@/lib/terminal-theme";
 import type { TerminalPaneAccentDefinition } from "@/lib/terminal-panes";
@@ -16,10 +19,23 @@ interface EmbeddedTerminalProps {
   cwd?: string;
   env?: Record<string, string>;
   label?: string;
+  persistenceKey?: string;
   preferences: TerminalPreferences;
   themeOverride?: TerminalThemeName;
   onClose?: () => void;
   onFocusRequest?: () => void;
+  onStateChange?: (state: {
+    error: string | null;
+    info: {
+      cwd: string;
+      id: string;
+      pid: number;
+      shell: string;
+      label: string;
+    } | null;
+    label: string;
+    status: EmbeddedTerminalStatus;
+  }) => void;
 }
 
 export function EmbeddedTerminal({
@@ -31,10 +47,12 @@ export function EmbeddedTerminal({
   cwd,
   env,
   label,
+  persistenceKey,
   preferences,
   themeOverride,
   onClose,
   onFocusRequest,
+  onStateChange,
 }: EmbeddedTerminalProps) {
   const effectivePreferences = useMemo(
     () => ({
@@ -50,6 +68,7 @@ export function EmbeddedTerminal({
       args,
       env,
       label,
+      persistenceKey,
       preferences: effectivePreferences,
     });
   const theme = useMemo(
@@ -64,6 +83,15 @@ export function EmbeddedTerminal({
       focus();
     }
   }, [active, focus]);
+
+  useEffect(() => {
+    onStateChange?.({
+      error,
+      info,
+      label: displayLabel,
+      status,
+    });
+  }, [displayLabel, error, info, onStateChange, status]);
 
   const statusTone =
     status === "error"

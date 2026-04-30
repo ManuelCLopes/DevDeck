@@ -29,12 +29,17 @@ import { EmbeddedTerminal } from "@/components/terminal/EmbeddedTerminal";
 import type { TerminalPreferences } from "@/lib/app-preferences";
 import { TERMINAL_THEMES } from "@/lib/terminal-theme";
 import { cn } from "@/lib/utils";
+import type { EmbeddedTerminalStatus } from "@/hooks/use-embedded-terminal";
 
 interface TerminalGridProps {
   activePaneId?: string | null;
   layout: TerminalLayout;
   onLayoutChange: (layout: TerminalLayout) => void;
   onActivePaneIdChange?: (paneId: string | null) => void;
+  onPaneRuntimeStateChange?: (
+    paneId: string,
+    state: TerminalPaneRuntimeState,
+  ) => void;
   panes: TerminalPaneConfig[];
   onPanesChange: (panes: TerminalPaneConfig[]) => void;
   preferences: TerminalPreferences;
@@ -56,6 +61,19 @@ export function defaultLayoutForSaved(value: unknown): TerminalLayout {
     return value as TerminalLayout;
   }
   return "single";
+}
+
+export interface TerminalPaneRuntimeState {
+  error: string | null;
+  info: {
+    cwd: string;
+    id: string;
+    pid: number;
+    shell: string;
+    label: string;
+  } | null;
+  label: string;
+  status: EmbeddedTerminalStatus;
 }
 
 export function layoutCapacity(layout: TerminalLayout): number {
@@ -134,6 +152,7 @@ export function TerminalGrid({
   layout,
   onLayoutChange,
   onActivePaneIdChange,
+  onPaneRuntimeStateChange,
   panes,
   onPanesChange,
   preferences,
@@ -210,6 +229,7 @@ export function TerminalGrid({
         onUpdate={(updates) => handleUpdatePane(pane.id, updates)}
         onFocus={() => setActivePaneId(pane.id)}
         onClose={normalizedPanes.length > 1 ? handleShrinkLayout : undefined}
+        onStateChange={(state) => onPaneRuntimeStateChange?.(pane.id, state)}
         availableShells={availableShells}
       />
     </div>
@@ -334,6 +354,7 @@ interface TerminalPaneProps {
   onUpdate: (updates: Partial<TerminalPaneConfig>) => void;
   onFocus: () => void;
   onClose?: () => void;
+  onStateChange?: (state: TerminalPaneRuntimeState) => void;
   availableShells?: Array<{ label: string; command: string; args?: string[] }>;
 }
 
@@ -344,6 +365,7 @@ function TerminalPane({
   onUpdate,
   onFocus,
   onClose,
+  onStateChange,
   availableShells,
 }: TerminalPaneProps) {
   const configPanelId = useId();
@@ -518,10 +540,12 @@ function TerminalPane({
           args={pane.args}
           env={pane.env}
           label={pane.label}
+          persistenceKey={pane.id}
           preferences={preferences}
           themeOverride={pane.theme}
           onClose={onClose}
           onFocusRequest={onFocus}
+          onStateChange={onStateChange}
         />
       </div>
     </div>
