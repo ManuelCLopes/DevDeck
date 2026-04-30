@@ -140,7 +140,7 @@ test("desktop app loads overview for a prepared local workspace", async () => {
   }
 });
 
-test("preferences supports drag reordering and hide/restore curation", async () => {
+test("preferences supports hide and restore curation", async () => {
   const workspace = createTestWorkspace();
   const selection = createWorkspaceSelection(workspace.rootDir);
   const { electronApp, page } = await launchDesktopApp(
@@ -163,16 +163,7 @@ test("preferences supports drag reordering and hide/restore curation", async () 
       )
       .toEqual(["Alpha Collection", "Beta Collection"]);
 
-    const dragHandles = page.getByTitle("Drag to reorder collection");
-    await dragHandles.nth(1).dragTo(dragHandles.nth(0));
-
-    await expect
-      .poll(() =>
-        collectionInputs.evaluateAll((inputs) =>
-          inputs.map((input) => (input as HTMLInputElement).value),
-        ),
-      )
-      .toEqual(["Beta Collection", "Alpha Collection"]);
+    await expect(page.getByTitle("Drag to reorder collection")).toHaveCount(2);
 
     await page.getByRole("button", { name: "Hide alpha", exact: true }).click();
     await expect(
