@@ -1,18 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import type { DevSessionOperationalSnapshot } from "@shared/sessions";
 import AppLayout from "@/components/layout/AppLayout";
-import CreateSessionDialog from "@/components/sessions/CreateSessionDialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { toast } from "@/hooks/use-toast";
@@ -22,22 +11,23 @@ import { useCodingTool } from "@/hooks/use-coding-tool";
 import { getDesktopApi } from "@/lib/desktop";
 import {
   buildTerminalsPath,
+  buildDefaultSessionLabel,
+  createSessionId,
   DEV_SESSIONS_STORAGE_KEY,
+  findDuplicateDevSession,
   normalizeDevSessions,
   sortDevSessions,
   type DevSession,
 } from "@/lib/dev-sessions";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import {
+  Check,
   Archive,
-  FolderTree,
-  Github,
-  Loader2,
+  Pencil,
   RotateCcw,
   SquareTerminal,
-  Trash2,
+  X,
 } from "lucide-react";
-import OpenInCodeButton from "@/components/coding-tool/OpenInCodeButton";
 
 export default function Sessions() {
   const [, setLocation] = useLocation();
@@ -45,11 +35,9 @@ export default function Sessions() {
   const { data: snapshot } = useWorkspaceSnapshot();
   const { availability: codingToolAvailability } = useCodingTool();
   const desktopApi = getDesktopApi();
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [pendingRemovalSession, setPendingRemovalSession] = useState<DevSession | null>(
-    null,
-  );
-  const [isLoadingSessionStatus, setIsLoadingSessionStatus] = useState(false);
+  const autoCreateHandledKeyRef = useRef<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [draftLabel, setDraftLabel] = useState("");
   const [sessionSnapshotsById, setSessionSnapshotsById] = useState<
     Record<string, DevSessionOperationalSnapshot>
   >({});
@@ -62,15 +50,9 @@ export default function Sessions() {
   );
 
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
-  const shouldOpenCreateDialog = searchParams.get("create") === "1";
+  const shouldAutoCreateSession = searchParams.get("create") === "1";
   const initialProjectId = searchParams.get("project");
   const initialPullRequestId = searchParams.get("pr");
-
-  useEffect(() => {
-    if (shouldOpenCreateDialog) {
-      setIsCreateDialogOpen(true);
-    }
-  }, [shouldOpenCreateDialog]);
 
   useEffect(() => {
     if (!desktopApi?.inspectDevSessions) {
@@ -84,7 +66,6 @@ export default function Sessions() {
     }
 
     let cancelled = false;
-    setIsLoadingSessionStatus(true);
 
     void desktopApi
       .inspectDevSessions(
@@ -109,11 +90,6 @@ export default function Sessions() {
         if (!cancelled) {
           setSessionSnapshotsById({});
         }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingSessionStatus(false);
-        }
       });
 
     return () => {
@@ -127,11 +103,7 @@ export default function Sessions() {
     (session) => session.status === "archived",
   );
   const linkedPullRequests = snapshot?.pullRequests ?? [];
-  const linkedPullRequestsById = useMemo(
-    () => new Map(linkedPullRequests.map((pullRequest) => [pullRequest.id, pullRequest])),
-    [linkedPullRequests],
-  );
-  const formatCount = (value: number) => new Intl.NumberFormat().format(value);
+  const trackedProjects = snapshot?.projects ?? [];
 
   const updateSession = (sessionId: string, updater: (session: DevSession) => DevSession) => {
     setSessions((currentSessions) =>
@@ -141,34 +113,8 @@ export default function Sessions() {
     );
   };
 
-  const removeSession = (sessionId: string) => {
-    setSessions((currentSessions) =>
-      currentSessions.filter((session) => session.id !== sessionId),
-    );
-  };
-
   const openEmbeddedTerminal = (session: DevSession) => {
     navigateInApp(buildTerminalsPath(session.id, { launch: "opencode" }), setLocation);
-  };
-
-  const openLinkedPullRequest = async (session: DevSession) => {
-    if (!session.linkedPullRequestId) {
-      return;
-    }
-
-    const pullRequest = linkedPullRequests.find(
-      (candidate) => candidate.id === session.linkedPullRequestId,
-    );
-    if (!pullRequest) {
-      return;
-    }
-
-    if (desktopApi) {
-      await desktopApi.openExternal(pullRequest.url);
-      return;
-    }
-
-    window.open(pullRequest.url, "_blank", "noopener,noreferrer");
   };
 
   const handleArchiveSession = (sessionId: string) => {
@@ -187,83 +133,200 @@ export default function Sessions() {
     }));
   };
 
-  const handleDeleteWorktree = async (session: DevSession) => {
-    try {
-      await desktopApi?.removeGitWorktreeSession?.({
-        repositoryPath: session.repositoryPath,
-        worktreePath: session.localPath,
-      });
-      removeSession(session.id);
+  const beginEditingSession = (session: DevSession) => {
+    setEditingSessionId(session.id);
+    setDraftLabel(session.label);
+  };
+
+  const cancelEditingSession = () => {
+    setEditingSessionId(null);
+    setDraftLabel("");
+  };
+
+  const saveSessionLabel = (sessionId: string) => {
+    const nextLabel = draftLabel.trim();
+    if (!nextLabel) {
       toast({
-        title: "Worktree removed",
-        description: `${session.label} was removed from disk and from DevDeck.`,
-      });
-    } catch (error) {
-      toast({
-        title: "Worktree removal failed",
-        description:
-          error instanceof Error
-            ? error.message
-            : "DevDeck could not remove that worktree.",
+        title: "Name required",
+        description: "OpenCode sessions need a visible name.",
         variant: "destructive",
       });
-    }
-  };
-
-  const handleRemoveMetadataOnly = (session: DevSession) => {
-    removeSession(session.id);
-  };
-
-  const confirmRemoval = async () => {
-    if (!pendingRemovalSession) {
       return;
     }
 
-    const session = pendingRemovalSession;
-    setPendingRemovalSession(null);
+    updateSession(sessionId, (session) => ({
+      ...session,
+      label: nextLabel,
+      updatedAt: new Date().toISOString(),
+    }));
+    cancelEditingSession();
+  };
 
-    if (session.kind === "worktree") {
-      await handleDeleteWorktree(session);
+  useEffect(() => {
+    if (!shouldAutoCreateSession) {
+      autoCreateHandledKeyRef.current = null;
       return;
     }
 
-    handleRemoveMetadataOnly(session);
-  };
+    if (!snapshot || !initialProjectId) {
+      return;
+    }
 
-  const closeCreateDialog = (open: boolean) => {
-    setIsCreateDialogOpen(open);
-    if (!open && shouldOpenCreateDialog) {
+    const targetProject = trackedProjects.find((project) => project.id === initialProjectId);
+    if (!targetProject?.localPath) {
+      if (autoCreateHandledKeyRef.current === "missing-project") {
+        return;
+      }
+
+      autoCreateHandledKeyRef.current = "missing-project";
+      toast({
+        title: "Repository not available",
+        description:
+          "DevDeck could not start an OpenCode session because the linked local repository was not found.",
+        variant: "destructive",
+      });
       navigateInApp("/sessions", setLocation);
+      return;
     }
-  };
+
+    const targetPullRequest =
+      initialPullRequestId != null
+        ? linkedPullRequests.find((pullRequest) => pullRequest.id === initialPullRequestId) ??
+          null
+        : null;
+
+    const autoCreateKey = `${targetProject.id}:${targetPullRequest?.id ?? "none"}`;
+    if (autoCreateHandledKeyRef.current === autoCreateKey) {
+      return;
+    }
+
+    autoCreateHandledKeyRef.current = autoCreateKey;
+
+    const existingSession = findDuplicateDevSession(sessions, {
+      kind: "existing_clone",
+      linkedPullRequestId: targetPullRequest?.id ?? null,
+      projectId: targetProject.id,
+    });
+    if (existingSession) {
+      navigateInApp(buildTerminalsPath(existingSession.id, { launch: "opencode" }), setLocation);
+      return;
+    }
+
+    const sessionBranchName = targetPullRequest?.headBranch ?? targetProject.currentBranch;
+    const now = new Date().toISOString();
+    const nextSession: DevSession = {
+      createdAt: now,
+      id: createSessionId(),
+      kind: "existing_clone",
+      label: buildDefaultSessionLabel({
+        kind: "existing_clone",
+        projectName: targetProject.name,
+        pullRequestNumber: targetPullRequest?.number ?? null,
+        sessionBranchName,
+      }),
+      linkedPullRequestId: targetPullRequest?.id ?? null,
+      linkedPullRequestNumber: targetPullRequest?.number ?? null,
+      linkedPullRequestTitle: targetPullRequest?.title ?? null,
+      localPath: targetProject.localPath,
+      projectId: targetProject.id,
+      projectName: targetProject.name,
+      repositoryPath: targetProject.localPath,
+      repositorySlug: targetPullRequest?.repositorySlug ?? null,
+      sessionBranchName,
+      sourceRef: targetPullRequest?.headBranch ?? targetProject.currentBranch,
+      status: "active",
+      updatedAt: now,
+    };
+
+    setSessions((currentSessions) => [nextSession, ...currentSessions]);
+    navigateInApp(buildTerminalsPath(nextSession.id, { launch: "opencode" }), setLocation);
+  }, [
+    initialProjectId,
+    initialPullRequestId,
+    linkedPullRequests,
+    sessions,
+    setLocation,
+    setSessions,
+    shouldAutoCreateSession,
+    snapshot,
+    trackedProjects,
+  ]);
 
   const renderSessionRow = (session: DevSession, options?: { archived?: boolean }) => {
     const archived = options?.archived ?? false;
-    const linkedPullRequest = session.linkedPullRequestId
-      ? linkedPullRequestsById.get(session.linkedPullRequestId) ?? null
-      : null;
     const sessionSnapshot = sessionSnapshotsById[session.id];
     const sessionUnavailable =
       sessionSnapshot && (!sessionSnapshot.exists || !sessionSnapshot.isRepository);
+    const isEditing = editingSessionId === session.id;
+
     return (
       <div
         key={session.id}
-        className="grid gap-4 border-t border-border/50 px-4 py-4 first:border-t-0 md:grid-cols-[minmax(0,2.4fr)_minmax(0,1.2fr)_auto] md:items-center"
+        className="grid gap-4 border-t border-border/50 px-4 py-4 first:border-t-0 md:grid-cols-[180px_minmax(0,1.6fr)_minmax(0,1fr)_auto] md:items-center"
       >
         <div className="min-w-0">
           <span className="font-mono text-[12px] text-foreground">{session.id}</span>
         </div>
 
         <div className="min-w-0">
-          <button
-            type="button"
-            onClick={() =>
-              navigateInApp(`/?project=${encodeURIComponent(session.projectId)}`, setLocation)
-            }
-            className={getProjectTagClassName(session.projectName, "px-2.5 py-1")}
-          >
+          {isEditing ? (
+            <div className="flex items-center gap-2">
+              <input
+                autoFocus
+                className="h-9 min-w-0 flex-1 rounded-md border border-border/60 bg-white px-3 text-sm text-foreground outline-none ring-0 transition focus:border-foreground/40"
+                value={draftLabel}
+                onChange={(event) => setDraftLabel(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    saveSessionLabel(session.id);
+                  }
+
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    cancelEditingSession();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => saveSessionLabel(session.id)}
+                title="Save name"
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={cancelEditingSession}
+                title="Cancel rename"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-foreground">
+                {session.label}
+              </div>
+              {sessionUnavailable ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Local repository unavailable
+                </p>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0">
+          <span className={getProjectTagClassName(session.projectName, "px-2.5 py-1")}>
             {session.projectName}
-          </button>
+          </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 md:justify-end">
@@ -277,22 +340,16 @@ export default function Sessions() {
             <SquareTerminal className="h-3.5 w-3.5" />
             Open in Terminals
           </Button>
-          <OpenInCodeButton
-            targetPath={session.localPath}
-            disabled={Boolean(sessionUnavailable)}
-            variant="outline"
-            size="sm"
-          />
-          {linkedPullRequest ? (
+          {!isEditing ? (
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void openLinkedPullRequest(session)}
+              onClick={() => beginEditingSession(session)}
               className="gap-1.5"
             >
-              <Github className="h-3.5 w-3.5" />
-              PR
+              <Pencil className="h-3.5 w-3.5" />
+              Rename
             </Button>
           ) : null}
           {archived ? (
@@ -318,24 +375,6 @@ export default function Sessions() {
               Archive
             </Button>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setPendingRemovalSession(session)}
-            className={
-              session.kind === "worktree"
-                ? "gap-1.5 text-[#cf222e] hover:text-[#cf222e]"
-                : "gap-1.5"
-            }
-          >
-            {session.kind === "worktree" ? (
-              <FolderTree className="h-3.5 w-3.5" />
-            ) : (
-              <Trash2 className="h-3.5 w-3.5" />
-            )}
-            {session.kind === "worktree" ? "Delete Worktree" : "Remove"}
-          </Button>
         </div>
       </div>
     );
@@ -350,17 +389,14 @@ export default function Sessions() {
               OpenCode Sessions
             </h1>
             <p className="text-sm text-muted-foreground">
-              A simple list of your saved OpenCode contexts. Open a session in Terminals, then launch OpenCode or other tools from the right repository state.
+              Sessions appear here automatically when you start OpenCode from a repository or pull request. Rename them, open them, or archive them.
             </p>
             {!codingToolAvailability.opencode.available ? (
               <p className="mt-2 text-xs text-muted-foreground">
-                OpenCode is not currently available on this machine. DevDeck will still keep the session structure ready and let you open the same context in the embedded terminal or your fallback coding tool.
+                OpenCode is not currently available on this machine. DevDeck will still keep the session records and open their linked terminal contexts.
               </p>
             ) : null}
           </div>
-          <Button type="button" onClick={() => setIsCreateDialogOpen(true)}>
-            New OpenCode Session
-          </Button>
         </div>
 
         <section className="rounded-2xl border border-border/60 bg-white/75 p-5 shadow-sm backdrop-blur-md">
@@ -370,31 +406,26 @@ export default function Sessions() {
                 Active OpenCode Sessions
               </h2>
               <p className="text-sm text-muted-foreground">
-                Session ID, repository, and direct access to the terminal workspace.
+                Sessions are created automatically from repository and pull request entry points.
               </p>
             </div>
             <div className="flex items-center gap-3">
               <span className="rounded-full border border-border/60 bg-secondary px-2.5 py-1 text-[11px] font-medium text-foreground">
-                {formatCount(activeSessions.length)} active
+                {activeSessions.length} active
               </span>
-            {isLoadingSessionStatus ? (
-              <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Refreshing status…
-              </div>
-            ) : null}
             </div>
           </div>
 
           <div className="mt-4 overflow-hidden rounded-xl border border-border/50 bg-white/70">
             {activeSessions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border/60 bg-secondary/20 px-4 py-10 text-center text-sm text-muted-foreground">
-                No OpenCode sessions yet. Start from a linked clone or create a dedicated review worktree.
+                No OpenCode sessions yet. Start OpenCode from a repository or pull request and DevDeck will add the session automatically.
               </div>
             ) : (
               <>
-                <div className="hidden gap-4 border-b border-border/50 bg-secondary/30 px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground md:grid md:grid-cols-[minmax(0,2.4fr)_minmax(0,1.2fr)_auto]">
+                <div className="hidden gap-4 border-b border-border/50 bg-secondary/30 px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground md:grid md:grid-cols-[180px_minmax(0,1.6fr)_minmax(0,1fr)_auto]">
                   <div>Session</div>
+                  <div>Name</div>
                   <div>Repository</div>
                   <div className="text-right">Access</div>
                 </div>
@@ -412,17 +443,18 @@ export default function Sessions() {
                 Archived OpenCode Sessions
               </h2>
               <p className="text-sm text-muted-foreground">
-                Older contexts stay available here until you restore or remove them.
+                Archived sessions stay available until you restore them.
               </p>
             </div>
               <span className="rounded-full border border-border/60 bg-secondary px-2.5 py-1 text-[11px] font-medium text-foreground">
-                {formatCount(archivedSessions.length)} archived
+                {archivedSessions.length} archived
               </span>
             </div>
 
             <div className="mt-4 overflow-hidden rounded-xl border border-border/50 bg-white/70">
-              <div className="hidden gap-4 border-b border-border/50 bg-secondary/30 px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground md:grid md:grid-cols-[minmax(0,2.4fr)_minmax(0,1.2fr)_auto]">
+              <div className="hidden gap-4 border-b border-border/50 bg-secondary/30 px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground md:grid md:grid-cols-[180px_minmax(0,1.6fr)_minmax(0,1fr)_auto]">
                 <div>Session</div>
+                <div>Name</div>
                 <div>Repository</div>
                 <div className="text-right">Access</div>
               </div>
@@ -431,63 +463,6 @@ export default function Sessions() {
           </section>
         ) : null}
       </div>
-
-      <CreateSessionDialog
-        existingSessions={sessions}
-        initialProjectId={initialProjectId}
-        initialPullRequestId={initialPullRequestId}
-        onOpenChange={closeCreateDialog}
-        onSessionActivated={(session) =>
-          navigateInApp(
-            buildTerminalsPath(session.id, { launch: "opencode" }),
-            setLocation,
-          )
-        }
-        onSessionCreated={(session) =>
-          setSessions((currentSessions) => [session, ...currentSessions])
-        }
-        open={isCreateDialogOpen}
-        projects={snapshot?.projects ?? []}
-        pullRequests={linkedPullRequests}
-      />
-      <AlertDialog
-        open={Boolean(pendingRemovalSession)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPendingRemovalSession(null);
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {pendingRemovalSession?.kind === "worktree"
-                ? "Delete worktree session?"
-                : "Remove session from DevDeck?"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingRemovalSession?.kind === "worktree"
-                ? `This removes ${pendingRemovalSession?.label} from DevDeck and deletes the worktree at ${pendingRemovalSession?.localPath}.`
-                : `This removes ${pendingRemovalSession?.label} from DevDeck, but leaves the repository files untouched.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className={
-                pendingRemovalSession?.kind === "worktree"
-                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  : undefined
-              }
-              onClick={() => void confirmRemoval()}
-            >
-              {pendingRemovalSession?.kind === "worktree"
-                ? "Delete Worktree"
-                : "Remove Session"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AppLayout>
   );
 }

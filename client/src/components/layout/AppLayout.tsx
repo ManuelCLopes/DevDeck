@@ -66,7 +66,6 @@ import {
   RefreshCw,
   SquareTerminal,
   TerminalSquare,
-  Users2,
 } from "lucide-react";
 
 const AddProjectsDialog = lazy(() => import("@/components/workspace/AddProjectsDialog"));
@@ -239,7 +238,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { href: "/sessions", icon: SquareTerminal, label: "OpenCode Sessions" },
     { href: "/terminals", icon: TerminalSquare, label: "Terminals" },
     { href: "/activity", icon: Activity, label: "Activity Inbox" },
-    { href: "/team", icon: Users2, label: "Team Insights" },
   ];
 
   useEffect(() => {
@@ -668,10 +666,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <Activity className="w-4 h-4 text-primary" />
               <span className="font-medium">Open Activity Inbox</span>
             </CommandItem>
-            <CommandItem value="open team insights collaboration" onSelect={() => handleNavigate("/team")}>
-              <Users2 className="w-4 h-4 text-primary" />
-              <span className="font-medium">Open Team Insights</span>
-            </CommandItem>
             <CommandItem value="open preferences settings" onSelect={() => handleNavigate("/settings")}>
               <Settings className="w-4 h-4 text-primary" />
               <span className="font-medium">Open Preferences</span>
@@ -728,7 +722,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   .map((project) => (
                     <CommandItem
                       key={`session:${project.id}`}
-                      value={`start opencode session ${project.name} worktree repository`}
+                      value={`open opencode ${project.name} repository`}
                       onSelect={() =>
                         handleCommandAction(() =>
                           handleNavigate(buildCreateSessionPath(project.id)),
@@ -737,7 +731,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     >
                       <SquareTerminal className="w-4 h-4 text-primary" />
                       <span className="truncate font-medium">
-                        Start OpenCode for {project.name}
+                        Open OpenCode for {project.name}
                       </span>
                       <CommandShortcut>OpenCode</CommandShortcut>
                     </CommandItem>
@@ -795,7 +789,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 {searchResults.pullRequests.slice(0, 3).map((pullRequest) => (
                   <CommandItem
                     key={`session-pr:${pullRequest.id}`}
-                      value={`start opencode review ${pullRequest.title} ${pullRequest.repo}`}
+                    value={`open opencode ${pullRequest.title} ${pullRequest.repo}`}
                     onSelect={() =>
                       handleCommandAction(() =>
                         handleNavigate(
@@ -809,7 +803,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   >
                     <SquareTerminal className="w-4 h-4 text-primary" />
                     <span className="truncate font-medium">
-                      Start OpenCode for #{pullRequest.number}
+                      Open OpenCode for #{pullRequest.number}
                     </span>
                     <CommandShortcut>OpenCode</CommandShortcut>
                   </CommandItem>

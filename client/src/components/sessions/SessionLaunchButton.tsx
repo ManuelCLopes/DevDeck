@@ -24,7 +24,7 @@ export default function SessionLaunchButton({
   size = "icon",
   variant = "outline",
 }: SessionLaunchButtonProps) {
-  const actionLabel = existingSession ? "Open OpenCode" : "Start OpenCode";
+  const actionLabel = "Open OpenCode";
 
   const handleClick = async () => {
     if (existingSession) {

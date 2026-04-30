@@ -431,7 +431,7 @@ export default function Projects() {
                       onClick={() => void startSessionForProject(selectedProject)}
                       className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-md hover:bg-secondary transition-colors text-foreground"
                     >
-                      {selectedProjectSession ? "Open OpenCode Session" : "Start OpenCode Session"}
+                      Open OpenCode
                     </button>
                     <button
                       type="button"
