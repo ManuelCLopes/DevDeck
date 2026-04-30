@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import {
   AlertTriangle,
@@ -355,6 +355,23 @@ export default function Terminals() {
     setPanes((currentPanes) => [...currentPanes, nextPane]);
   };
 
+  const handlePaneRuntimeStateChange = useCallback(
+    (paneId: string, state: TerminalPaneRuntimeState) => {
+      setPaneRuntimeStates((currentStates) => {
+        const previousState = currentStates[paneId];
+        if (areTerminalPaneRuntimeStatesEqual(previousState, state)) {
+          return currentStates;
+        }
+
+        return {
+          ...currentStates,
+          [paneId]: state,
+        };
+      });
+    },
+    [],
+  );
+
   const requestLayoutChange = (nextLayout: TerminalLayout) => {
     if (nextLayout === layout) {
       return;
@@ -642,12 +659,7 @@ export default function Terminals() {
               initialPanes={initialPanes}
               layout={layout}
               onLayoutRequestChange={requestLayoutChange}
-              onPaneRuntimeStateChange={(paneId, state) =>
-                setPaneRuntimeStates((currentStates) => ({
-                  ...currentStates,
-                  [paneId]: state,
-                }))
-              }
+              onPaneRuntimeStateChange={handlePaneRuntimeStateChange}
               opencodeAvailable={codingToolAvailability.opencode.available}
               panes={sanitizedPanes.length > 0 ? sanitizedPanes : initialPanes}
               preferences={terminalPreferences}
@@ -701,6 +713,26 @@ export default function Terminals() {
         </AlertDialogContent>
       </AlertDialog>
     </AppLayout>
+  );
+}
+
+function areTerminalPaneRuntimeStatesEqual(
+  left: TerminalPaneRuntimeState | undefined,
+  right: TerminalPaneRuntimeState,
+) {
+  if (!left) {
+    return false;
+  }
+
+  return (
+    left.status === right.status &&
+    left.error === right.error &&
+    left.label === right.label &&
+    left.info?.id === right.info?.id &&
+    left.info?.pid === right.info?.pid &&
+    left.info?.cwd === right.info?.cwd &&
+    left.info?.shell === right.info?.shell &&
+    left.info?.label === right.info?.label
   );
 }
 
