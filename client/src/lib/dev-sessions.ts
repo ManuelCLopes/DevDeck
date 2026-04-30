@@ -1,3 +1,5 @@
+import type { WorkspaceProject } from "@shared/workspace";
+
 export type DevSessionKind = "existing_clone" | "worktree";
 export type DevSessionStatus = "active" | "archived";
 
@@ -88,6 +90,64 @@ export function buildDefaultSessionLabel(options: {
   }
 
   return `${options.projectName} OpenCode`;
+}
+
+export function findTrackedProjectForPath(
+  projects: WorkspaceProject[],
+  candidatePath?: string | null,
+) {
+  if (!candidatePath) {
+    return null;
+  }
+
+  const normalizedCandidatePath = candidatePath.replace(/\/+$/, "");
+  const matchingProjects = projects.filter((project) => {
+    const projectPath = project.localPath.replace(/\/+$/, "");
+    return (
+      normalizedCandidatePath === projectPath ||
+      normalizedCandidatePath.startsWith(`${projectPath}/`)
+    );
+  });
+
+  if (matchingProjects.length === 0) {
+    return null;
+  }
+
+  return (
+    matchingProjects.sort(
+      (left, right) => right.localPath.length - left.localPath.length,
+    )[0] ?? null
+  );
+}
+
+export function buildAutomaticOpenCodeSession(project: WorkspaceProject, options?: {
+  now?: string;
+  sessionId?: string;
+}) {
+  const now = options?.now ?? new Date().toISOString();
+
+  return {
+    createdAt: now,
+    id: options?.sessionId ?? createSessionId(),
+    kind: "existing_clone",
+    label: buildDefaultSessionLabel({
+      kind: "existing_clone",
+      projectName: project.name,
+      sessionBranchName: project.currentBranch,
+    }),
+    linkedPullRequestId: null,
+    linkedPullRequestNumber: null,
+    linkedPullRequestTitle: null,
+    localPath: project.localPath,
+    projectId: project.id,
+    projectName: project.name,
+    repositoryPath: project.localPath,
+    repositorySlug: null,
+    sessionBranchName: project.currentBranch,
+    sourceRef: project.currentBranch,
+    status: "active" as const,
+    updatedAt: now,
+  } satisfies DevSession;
 }
 
 export function buildDefaultSessionBranchName(options: {

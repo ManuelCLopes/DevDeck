@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildAutomaticOpenCodeSession,
   buildCreateSessionPath,
   buildDefaultSessionBranchName,
   buildDefaultSessionLabel,
+  findTrackedProjectForPath,
   findDuplicateDevSession,
   findProjectDevSession,
   findPullRequestDevSession,
@@ -46,6 +48,50 @@ test("buildDefaultSessionLabel adapts to worktree and existing clone templates",
     }),
     "Review #42 · Linked Clone",
   );
+});
+
+test("findTrackedProjectForPath prefers the deepest matching repository path", () => {
+  const project = findTrackedProjectForPath(
+    [
+      {
+        id: "repo-root",
+        localPath: "/Users/me/dev",
+        currentBranch: "main",
+        name: "Root",
+      },
+      {
+        id: "repo-nested",
+        localPath: "/Users/me/dev/app",
+        currentBranch: "feature/refactor",
+        name: "App",
+      },
+    ] as never,
+    "/Users/me/dev/app/src/components",
+  );
+
+  assert.equal(project?.id, "repo-nested");
+});
+
+test("buildAutomaticOpenCodeSession creates a repository-backed active session", () => {
+  const session = buildAutomaticOpenCodeSession(
+    {
+      id: "repo-1",
+      localPath: "/tmp/devdeck",
+      currentBranch: "main",
+      name: "DevDeck",
+    } as never,
+    {
+      now: "2026-04-30T10:00:00.000Z",
+      sessionId: "session-123",
+    },
+  );
+
+  assert.equal(session.id, "session-123");
+  assert.equal(session.projectId, "repo-1");
+  assert.equal(session.localPath, "/tmp/devdeck");
+  assert.equal(session.sessionBranchName, "main");
+  assert.equal(session.label, "DevDeck OpenCode");
+  assert.equal(session.status, "active");
 });
 
 test("normalizeDevSessions keeps only valid persisted sessions", () => {

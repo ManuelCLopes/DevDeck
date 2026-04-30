@@ -57,8 +57,10 @@ import {
   layoutCapacity,
 } from "@/components/terminal/TerminalGrid";
 import {
+  buildAutomaticOpenCodeSession,
   DEV_SESSIONS_STORAGE_KEY,
   buildTerminalsPath,
+  findTrackedProjectForPath,
   normalizeDevSessions,
   sortDevSessions,
   type DevSession,
@@ -99,6 +101,7 @@ const DEFAULT_QUICK_SHELLS: Array<{
   { label: "Claude", command: "claude" },
   { label: "zsh", command: "/bin/zsh", args: ["-l"] },
 ];
+const DEVDECK_OPENCODE_SESSION_ID_ENV = "DEVDECK_OPENCODE_SESSION_ID";
 
 function buildInitialPanes(options: {
   defaultCwd?: string;
@@ -152,6 +155,7 @@ export default function Terminals() {
   const [ptyAvailability, setPtyAvailability] = useState<PtyAvailability | null>(null);
   const [dismissedWarnings, setDismissedWarnings] = useState<Record<string, true>>({});
   const [isFocusMode, setIsFocusMode] = useState(false);
+  const recoveredOpenCodePaneIdsRef = useRef<Set<string>>(new Set());
   const [paneRuntimeStates, setPaneRuntimeStates] = useState<
     Record<string, TerminalPaneRuntimeState>
   >({});
@@ -159,7 +163,7 @@ export default function Terminals() {
     nextLayout: TerminalLayout;
     panes: Array<{ id: string; label: string }>;
   } | null>(null);
-  const [sessions] = usePersistentState<DevSession[]>(DEV_SESSIONS_STORAGE_KEY, [], {
+  const [sessions, setSessions] = usePersistentState<DevSession[]>(DEV_SESSIONS_STORAGE_KEY, [], {
     deserialize: (value) => normalizeDevSessions(JSON.parse(value)),
   });
   const terminalPreferences = preferences.terminal;
@@ -177,6 +181,7 @@ export default function Terminals() {
         (pullRequest) => pullRequest.id === selectedSession.linkedPullRequestId,
       ) ?? null
     : null;
+  const trackedProjects = snapshot?.projects ?? [];
   const sessionMissing = Boolean(requestedSessionId && !selectedSession);
   const storageScopeKey = buildTerminalWorkspaceScopeKey(selectedSession?.id);
   const [layout, setLayout] = usePersistentState<TerminalLayout>(
@@ -306,6 +311,77 @@ export default function Terminals() {
     );
   }, [sanitizedPanes, setPanes]);
 
+  useEffect(() => {
+    if (selectedSession) {
+      return;
+    }
+
+    const normalizedPanes = normalizeTerminalPanes(panes);
+    if (normalizedPanes.length === 0) {
+      return;
+    }
+
+    const recoveredSessions: DevSession[] = [];
+    let nextPanes = normalizedPanes;
+
+    normalizedPanes.forEach((pane) => {
+      if (pane.command !== "opencode") {
+        return;
+      }
+
+      if (pane.env?.[DEVDECK_OPENCODE_SESSION_ID_ENV]) {
+        return;
+      }
+
+      if (recoveredOpenCodePaneIdsRef.current.has(pane.id)) {
+        return;
+      }
+
+      const matchedProject = findTrackedProjectForPath(
+        trackedProjects,
+        paneRuntimeStates[pane.id]?.info?.cwd ?? pane.cwd ?? defaultCwd ?? null,
+      );
+      if (!matchedProject) {
+        return;
+      }
+
+      const nextSession = buildAutomaticOpenCodeSession(matchedProject);
+      recoveredOpenCodePaneIdsRef.current.add(pane.id);
+      recoveredSessions.push(nextSession);
+      nextPanes = nextPanes.map((candidate) =>
+        candidate.id === pane.id
+          ? {
+              ...candidate,
+              args: buildOpenCodeSessionArgs(nextSession.id),
+              env: {
+                ...(candidate.env ?? {}),
+                [DEVDECK_OPENCODE_SESSION_ID_ENV]: nextSession.id,
+              },
+            }
+          : candidate,
+      );
+    });
+
+    if (recoveredSessions.length === 0) {
+      return;
+    }
+
+    setSessions((currentSessions) => [...recoveredSessions, ...currentSessions]);
+    setPanes((currentPanes) =>
+      areTerminalPanesEqual(normalizeTerminalPanes(currentPanes), nextPanes)
+        ? currentPanes
+        : nextPanes,
+    );
+  }, [
+    defaultCwd,
+    paneRuntimeStates,
+    panes,
+    selectedSession,
+    setPanes,
+    setSessions,
+    trackedProjects,
+  ]);
+
   const handleSessionChange = (value: string) => {
     navigateInApp(
       value === GLOBAL_TERMINAL_WORKSPACE_SCOPE
@@ -328,11 +404,62 @@ export default function Terminals() {
     window.open(linkedPullRequest.url, "_blank", "noopener,noreferrer");
   };
 
+  const createAutomaticSessionFromPath = useCallback(
+    (candidatePath?: string | null) => {
+      const matchedProject = findTrackedProjectForPath(
+        trackedProjects,
+        candidatePath ?? defaultCwd ?? null,
+      );
+
+      if (!matchedProject) {
+        toast({
+          title: "Tracked repository required",
+          description:
+            "OpenCode sessions can only be created from a tracked repository context.",
+          variant: "destructive",
+        });
+        return null;
+      }
+
+      const nextSession = buildAutomaticOpenCodeSession(matchedProject);
+      setSessions((currentSessions) => [nextSession, ...currentSessions]);
+      return nextSession;
+    },
+    [defaultCwd, setSessions, trackedProjects],
+  );
+
+  const launchAutomaticSessionFromPath = useCallback(
+    (candidatePath?: string | null) => {
+      const nextSession = createAutomaticSessionFromPath(candidatePath);
+      if (!nextSession) {
+        return false;
+      }
+
+      navigateInApp(
+        buildTerminalsPath(nextSession.id, { launch: "opencode" }),
+        setLocation,
+      );
+      return true;
+    },
+    [createAutomaticSessionFromPath, setLocation],
+  );
+
   const addPaneWithShell = (shell: {
     label: string;
     command: string;
     args?: string[];
+    env?: Record<string, string>;
   }) => {
+    if (shell.command === "opencode" && selectedSession) {
+      shell = {
+        ...shell,
+        args: buildOpenCodeSessionArgs(selectedSession.id),
+        env: {
+          [DEVDECK_OPENCODE_SESSION_ID_ENV]: selectedSession.id,
+        },
+      };
+    }
+
     const currentCapacity = layoutCapacity(layout);
     if (layout === "grid" && sanitizedPanes.length >= currentCapacity) {
       toast({
@@ -348,7 +475,8 @@ export default function Terminals() {
       label: shell.label,
       command: shell.command,
       args: shell.args,
-      cwd: defaultCwd,
+      env: "env" in shell ? shell.env : undefined,
+      cwd: selectedSession?.localPath ?? defaultCwd,
     };
 
     setLayout(nextLayout);
@@ -666,6 +794,8 @@ export default function Terminals() {
               requestedLaunch={requestedLaunch}
               requestedSessionId={selectedSession?.id ?? null}
               selectedSession={selectedSession}
+              onLaunchAutomaticSession={launchAutomaticSessionFromPath}
+              paneRuntimeStates={paneRuntimeStates}
               setLayout={setLayout}
               setPanes={setPanes}
               scopeKey={storageScopeKey}
@@ -739,6 +869,7 @@ function areTerminalPaneRuntimeStatesEqual(
 interface TerminalWorkspaceProps {
   availableCommands: string[];
   availableShells: Array<{ label: string; command: string; args?: string[] }>;
+  onLaunchAutomaticSession: (cwd?: string | null) => boolean;
   defaultCwd?: string;
   initialPanes: TerminalPaneConfig[];
   layout: TerminalLayout;
@@ -746,6 +877,7 @@ interface TerminalWorkspaceProps {
   onPaneRuntimeStateChange: (paneId: string, state: TerminalPaneRuntimeState) => void;
   opencodeAvailable: boolean;
   panes: TerminalPaneConfig[];
+  paneRuntimeStates: Record<string, TerminalPaneRuntimeState>;
   preferences: import("@/lib/app-preferences").TerminalPreferences;
   requestedLaunch: string | null;
   requestedSessionId: string | null;
@@ -758,6 +890,7 @@ interface TerminalWorkspaceProps {
 function TerminalWorkspace({
   availableCommands,
   availableShells,
+  onLaunchAutomaticSession,
   defaultCwd,
   initialPanes,
   layout,
@@ -765,6 +898,7 @@ function TerminalWorkspace({
   onPaneRuntimeStateChange,
   opencodeAvailable,
   panes,
+  paneRuntimeStates,
   preferences,
   requestedLaunch,
   requestedSessionId,
@@ -819,6 +953,12 @@ function TerminalWorkspace({
               args: buildOpenCodeSessionArgs(requestedSessionId),
               command: "opencode",
               cwd: pane.cwd ?? defaultCwd,
+              env: requestedSessionId
+                ? {
+                    ...(pane.env ?? {}),
+                    [DEVDECK_OPENCODE_SESSION_ID_ENV]: requestedSessionId,
+                  }
+                : pane.env,
               label: "OpenCode",
             }
           : pane,
@@ -842,7 +982,33 @@ function TerminalWorkspace({
     label: string;
     command: string;
     args?: string[];
+    env?: Record<string, string>;
   }) => {
+    const activePane =
+      panes.find((pane) => pane.id === activePaneId) ?? panes[0] ?? initialPanes[0];
+    const activePaneCwd =
+      (activePaneId ? paneRuntimeStates[activePaneId]?.info?.cwd : null) ??
+      activePane?.cwd ??
+      defaultCwd;
+
+    if (shell.command === "opencode") {
+      if (selectedSession) {
+        shell = {
+          ...shell,
+          args: buildOpenCodeSessionArgs(selectedSession.id),
+          env: {
+            [DEVDECK_OPENCODE_SESSION_ID_ENV]: selectedSession.id,
+          },
+        };
+      } else {
+        if (onLaunchAutomaticSession(activePaneCwd)) {
+          return;
+        }
+
+        return;
+      }
+    }
+
     const currentCapacity = layoutCapacity(layout);
     if (layout === "grid" && panes.length >= currentCapacity) {
       toast({
@@ -858,7 +1024,7 @@ function TerminalWorkspace({
       label: shell.label,
       command: shell.command,
       args: shell.args,
-      cwd: defaultCwd,
+      cwd: selectedSession?.localPath ?? activePaneCwd ?? defaultCwd,
     };
 
     setLayout(nextLayout);
@@ -920,11 +1086,17 @@ function areTerminalPanesEqual(
 }
 
 interface QuickShellActionsProps {
-  availableShells: Array<{ label: string; command: string; args?: string[] }>;
+  availableShells: Array<{
+    label: string;
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+  }>;
   onAddPane: (shell: {
     label: string;
     command: string;
     args?: string[];
+    env?: Record<string, string>;
   }) => void;
 }
 
