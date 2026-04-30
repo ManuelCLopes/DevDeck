@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   Columns2,
   Grid2x2,
@@ -30,6 +30,7 @@ import type { TerminalPreferences } from "@/lib/app-preferences";
 import { TERMINAL_THEMES } from "@/lib/terminal-theme";
 import { cn } from "@/lib/utils";
 import type { EmbeddedTerminalStatus } from "@/hooks/use-embedded-terminal";
+import { disposePersistentTerminalSession } from "@/hooks/use-embedded-terminal";
 
 interface TerminalGridProps {
   activePaneId?: string | null;
@@ -164,6 +165,7 @@ export function TerminalGrid({
   const [internalActivePaneId, setInternalActivePaneId] = useState<string | null>(
     panes[0]?.id ?? null,
   );
+  const previousPaneIdsRef = useRef<string[]>([]);
   const activePaneId = controlledActivePaneId ?? internalActivePaneId;
   const normalizedPanes = ensurePaneCount(
     panes,
@@ -199,6 +201,23 @@ export function TerminalGrid({
       onPanesChange(normalizedPanes);
     }
   }, [normalizedPanes, onPanesChange, panes.length]);
+
+  useEffect(() => {
+    const currentPaneIds = normalizedPanes.map((pane) => pane.id);
+    if (previousPaneIdsRef.current.length === 0) {
+      previousPaneIdsRef.current = currentPaneIds;
+      return;
+    }
+
+    const removedPaneIds = previousPaneIdsRef.current.filter(
+      (paneId) => !currentPaneIds.includes(paneId),
+    );
+    removedPaneIds.forEach((paneId) => {
+      disposePersistentTerminalSession(paneId);
+    });
+
+    previousPaneIdsRef.current = currentPaneIds;
+  }, [normalizedPanes]);
 
   const handleUpdatePane = useCallback(
     (paneId: string, updates: Partial<TerminalPaneConfig>) => {

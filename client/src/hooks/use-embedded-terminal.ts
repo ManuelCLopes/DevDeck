@@ -59,7 +59,6 @@ interface PersistentTerminalExit {
 
 interface PersistentTerminalSession extends PersistentTerminalRuntime {
   buffer: string;
-  cleanupTimer: ReturnType<typeof setTimeout> | null;
   dataDisposer: (() => void) | null;
   exitDisposer: (() => void) | null;
   key: string;
@@ -78,7 +77,6 @@ interface PersistentTerminalSubscriber {
 }
 
 const persistedTerminalSessions = new Map<string, PersistentTerminalSession>();
-const DETACH_GRACE_PERIOD_MS = 1500;
 const MAX_BUFFER_LENGTH = 200_000;
 
 function buildSessionSignature(options: UseEmbeddedTerminalOptions) {
@@ -103,7 +101,6 @@ function createPersistentSession(
 ): PersistentTerminalSession {
   return {
     buffer: "",
-    cleanupTimer: null,
     dataDisposer: null,
     error: null,
     exitDisposer: null,
@@ -117,13 +114,6 @@ function createPersistentSession(
     status: "idle",
     subscribers: new Set(),
   };
-}
-
-function clearCleanupTimer(session: PersistentTerminalSession) {
-  if (session.cleanupTimer) {
-    clearTimeout(session.cleanupTimer);
-    session.cleanupTimer = null;
-  }
 }
 
 function notifyRuntime(session: PersistentTerminalSession) {
@@ -197,7 +187,6 @@ function getOrCreatePersistentSession(
     return createdSession;
   }
 
-  clearCleanupTimer(existingSession);
   if (existingSession.signature !== signature) {
     void disposeSessionProcess(existingSession, { preserveRuntime: false });
     existingSession.signature = signature;
@@ -485,7 +474,6 @@ export function useEmbeddedTerminal(
     };
 
     session.subscribers.add(subscriber);
-    clearCleanupTimer(session);
 
     setStatus(session.status);
     setError(session.error);
@@ -536,13 +524,7 @@ export function useEmbeddedTerminal(
       }
 
       if (session.subscribers.size === 0) {
-        if (options.persistenceKey) {
-          session.cleanupTimer = setTimeout(() => {
-            if (session.subscribers.size === 0) {
-              void disposeSessionProcess(session, { removeFromRegistry: true });
-            }
-          }, DETACH_GRACE_PERIOD_MS);
-        } else {
+        if (!options.persistenceKey) {
           void disposeSessionProcess(session, { removeFromRegistry: true });
         }
       }
@@ -572,6 +554,15 @@ export function useEmbeddedTerminal(
     error,
     info,
   };
+}
+
+export function disposePersistentTerminalSession(persistenceKey: string) {
+  const session = persistedTerminalSessions.get(persistenceKey);
+  if (!session) {
+    return;
+  }
+
+  void disposeSessionProcess(session, { removeFromRegistry: true });
 }
 
 function readTerminalDimensions(terminal: Terminal) {
