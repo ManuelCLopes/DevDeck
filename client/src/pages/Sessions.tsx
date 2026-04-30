@@ -21,6 +21,7 @@ import {
 } from "@/lib/dev-sessions";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import {
+  AlertTriangle,
   Check,
   Archive,
   Pencil,
@@ -53,6 +54,7 @@ export default function Sessions() {
   const shouldAutoCreateSession = searchParams.get("create") === "1";
   const initialProjectId = searchParams.get("project");
   const initialPullRequestId = searchParams.get("pr");
+  const opencodeAvailable = codingToolAvailability.opencode.available;
 
   useEffect(() => {
     if (!desktopApi?.inspectDevSessions) {
@@ -163,6 +165,17 @@ export default function Sessions() {
   };
 
   useEffect(() => {
+    if (shouldAutoCreateSession && !opencodeAvailable) {
+      toast({
+        title: "OpenCode is unavailable",
+        description:
+          "DevDeck cannot create or list OpenCode sessions until the OpenCode CLI is installed and visible on PATH.",
+        variant: "destructive",
+      });
+      navigateInApp("/sessions", setLocation);
+      return;
+    }
+
     if (!shouldAutoCreateSession) {
       autoCreateHandledKeyRef.current = null;
       return;
@@ -250,6 +263,7 @@ export default function Sessions() {
     shouldAutoCreateSession,
     snapshot,
     trackedProjects,
+    opencodeAvailable,
   ]);
 
   const renderSessionRow = (session: DevSession, options?: { archived?: boolean }) => {
@@ -391,11 +405,11 @@ export default function Sessions() {
             <p className="text-sm text-muted-foreground">
               Sessions appear here automatically when you start OpenCode from a repository or pull request. Rename them, open them, or archive them.
             </p>
-            {!codingToolAvailability.opencode.available ? (
+            {opencodeAvailable ? null : (
               <p className="mt-2 text-xs text-muted-foreground">
-                OpenCode is not currently available on this machine. DevDeck will still keep the session records and open their linked terminal contexts.
+                Install the OpenCode CLI and restart DevDeck to enable this page.
               </p>
-            ) : null}
+            )}
           </div>
         </div>
 
@@ -406,20 +420,41 @@ export default function Sessions() {
                 Active OpenCode Sessions
               </h2>
               <p className="text-sm text-muted-foreground">
-                Sessions are created automatically from repository and pull request entry points.
+                {opencodeAvailable
+                  ? "Sessions DevDeck launched through OpenCode appear here."
+                  : "This page is unavailable until DevDeck can access the OpenCode CLI on this machine."}
               </p>
             </div>
             <div className="flex items-center gap-3">
               <span className="rounded-full border border-border/60 bg-secondary px-2.5 py-1 text-[11px] font-medium text-foreground">
-                {activeSessions.length} active
+                {opencodeAvailable ? `${activeSessions.length} active` : "Unavailable"}
               </span>
             </div>
           </div>
 
           <div className="mt-4 overflow-hidden rounded-xl border border-border/50 bg-white/70">
-            {activeSessions.length === 0 ? (
+            {!opencodeAvailable ? (
+              <div className="space-y-3 px-4 py-10 text-center">
+                <div className="mx-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-amber-200 bg-amber-50 text-amber-700">
+                  <AlertTriangle className="h-4 w-4" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">
+                    OpenCode CLI is not available
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    DevDeck cannot reliably discover real OpenCode sessions until the
+                    `opencode` command is installed and visible on PATH.
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Install OpenCode, restart DevDeck, and this page will only show
+                  sessions opened through a real OpenCode runtime.
+                </p>
+              </div>
+            ) : activeSessions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border/60 bg-secondary/20 px-4 py-10 text-center text-sm text-muted-foreground">
-                No OpenCode sessions yet. Start OpenCode from a repository or pull request and DevDeck will add the session automatically.
+                No OpenCode sessions yet. Start OpenCode from a repository or pull request and DevDeck will add the linked session here.
               </div>
             ) : (
               <>
@@ -435,7 +470,7 @@ export default function Sessions() {
           </div>
         </section>
 
-        {archivedSessions.length > 0 ? (
+        {opencodeAvailable && archivedSessions.length > 0 ? (
           <section className="rounded-2xl border border-border/60 bg-white/70 p-5 shadow-sm backdrop-blur-md">
             <div className="flex items-end justify-between gap-4">
               <div>

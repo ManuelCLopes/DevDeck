@@ -312,6 +312,10 @@ export default function Terminals() {
   }, [sanitizedPanes, setPanes]);
 
   useEffect(() => {
+    if (!codingToolAvailability.opencode.available) {
+      return;
+    }
+
     if (selectedSession) {
       return;
     }
@@ -373,6 +377,7 @@ export default function Terminals() {
         : nextPanes,
     );
   }, [
+    codingToolAvailability.opencode.available,
     defaultCwd,
     paneRuntimeStates,
     panes,
@@ -406,6 +411,10 @@ export default function Terminals() {
 
   const createAutomaticSessionFromPath = useCallback(
     (candidatePath?: string | null) => {
+      if (!codingToolAvailability.opencode.available) {
+        return null;
+      }
+
       const matchedProject = findTrackedProjectForPath(
         trackedProjects,
         candidatePath ?? defaultCwd ?? null,
@@ -425,7 +434,12 @@ export default function Terminals() {
       setSessions((currentSessions) => [nextSession, ...currentSessions]);
       return nextSession;
     },
-    [defaultCwd, setSessions, trackedProjects],
+    [
+      codingToolAvailability.opencode.available,
+      defaultCwd,
+      setSessions,
+      trackedProjects,
+    ],
   );
 
   const launchAutomaticSessionFromPath = useCallback(

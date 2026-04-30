@@ -94,7 +94,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
     [workspaceSelection],
   );
   const desktopApi = getDesktopApi();
-  const { openPreferredTool, preferredToolShortLabel } = useCodingTool();
+  const { availability: codingToolAvailability, openPreferredTool, preferredToolShortLabel } =
+    useCodingTool();
   const hiddenProjectIds = useMemo(
     () =>
       new Set(
@@ -716,7 +717,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       <CommandShortcut>{preferredToolShortLabel}</CommandShortcut>
                     </CommandItem>
                   ))}
-                {searchResults.projects
+                {codingToolAvailability.opencode.available
+                  ? searchResults.projects
                   .filter((project) => Boolean(project.localPath))
                   .slice(0, 3)
                   .map((project) => (
@@ -735,7 +737,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       </span>
                       <CommandShortcut>OpenCode</CommandShortcut>
                     </CommandItem>
-                  ))}
+                  ))
+                  : null}
                 {searchResults.projects
                   .filter((project) => Boolean(project.localPath))
                   .slice(0, 3)
@@ -786,7 +789,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <>
               <CommandSeparator />
               <CommandGroup heading="PR Actions">
-                {searchResults.pullRequests.slice(0, 3).map((pullRequest) => (
+                {codingToolAvailability.opencode.available
+                  ? searchResults.pullRequests.slice(0, 3).map((pullRequest) => (
                   <CommandItem
                     key={`session-pr:${pullRequest.id}`}
                     value={`open opencode ${pullRequest.title} ${pullRequest.repo}`}
@@ -807,7 +811,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     </span>
                     <CommandShortcut>OpenCode</CommandShortcut>
                   </CommandItem>
-                ))}
+                  ))
+                  : null}
                 {searchResults.pullRequests.slice(0, 3).map((pullRequest) => (
                   <CommandItem
                     key={`view:${pullRequest.id}`}

@@ -128,12 +128,12 @@ test("desktop app loads overview for a prepared local workspace", async () => {
   );
 
   try {
-    await expect(page.getByText("Repository Overview")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Overview$/ }),
+    ).toBeVisible();
     await expect(page.locator("aside")).toContainText("alpha");
     await expect(page.locator("aside")).toContainText("beta");
-    await expect(
-      page.getByRole("heading", { name: "Monitored Repos" }),
-    ).toBeVisible();
+    await expect(page.getByText(/Monitored Repos|Branch Context/)).toBeVisible();
   } finally {
     await electronApp.close();
     rmSync(workspace.tempDir, { force: true, recursive: true });

@@ -1,6 +1,8 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { SquareTerminal } from "lucide-react";
 import { Button, type ButtonProps } from "@/components/ui/button";
+import { useCodingTool } from "@/hooks/use-coding-tool";
+import { getCodingToolInstallHint } from "@/lib/coding-tool";
 import { buildTerminalsPath, type DevSession } from "@/lib/dev-sessions";
 
 interface SessionLaunchButtonProps {
@@ -24,9 +26,17 @@ export default function SessionLaunchButton({
   size = "icon",
   variant = "outline",
 }: SessionLaunchButtonProps) {
+  const { availability } = useCodingTool();
+  const opencodeAvailable = availability.opencode.available;
   const actionLabel = "Open OpenCode";
+  const unavailableReason =
+    availability.opencode.reason ?? getCodingToolInstallHint("opencode");
 
   const handleClick = async () => {
+    if (!opencodeAvailable) {
+      return;
+    }
+
     if (existingSession) {
       onBeforeNavigate?.();
       onNavigate(buildTerminalsPath(existingSession.id, { launch: "opencode" }));
@@ -44,9 +54,10 @@ export default function SessionLaunchButton({
           <Button
             type="button"
             className={className}
+            disabled={!opencodeAvailable}
             onClick={() => void handleClick()}
             size={size}
-            title={actionLabel}
+            title={opencodeAvailable ? actionLabel : unavailableReason}
             variant={variant}
           >
             <SquareTerminal className="h-3.5 w-3.5" />
@@ -58,7 +69,7 @@ export default function SessionLaunchButton({
             className="rounded bg-foreground px-2 py-1 text-[11px] text-background shadow-md"
             sideOffset={5}
           >
-            {actionLabel}
+            {opencodeAvailable ? actionLabel : unavailableReason}
             <Tooltip.Arrow className="fill-foreground" />
           </Tooltip.Content>
         </Tooltip.Portal>

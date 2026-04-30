@@ -153,6 +153,10 @@ export default function Projects() {
   };
 
   const startSessionForProject = async (project: WorkspaceProject) => {
+    if (!codingTool.availability.opencode.available) {
+      return;
+    }
+
     const existingSession = findProjectDevSession(devSessions, project.id);
     if (existingSession) {
       navigateInApp(
@@ -429,7 +433,13 @@ export default function Projects() {
                     <button
                       type="button"
                       onClick={() => void startSessionForProject(selectedProject)}
-                      className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-md hover:bg-secondary transition-colors text-foreground"
+                      disabled={!codingTool.availability.opencode.available}
+                      title={
+                        codingTool.availability.opencode.available
+                          ? "Open OpenCode"
+                          : "OpenCode CLI is not available on this machine."
+                      }
+                      className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-md hover:bg-secondary transition-colors text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Open OpenCode
                     </button>
