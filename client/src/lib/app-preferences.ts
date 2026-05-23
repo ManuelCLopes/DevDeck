@@ -33,6 +33,7 @@ export interface AppPreferences {
   preferredCodingTool: "opencode" | "vscode";
   refreshOnWindowFocus: boolean;
   showMenuBarIcon: boolean;
+  themeMode: "light" | "dark" | "system";
   terminal: TerminalPreferences;
 }
 
@@ -61,6 +62,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   preferredCodingTool: "vscode",
   refreshOnWindowFocus: true,
   showMenuBarIcon: true,
+  themeMode: "system",
   terminal: DEFAULT_TERMINAL_PREFERENCES,
 };
 

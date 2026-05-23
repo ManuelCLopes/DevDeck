@@ -12,21 +12,21 @@ import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import {
   hasValidWorkspaceSelection,
 } from "@/lib/workspace-selection";
+import { getAppPreferences, useAppPreferences } from "@/lib/app-preferences";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const Reviews = lazy(() => import("@/pages/Reviews"));
 const Activity = lazy(() => import("@/pages/Activity"));
-const Sessions = lazy(() => import("@/pages/Sessions"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const Terminals = lazy(() => import("@/pages/Terminals"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
 
 function AppLoadingScreen() {
   return (
-    <div className="flex h-screen items-center justify-center bg-[#ececec] p-4 text-[13px] font-sans">
-      <div className="w-full max-w-sm rounded-2xl border border-black/10 bg-white/90 px-6 py-8 text-center shadow-xl backdrop-blur-3xl">
+    <div className="flex h-screen items-center justify-center bg-[#ececec] dark:bg-background p-4 text-[13px] font-sans">
+      <div className="w-full max-w-sm rounded-2xl border border-black/10 dark:border-white/10 bg-white/90 px-6 py-8 text-center shadow-xl backdrop-blur-3xl">
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
           DevDeck
         </p>
@@ -75,7 +75,6 @@ function AppRouter() {
         <Route path="/onboarding">{() => <Onboarding />}</Route>
         <Route path="/">{() => <Dashboard />}</Route>
         <Route path="/reviews">{() => <Reviews />}</Route>
-        <Route path="/sessions">{() => <Sessions />}</Route>
         <Route path="/team">{() => <Dashboard />}</Route>
         <Route path="/projects">{() => <Projects />}</Route>
         <Route path="/terminals">{() => <Terminals />}</Route>
@@ -89,6 +88,46 @@ function AppRouter() {
 
 function App() {
   const locationHook = getDesktopApi() ? useHashLocation : undefined;
+  const { preferences } = useAppPreferences();
+
+  // Run synchronously during initial render to prevent light mode flash
+  useState(() => {
+    const initialPrefs = getAppPreferences();
+    const theme = initialPrefs.themeMode;
+    const root = window.document.documentElement;
+    if (theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+      root.classList.add("dark");
+    } else {
+      root.classList.remove("dark");
+    }
+  });
+
+  useEffect(() => {
+    const theme = preferences.themeMode;
+    const root = window.document.documentElement;
+
+    const applyTheme = (effectiveTheme: "light" | "dark") => {
+      if (effectiveTheme === "dark") {
+        root.classList.add("dark");
+      } else {
+        root.classList.remove("dark");
+      }
+    };
+
+    if (theme === "system") {
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      applyTheme(mediaQuery.matches ? "dark" : "light");
+
+      const handleChange = (e: MediaQueryListEvent) => {
+        applyTheme(e.matches ? "dark" : "light");
+      };
+
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    } else {
+      applyTheme(theme);
+    }
+  }, [preferences.themeMode]);
 
   return (
     <QueryClientProvider client={queryClient}>

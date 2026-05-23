@@ -534,16 +534,6 @@ export default function Terminals() {
                   {selectedSession.projectPath ? (
                     <OpenInCodeButton targetPath={selectedSession.projectPath} />
                   ) : null}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5"
-                    onClick={() => navigateInApp("/sessions", setLocation)}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Back to OpenCode Sessions
-                  </Button>
                 </div>
               </div>
             </div>

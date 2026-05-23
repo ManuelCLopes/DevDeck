@@ -236,7 +236,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { href: "/", icon: LayoutGrid, label: "Overview" },
     { href: "/reviews", icon: MessageSquare, label: "Pull Requests" },
     { href: "/projects", icon: FolderGit2, label: "Repositories" },
-    { href: "/sessions", icon: SquareTerminal, label: "OpenCode Sessions" },
     { href: "/terminals", icon: TerminalSquare, label: "Terminals" },
     { href: "/activity", icon: Activity, label: "Activity Inbox" },
   ];
@@ -317,12 +316,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <>
-      <div className="flex h-screen overflow-hidden bg-[#f4f4f3] text-[13px] font-sans">
-      <div className="flex h-full w-full overflow-hidden bg-[#f4f4f3]">
+      <div className="flex h-screen overflow-hidden bg-background text-[13px] font-sans">
+      <div className="flex h-full w-full overflow-hidden bg-background">
         
         {/* Sidebar - macOS visual style */}
         <aside
-          className={`${sidebarWidthClass} flex-shrink-0 border-r border-black/10 bg-[#f2f2f0] flex flex-col transition-[width] duration-200`}
+          className={`${sidebarWidthClass} flex-shrink-0 border-r border-black/10 dark:border-border/60 bg-sidebar flex flex-col transition-[width] duration-200`}
         >
           {/* Traffic Lights & Titlebar Drag Area */}
           <div className="titlebar-drag-region relative flex h-[52px] items-start pl-[18px] pt-[16px]">
@@ -538,10 +537,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </aside>
 
         {/* Main Content Area */}
-        <main className="z-10 flex min-w-0 flex-1 flex-col bg-[#fbfbfb]">
+        <main className="z-10 flex min-w-0 flex-1 flex-col bg-background">
           
           {/* Top Titlebar / Toolbar */}
-          <header className="h-[52px] border-b border-black/10 flex items-center justify-between gap-3 px-3 sm:px-4 titlebar-drag-region bg-white/60 backdrop-blur-md sticky top-0 z-50">
+          <header className="h-[52px] border-b border-black/10 dark:border-border/60 flex items-center justify-between gap-3 px-3 sm:px-4 titlebar-drag-region bg-white/60 backdrop-blur-md sticky top-0 z-50">
             <div className="flex min-w-0 items-center gap-3 sm:gap-4 no-drag">
               <div className="flex items-center gap-1">
                 <button
@@ -594,7 +593,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </header>
 
           {/* Scrollable Content */}
-          <div className="flex-1 overflow-x-hidden overflow-y-auto bg-white p-4 sm:p-6 lg:p-8 no-drag">
+          <div className="flex-1 overflow-x-hidden overflow-y-auto bg-background p-4 sm:p-6 lg:p-8 no-drag">
             <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1200px] flex-col">
               {children}
             </div>
@@ -652,10 +651,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <MessageSquare className="w-4 h-4 text-primary" />
               <span className="font-medium">Open Pull Requests</span>
             </CommandItem>
-            <CommandItem value="open sessions workspace ops" onSelect={() => handleNavigate("/sessions")}>
-              <SquareTerminal className="w-4 h-4 text-primary" />
-              <span className="font-medium">Open OpenCode Sessions</span>
-            </CommandItem>
+
             <CommandItem
               value="open terminals embedded shell opencode"
               onSelect={() => handleNavigate("/terminals")}

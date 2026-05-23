@@ -2,7 +2,6 @@ import { Suspense, lazy, useMemo } from "react";
 import { useLocation } from "wouter";
 import AppLayout from "@/components/layout/AppLayout";
 import { PullRequestCiStatusIcon } from "@/components/pull-requests/PullRequestStatusIndicators";
-import SessionLaunchButton from "@/components/sessions/SessionLaunchButton";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { usePersistentState } from "@/hooks/use-persistent-state";
@@ -11,11 +10,7 @@ import { navigateInApp } from "@/lib/app-navigation";
 import { getDesktopApi } from "@/lib/desktop";
 import { useCodingTool } from "@/hooks/use-coding-tool";
 import {
-  buildCreateSessionPath,
   buildTerminalsPath,
-  DEV_SESSIONS_STORAGE_KEY,
-  findProjectDevSession,
-  normalizeDevSessions,
 } from "@/lib/dev-sessions";
 import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
 import {
@@ -61,9 +56,7 @@ export default function Projects() {
     "devdeck:projects:selected-pr",
     null,
   );
-  const [devSessions] = usePersistentState(DEV_SESSIONS_STORAGE_KEY, [], {
-    deserialize: (value) => normalizeDevSessions(JSON.parse(value)),
-  });
+
   const { data: snapshot, isLoading } = useWorkspaceSnapshot();
   const desktopApi = getDesktopApi();
   const codingTool = useCodingTool();
@@ -114,9 +107,7 @@ export default function Projects() {
     selectedProjectPullRequests.find(
       (pullRequest) => pullRequest.id === selectedPullRequestId,
     ) ?? null;
-  const selectedProjectSession = selectedProject
-    ? findProjectDevSession(devSessions, selectedProject.id)
-    : null;
+
 
   const openInTerminal = async (project: WorkspaceProject) => {
     await desktopApi?.openInTerminal(project.localPath);
@@ -152,13 +143,7 @@ export default function Projects() {
     setSelectedPullRequestId(null);
   };
 
-  const startSessionForProject = async (project: WorkspaceProject) => {
-    if (!codingTool.availability.opencode.available) {
-      return;
-    }
 
-    navigateInApp(buildCreateSessionPath(project.id), setLocation);
-  };
 
   return (
     <AppLayout>
@@ -279,13 +264,7 @@ export default function Projects() {
                         </Tooltip.Portal>
                       </Tooltip.Root>
                     </Tooltip.Provider>
-                    <SessionLaunchButton
-                      className="h-8 w-8 bg-white/80 backdrop-blur-sm border-border shadow-sm hover:bg-black/5"
-                      createPath={buildCreateSessionPath(selectedProject.id)}
-                      existingSession={selectedProjectSession}
-                      iconOnly
-                      onNavigate={(path) => navigateInApp(path, setLocation)}
-                    />
+
                     <Tooltip.Provider>
                       <Tooltip.Root>
                         <Tooltip.Trigger asChild>
@@ -418,19 +397,7 @@ export default function Projects() {
                 <div>
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</h3>
                   <div className="space-y-2">
-                    <button
-                      type="button"
-                      onClick={() => void startSessionForProject(selectedProject)}
-                      disabled={!codingTool.availability.opencode.available}
-                      title={
-                        codingTool.availability.opencode.available
-                          ? "Open OpenCode"
-                          : "OpenCode CLI is not available on this machine."
-                      }
-                      className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-md hover:bg-secondary transition-colors text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Open OpenCode
-                    </button>
+
                     <button
                       type="button"
                       onClick={() => void openInTerminal(selectedProject)}

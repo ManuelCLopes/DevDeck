@@ -293,6 +293,7 @@ export default function Settings() {
         | "autoRefreshEnabled"
         | "autoRefreshIntervalSeconds"
         | "preferredCodingTool"
+        | "themeMode"
         | "terminal"
       >;
       label: string;
@@ -845,6 +846,43 @@ export default function Settings() {
                     <div className="rounded-md border border-border/60 bg-white px-3 py-2 text-sm text-foreground shadow-sm">
                       {lastWorkspaceSyncLabel}
                     </div>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="px-3 pt-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Appearance
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3 p-3 rounded-md transition-colors hover:bg-secondary/30 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <label
+                      htmlFor="themeMode"
+                      className="flex items-center gap-2 font-medium text-sm text-foreground cursor-pointer"
+                    >
+                      <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                      Interface Style
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Choose between light mode, dark mode, or follow the native macOS system setting.
+                    </p>
+                  </div>
+                  <div className="flex min-w-[220px] rounded-lg border border-border bg-secondary/40 p-0.5 gap-0.5 shadow-sm">
+                    {(["light", "dark", "system"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setPreference("themeMode", mode)}
+                        className={`flex-1 text-center py-1.5 px-3 rounded-md text-[11px] font-semibold capitalize transition-all ${
+                          preferences.themeMode === mode
+                            ? "bg-white dark:bg-[#323232] text-foreground shadow-xs border border-border/10 dark:border-border/30"
+                            : "text-muted-foreground hover:text-foreground hover:bg-secondary/30"
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>

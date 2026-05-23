@@ -7,7 +7,7 @@ import {
   PullRequestCiStatusIcon,
   PullRequestListStatusIcon,
 } from "@/components/pull-requests/PullRequestStatusIndicators";
-import SessionLaunchButton from "@/components/sessions/SessionLaunchButton";
+
 import {
   Dialog,
   DialogContent,
@@ -562,21 +562,6 @@ export default function Dashboard() {
                                   status={queueStatus}
                                 />
                               </div>
-                              <SessionLaunchButton
-                                className="h-8 w-8"
-                                createPath={buildCreateSessionPath(
-                                  pullRequest.projectId,
-                                  pullRequest.id,
-                                )}
-                                existingSession={findPullRequestDevSession(
-                                  devSessions,
-                                  pullRequest.id,
-                                )}
-                                iconOnly
-                                onNavigate={(path) => navigateInApp(path, setLocation)}
-                                size="icon"
-                                variant="outline"
-                              />
                               <button
                                 type="button"
                                 onClick={(event) => {
@@ -797,21 +782,6 @@ export default function Dashboard() {
                                   status={queueStatus}
                                 />
                               </div>
-                              <SessionLaunchButton
-                                className="h-8 w-8"
-                                createPath={buildCreateSessionPath(
-                                  pullRequest.projectId,
-                                  pullRequest.id,
-                                )}
-                                existingSession={findPullRequestDevSession(
-                                  devSessions,
-                                  pullRequest.id,
-                                )}
-                                iconOnly
-                                onNavigate={(path) => navigateInApp(path, setLocation)}
-                                size="icon"
-                                variant="outline"
-                              />
                               <button
                                 type="button"
                                 onClick={(event) => {
@@ -1118,21 +1088,6 @@ export default function Dashboard() {
                                       : undefined
                                   }
                                   status={queueStatus}
-                                />
-                                <SessionLaunchButton
-                                  className="h-8 w-8"
-                                  createPath={buildCreateSessionPath(
-                                    pullRequest.projectId,
-                                    pullRequest.id,
-                                  )}
-                                  existingSession={findPullRequestDevSession(
-                                    devSessions,
-                                    pullRequest.id,
-                                  )}
-                                  iconOnly
-                                  onNavigate={(path) => navigateInApp(path, setLocation)}
-                                  size="icon"
-                                  variant="outline"
                                 />
                                 <button
                                   type="button"

@@ -1,8 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
-import SessionLaunchButton from "@/components/sessions/SessionLaunchButton";
-import { usePersistentState } from "@/hooks/use-persistent-state";
 import {
   CheckCheck,
   GitBranch,
@@ -13,13 +10,6 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { navigateInApp } from "@/lib/app-navigation";
-import {
-  buildCreateSessionPath,
-  DEV_SESSIONS_STORAGE_KEY,
-  findPullRequestDevSession,
-  normalizeDevSessions,
-} from "@/lib/dev-sessions";
 import PullRequestQueueControl from "@/components/pull-requests/PullRequestQueueControl";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -52,7 +42,7 @@ export default function PullRequestDetailDialog({
   onOpenChange,
   pullRequest,
 }: PullRequestDetailDialogProps) {
-  const [, setLocation] = useLocation();
+  const desktopApi = getDesktopApi();
   const [commentBody, setCommentBody] = useState("");
   const [reviewerInput, setReviewerInput] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -61,10 +51,6 @@ export default function PullRequestDetailDialog({
   const ciStatusMeta = pullRequest
     ? getPullRequestCiStatusMeta(pullRequest.ciStatus)
     : null;
-  const desktopApi = getDesktopApi();
-  const [devSessions] = usePersistentState(DEV_SESSIONS_STORAGE_KEY, [], {
-    deserialize: (value) => normalizeDevSessions(JSON.parse(value)),
-  });
   const reviewerLogins = parseReviewerLogins(reviewerInput);
   const canRunGitHubActions = Boolean(desktopApi && pullRequest?.repositorySlug);
   const queueStatus = pullRequest
@@ -73,9 +59,6 @@ export default function PullRequestDetailDialog({
   const signalBadges = pullRequest
     ? getPullRequestSignalBadges(pullRequest)
     : [];
-  const existingSession = pullRequest
-    ? findPullRequestDevSession(devSessions, pullRequest.id)
-    : null;
 
   useEffect(() => {
     if (!open) {
@@ -241,20 +224,6 @@ export default function PullRequestDetailDialog({
                         : undefined
                     }
                     status={queueStatus}
-                  />
-                  <SessionLaunchButton
-                    className="h-9 gap-1.5"
-                    createPath={
-                      pullRequest
-                        ? buildCreateSessionPath(pullRequest.projectId, pullRequest.id)
-                        : "/sessions"
-                    }
-                    existingSession={existingSession}
-                    iconOnly={false}
-                    onBeforeNavigate={() => onOpenChange(false)}
-                    onNavigate={(path) => navigateInApp(path, setLocation)}
-                    size="default"
-                    variant="outline"
                   />
                   <Button
                     type="button"
