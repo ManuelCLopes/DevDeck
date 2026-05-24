@@ -9,6 +9,21 @@ import {
   PlusSquare,
   TerminalSquare,
   X,
+  ChevronLeft,
+  ChevronRight,
+  Edit2,
+  Check,
+  Archive,
+  RefreshCw,
+  Play,
+  Sparkles,
+  Power,
+  Globe,
+  FolderGit2,
+  GitBranch,
+  Compass,
+  Code,
+  Copy,
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import OpenInCodeButton from "@/components/coding-tool/OpenInCodeButton";
@@ -88,6 +103,7 @@ import type {
 } from "@/lib/app-preferences";
 import type { OpenCodeSessionView } from "@/hooks/use-opencode-sessions";
 import type { PtyAvailability } from "@shared/terminals";
+import type { WorkspaceProject } from "@shared/workspace";
 const DEFAULT_QUICK_SHELLS: Array<{
   label: string;
   command: string;
@@ -147,7 +163,7 @@ export default function Terminals() {
   const search = useSearch();
   const { preferences, setPreference } = useAppPreferences();
   const { availability: codingToolAvailability, preferredTool } = useCodingTool();
-  const { isLoading: opencodeSessionsLoading, sessions: opencodeSessions } =
+  const { isLoading: opencodeSessionsLoading, sessions: opencodeSessions, refresh: refreshSessions } =
     useOpenCodeSessions();
   const { data: snapshot } = useWorkspaceSnapshot();
   const desktopApi = getDesktopApi();
@@ -161,10 +177,21 @@ export default function Terminals() {
     nextLayout: TerminalLayout;
     panes: Array<{ id: string; label: string }>;
   } | null>(null);
-  const [archivedSessionIds] = usePersistentState<string[]>(
+  const [archivedSessionIds, setArchivedSessionIds] = usePersistentState<string[]>(
     ARCHIVED_OPENCODE_SESSIONS_STORAGE_KEY,
     [],
   );
+  const [sidebarOpen, setSidebarOpen] = usePersistentState<boolean>(
+    "devdeck:terminals:sidebar-open",
+    true,
+  );
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingSessionTitle, setEditingSessionTitle] = useState("");
+  const [selectedRepoForLaunch, setSelectedRepoForLaunch] = useState<WorkspaceProject | null>(null);
+  const [newBranchName, setNewBranchName] = useState("");
+  const [baseRef, setBaseRef] = useState("");
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+
   const terminalPreferences = preferences.terminal;
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const requestedProjectId = searchParams.get("project");
@@ -201,6 +228,121 @@ export default function Terminals() {
       deserialize: (value) => normalizeTerminalPanes(JSON.parse(value)),
     },
   );
+
+  const copyCommandToClipboard = async (command: string) => {
+    if (desktopApi?.copyToClipboard) {
+      await desktopApi.copyToClipboard(command);
+    } else {
+      await navigator.clipboard.writeText(command);
+    }
+    toast({
+      title: "Command copied!",
+      description: "Paste it in your system terminal to install OpenCode.",
+    });
+  };
+
+  const handleArchiveSession = (sessionId: string) => {
+    setArchivedSessionIds((current) => [...current, sessionId]);
+    if (requestedSessionId === sessionId) {
+      handleSessionChange(GLOBAL_TERMINAL_WORKSPACE_SCOPE);
+    }
+    toast({
+      title: "Session archived",
+      description: "You can restore sessions from the system settings if needed.",
+    });
+  };
+
+  const handleRename = async (sessionId: string) => {
+    const title = editingSessionTitle.trim();
+    if (!title) {
+      toast({
+        title: "Rename failed",
+        description: "Session title cannot be empty.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await desktopApi?.renameOpenCodeSession(sessionId, title);
+      toast({
+        title: "Session renamed",
+        description: `Successfully renamed to "${title}"`,
+      });
+      setEditingSessionId(null);
+      void refreshSessions();
+    } catch (e) {
+      toast({
+        title: "Rename failed",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRelaunch = (session: OpenCodeSessionView) => {
+    handleSessionChange(session.id);
+    toast({
+      title: "Relaunching context",
+      description: `Switching to session ${session.title}`,
+    });
+  };
+
+  const handleLaunchSession = async () => {
+    if (!selectedRepoForLaunch || !desktopApi?.createGitWorktreeSession) return;
+    
+    const branchToUse = newBranchName.trim() || `opencode-dev-${Math.random().toString(36).substring(2, 7)}`;
+    const baseToUse = baseRef || selectedRepoForLaunch.defaultBranch || "HEAD";
+    
+    setIsCreatingSession(true);
+    try {
+      toast({
+        title: "Creating worktree...",
+        description: `Spawning session for branch ${branchToUse} off ${baseToUse}`,
+      });
+      
+      const result = await desktopApi.createGitWorktreeSession({
+        repositoryPath: selectedRepoForLaunch.localPath,
+        branchName: branchToUse,
+        baseRef: baseToUse,
+      });
+
+      toast({
+        title: "Worktree created!",
+        description: `Staging OpenCode terminal shell at ${result.branchName}`,
+      });
+
+      setSelectedRepoForLaunch(null);
+      setNewBranchName("");
+      setBaseRef("");
+
+      const newPane: TerminalPaneConfig = {
+        ...createDefaultPane(panes.length, result.localPath),
+        label: `OpenCode (${result.branchName})`,
+        command: "opencode",
+        args: ["."],
+        cwd: result.localPath,
+      };
+
+      setPanes((currentPanes) => [...normalizeTerminalPanes(currentPanes), newPane]);
+      setLayout("single");
+
+      setTimeout(() => {
+        if (refreshSessions) {
+          void refreshSessions();
+        }
+      }, 2500);
+
+    } catch (e) {
+      toast({
+        title: "Workspace creation failed",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingSession(false);
+    }
+  };
 
   useEffect(() => {
     if (!desktopApi?.terminal) {
@@ -438,28 +580,6 @@ export default function Terminals() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 xl:min-w-[360px] xl:justify-end">
-              {activeSessions.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Select
-                    value={selectedSession?.id ?? GLOBAL_TERMINAL_WORKSPACE_SCOPE}
-                    onValueChange={handleSessionChange}
-                  >
-                    <SelectTrigger className="h-9 w-[280px] bg-white text-[12px]">
-                      <SelectValue placeholder="Choose OpenCode session" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={GLOBAL_TERMINAL_WORKSPACE_SCOPE}>
-                        Shared terminals workspace
-                      </SelectItem>
-                      {activeSessions.map((session) => (
-                        <SelectItem key={session.id} value={session.id}>
-                          {session.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
               <TerminalPersonalization
                 iconOnly
                 value={terminalPreferences}
@@ -501,43 +621,6 @@ export default function Terminals() {
               </Button>
             </div>
           </div>
-
-          {selectedSession ? (
-            <div className="w-full rounded-xl border border-border/60 bg-white/75 p-4 shadow-sm backdrop-blur-md">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                    <span className="font-medium uppercase tracking-wide text-muted-foreground">
-                      OpenCode Session
-                    </span>
-                    <span className="font-mono text-foreground">
-                      {selectedSession.id}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={getProjectTagClassName(
-                        selectedSession.resolvedProjectName ?? "Global context",
-                        "px-2.5 py-1",
-                      )}
-                    >
-                      {selectedSession.resolvedProjectName ?? "Global context"}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                  <LayoutPicker layout={layout} onChange={requestLayoutChange} />
-                  <QuickShellActions
-                    availableShells={availableShells}
-                    onAddPane={addPaneWithShell}
-                  />
-                  {selectedSession.projectPath ? (
-                    <OpenInCodeButton targetPath={selectedSession.projectPath} />
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          ) : null}
 
           {sessionMissing ? (
             <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
@@ -604,48 +687,456 @@ export default function Terminals() {
             </div>
           </div>
         ) : (
-          <div
-            className={cn(
-              "flex flex-1 min-h-[420px] min-w-0 flex-col",
-              isFocusMode &&
-                "fixed inset-0 z-[90] min-h-0 bg-[#fbfbfb] p-3 sm:p-4 lg:p-5",
+          <div className="flex flex-1 min-h-0 min-w-0 gap-4">
+            {/* 1. Collapsible Sidebar */}
+            {!isFocusMode && sidebarOpen && (
+              <aside className="w-80 shrink-0 flex flex-col rounded-xl border border-black/10 dark:border-white/10 bg-white/75 dark:bg-[#1a1a1c]/75 backdrop-blur-md shadow-sm overflow-hidden transition-all duration-200">
+                {/* Header */}
+                <div className="p-4 border-b border-black/10 dark:border-white/10 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "h-2 w-2 rounded-full",
+                      codingToolAvailability.opencode.available 
+                        ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" 
+                        : "bg-amber-500"
+                    )} />
+                    <span className="text-xs font-semibold text-foreground uppercase tracking-wider">OpenCode Hub</span>
+                  </div>
+                  
+                  {/* Refresh Button */}
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      void refreshSessions();
+                      toast({ title: "Refreshing sessions...", description: "Querying active OpenCode daemon." });
+                    }}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {/* OpenCode Diagnostic / Installer Card */}
+                  {!codingToolAvailability.opencode.available && (
+                    <div className="rounded-lg border border-amber-200/60 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 p-3 text-[11px] text-amber-900 dark:text-amber-300 space-y-3 shadow-xs">
+                      <div className="flex items-center gap-1.5 font-semibold text-[12px]">
+                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                        <span>OpenCode CLI Offline</span>
+                      </div>
+                      <p className="leading-relaxed text-muted-foreground">
+                        To enable session automation, repository worktrees, and full diagnostic tracing, make sure the OpenCode CLI is installed and running.
+                      </p>
+                      
+                      <div className="space-y-1.5">
+                        <span className="font-medium text-amber-950 dark:text-amber-200">Installation Command:</span>
+                        <div className="relative group/copy">
+                          <pre className="rounded bg-white/70 dark:bg-[#111]/70 border border-amber-200/50 dark:border-amber-950/50 p-2 font-mono text-[9.5px] overflow-x-auto text-amber-950 dark:text-amber-200 leading-normal select-all">
+                            curl -fsSL https://opencode.ai/install.sh | sh
+                          </pre>
+                          <button
+                            onClick={() => void copyCommandToClipboard("curl -fsSL https://opencode.ai/install.sh | sh")}
+                            className="absolute right-2 top-2 p-1 rounded bg-amber-200/60 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 opacity-80 hover:opacity-100 transition-opacity"
+                            title="Copy command"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sessions Inventory */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
+                      Active Sessions
+                    </span>
+                    
+                    {/* Shared Terminal Workspace Link */}
+                    <button
+                      onClick={() => handleSessionChange(GLOBAL_TERMINAL_WORKSPACE_SCOPE)}
+                      className={cn(
+                        "w-full text-left p-2.5 rounded-lg border text-xs flex items-center justify-between transition-all duration-150",
+                        selectedSession === null
+                          ? "bg-primary/5 border-primary/20 dark:bg-primary/10 dark:border-primary/30 text-primary font-medium shadow-xs"
+                          : "bg-white/50 dark:bg-[#202022]/40 border-black/5 dark:border-white/5 text-foreground hover:bg-secondary/80"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <TerminalSquare className="h-3.5 w-3.5 shrink-0" />
+                        <span>Shared terminals workspace</span>
+                      </div>
+                    </button>
+
+                    {/* Active Sessions List */}
+                    {activeSessions.length === 0 ? (
+                      <div className="py-6 text-center text-muted-foreground text-[11px] bg-secondary/20 dark:bg-secondary/5 rounded-lg border border-dashed border-border/40">
+                        No active OpenCode sessions. Use the launcher grid to start one.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {activeSessions.map((session) => {
+                          const isSelected = selectedSession?.id === session.id;
+                          const isEditing = editingSessionId === session.id;
+
+                          return (
+                            <div
+                              key={session.id}
+                              className={cn(
+                                "group relative w-full p-2.5 rounded-lg border text-xs flex flex-col transition-all duration-150",
+                                isSelected
+                                  ? "bg-primary/5 border-primary/20 dark:bg-primary/10 dark:border-primary/30 text-foreground font-medium shadow-xs"
+                                  : "bg-white/50 dark:bg-[#202022]/40 border-black/5 dark:border-white/5 text-foreground/90 hover:bg-secondary/80 hover:border-black/10 dark:hover:border-white/10"
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <div className={cn(
+                                    "h-1.5 w-1.5 rounded-full shrink-0 mt-1.5",
+                                    isSelected 
+                                      ? "bg-emerald-500 animate-pulse" 
+                                      : "bg-muted-foreground/45"
+                                  )} />
+                                  
+                                  {isEditing ? (
+                                    <div className="flex items-center gap-1 w-full" onClick={(e) => e.stopPropagation()}>
+                                      <input
+                                        type="text"
+                                        value={editingSessionTitle}
+                                        onChange={(e) => setEditingSessionTitle(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") void handleRename(session.id);
+                                          else if (e.key === "Escape") setEditingSessionId(null);
+                                        }}
+                                        className="h-6 w-full text-xs bg-white dark:bg-background border border-primary/30 rounded px-1.5 focus:outline-none"
+                                        autoFocus
+                                      />
+                                      <button 
+                                        onClick={() => void handleRename(session.id)}
+                                        className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 rounded"
+                                      >
+                                        <Check className="h-3.5 w-3.5" />
+                                      </button>
+                                      <button 
+                                        onClick={() => setEditingSessionId(null)}
+                                        className="p-1 text-destructive hover:bg-destructive/5 rounded"
+                                      >
+                                        <X className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleSessionChange(session.id)}
+                                      className="font-medium text-left truncate hover:text-primary transition-colors flex-1"
+                                    >
+                                      {session.title}
+                                    </button>
+                                  )}
+                                </div>
+
+                                {!isEditing && (
+                                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0">
+                                    <button
+                                      onClick={() => {
+                                        setEditingSessionId(session.id);
+                                        setEditingSessionTitle(session.title);
+                                      }}
+                                      className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-secondary"
+                                      title="Rename Session"
+                                    >
+                                      <Edit2 className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleRelaunch(session)}
+                                      className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-secondary"
+                                      title="Focus Shell"
+                                    >
+                                      <Play className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleArchiveSession(session.id)}
+                                      className="p-1 text-muted-foreground hover:text-destructive rounded hover:bg-secondary"
+                                      title="Archive Session"
+                                    >
+                                      <Archive className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="mt-1 pl-3.5 flex flex-col gap-0.5 text-[10px] text-muted-foreground">
+                                <span className="truncate">Path: {session.projectPath ?? "Global"}</span>
+                                {session.resolvedProjectName && (
+                                  <span className="inline-flex items-center gap-1 mt-0.5">
+                                    <FolderGit2 className="h-2.5 w-2.5 shrink-0" />
+                                    <span>{session.resolvedProjectName}</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </aside>
             )}
-          >
-            {isFocusMode ? (
-              <div className="pointer-events-none absolute right-3 top-3 z-[100] sm:right-4 sm:top-4 lg:right-5 lg:top-5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="pointer-events-auto h-9 w-9 rounded-full bg-white/92 shadow-sm backdrop-blur-md"
-                  onClick={() => setIsFocusMode(false)}
-                  aria-label="Exit focus mode"
-                  title="Exit focus mode"
-                >
-                  <Minimize2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : null}
-            <TerminalWorkspace
-              key={storageScopeKey}
-              availableShells={availableShells}
-              availableCommands={ptyAvailability?.availableCommands ?? []}
-              defaultCwd={defaultCwd}
-              initialPanes={initialPanes}
-              layout={layout}
-              onLayoutRequestChange={requestLayoutChange}
-              onPaneRuntimeStateChange={handlePaneRuntimeStateChange}
-              opencodeAvailable={codingToolAvailability.opencode.available}
-              panes={sanitizedPanes.length > 0 ? sanitizedPanes : initialPanes}
-              preferences={terminalPreferences}
-              requestedLaunch={requestedLaunch}
-              requestedSessionId={selectedSession?.id ?? null}
-              selectedSession={selectedSession}
-              paneRuntimeStates={paneRuntimeStates}
-              setLayout={setLayout}
-              setPanes={setPanes}
-              scopeKey={storageScopeKey}
-            />
+
+            {/* Sidebar toggle tab */}
+            {!isFocusMode && (
+              <button 
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="self-center flex h-16 w-3.5 items-center justify-center rounded-r-md border border-l-0 border-black/10 dark:border-white/10 bg-white/80 dark:bg-[#1a1a1c]/80 hover:bg-secondary text-muted-foreground/60 transition-all shadow-sm z-10"
+              >
+                {sidebarOpen ? <ChevronLeft className="h-3 w-3 -ml-0.5" /> : <ChevronRight className="h-3 w-3" />}
+              </button>
+            )}
+
+            {/* Main Content Pane Area */}
+            <div
+              className={cn(
+                "flex flex-1 min-h-[420px] min-w-0 flex-col",
+                isFocusMode &&
+                  "fixed inset-0 z-[90] min-h-0 bg-[#fbfbfb] dark:bg-[#121212] p-3 sm:p-4 lg:p-5",
+              )}
+            >
+              {isFocusMode ? (
+                <div className="pointer-events-none absolute right-3 top-3 z-[100] sm:right-4 sm:top-4 lg:right-5 lg:top-5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="pointer-events-auto h-9 w-9 rounded-full bg-white/92 dark:bg-[#1e1e1e]/92 shadow-sm backdrop-blur-md"
+                    onClick={() => setIsFocusMode(false)}
+                    aria-label="Exit focus mode"
+                    title="Exit focus mode"
+                  >
+                    <Minimize2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : null}
+
+              {selectedSession && !isFocusMode && (
+                <div className="mb-3 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/75 dark:bg-[#1e1e1f]/75 p-4 shadow-sm backdrop-blur-md">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                        <span className="font-medium uppercase tracking-wide text-muted-foreground">
+                          OpenCode Session
+                        </span>
+                        <span className="font-mono text-foreground">
+                          {selectedSession.id}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={getProjectTagClassName(
+                            selectedSession.resolvedProjectName ?? "Global context",
+                            "px-2.5 py-1",
+                          )}
+                        >
+                          {selectedSession.resolvedProjectName ?? "Global context"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                      <LayoutPicker layout={layout} onChange={requestLayoutChange} />
+                      <QuickShellActions
+                        availableShells={availableShells}
+                        onAddPane={addPaneWithShell}
+                      />
+                      {selectedSession.projectPath ? (
+                        <OpenInCodeButton targetPath={selectedSession.projectPath} />
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Launcher empty state vs active terminal workspace */}
+              {selectedSession === null && sanitizedPanes.length === 0 ? (
+                <div className="flex-1 flex flex-col p-6 rounded-xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-[#1b1b1c]/60 backdrop-blur-md overflow-y-auto">
+                  {selectedRepoForLaunch ? (
+                    <div className="max-w-xl mx-auto w-full border border-black/10 dark:border-white/10 rounded-xl bg-white/80 dark:bg-[#202022]/80 p-6 shadow-md space-y-5 animate-in fade-in zoom-in-95 duration-200 mt-10">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                            <FolderGit2 className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-semibold">{selectedRepoForLaunch.name}</h3>
+                            <p className="text-[11px] text-muted-foreground font-mono truncate max-w-[320px]">{selectedRepoForLaunch.localPath}</p>
+                          </div>
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          onClick={() => setSelectedRepoForLaunch(null)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                        <div className="space-y-2">
+                          <Label className="text-[11px] text-muted-foreground block font-medium">New Worktree Branch Name</Label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={newBranchName}
+                              onChange={(e) => setNewBranchName(e.target.value)}
+                              placeholder="e.g. feature/opencode-hub"
+                              className="h-9 w-full bg-white dark:bg-background border border-black/10 dark:border-white/10 rounded-md pl-3 pr-8 focus:outline-none focus:border-primary/50 text-[12px]"
+                            />
+                            <GitBranch className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground/60" />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-[11px] text-muted-foreground block font-medium">Base Ref / Branch</Label>
+                          <Select value={baseRef} onValueChange={setBaseRef}>
+                            <SelectTrigger className="h-9 w-full bg-white text-[12px]">
+                              <SelectValue placeholder="Choose base branch" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={selectedRepoForLaunch.defaultBranch}>
+                                {selectedRepoForLaunch.defaultBranch} (Default)
+                              </SelectItem>
+                              {selectedRepoForLaunch.currentBranch !== selectedRepoForLaunch.defaultBranch && (
+                                <SelectItem value={selectedRepoForLaunch.currentBranch}>
+                                  {selectedRepoForLaunch.currentBranch} (Active)
+                                </SelectItem>
+                              )}
+                              <SelectItem value="HEAD">HEAD</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-3 pt-2">
+                        <Button 
+                          variant="outline" 
+                          onClick={() => setSelectedRepoForLaunch(null)}
+                          disabled={isCreatingSession}
+                          className="text-xs"
+                        >
+                          Cancel
+                        </Button>
+                        <Button 
+                          onClick={() => void handleLaunchSession()}
+                          disabled={isCreatingSession}
+                          className="gap-2 text-xs"
+                        >
+                          {isCreatingSession ? (
+                            <>
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                              Launching...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-3.5 w-3.5" />
+                              Launch OpenCode Workspace
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-6 flex-1 flex flex-col justify-center max-w-4xl mx-auto w-full py-8">
+                      <div className="text-center space-y-2">
+                        <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center shadow-xs">
+                          <Sparkles className="h-5 w-5 animate-pulse" />
+                        </div>
+                        <h2 className="text-base font-semibold">Quick Launch OpenCode Workspace</h2>
+                        <p className="text-[12px] text-muted-foreground max-w-lg mx-auto leading-relaxed">
+                          Check out a new worktree branch and start a pre-scoped terminal session instantly inside any of your connected repositories.
+                        </p>
+                      </div>
+
+                      {trackedProjects.length === 0 ? (
+                        <div className="py-12 text-center text-muted-foreground text-[12px] bg-white/40 dark:bg-white/5 rounded-xl border border-dashed">
+                          No connected repositories in workspace snapshot. Add folders in Settings to monitor repositories.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {trackedProjects.map((project) => (
+                            <div
+                              key={project.id}
+                              onClick={() => {
+                                setSelectedRepoForLaunch(project);
+                                setNewBranchName(`feature/opencode-${Math.random().toString(36).substring(2, 6)}`);
+                                setBaseRef(project.defaultBranch || "main");
+                              }}
+                              className="group relative p-4 rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#202022]/70 hover:border-primary/50 dark:hover:border-primary/50 cursor-pointer shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between h-36"
+                            >
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors truncate max-w-[180px]">{project.name}</span>
+                                  <span className="text-[9px] text-muted-foreground font-mono bg-secondary/50 dark:bg-[#2e2e30]/40 px-2 py-0.5 rounded">
+                                    {project.language}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                                  {project.description || "No description provided."}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center justify-between border-t border-black/5 dark:border-white/5 pt-2 text-[10px] text-muted-foreground">
+                                <span className="flex items-center gap-1 font-mono">
+                                  <GitBranch className="h-3 w-3 shrink-0" />
+                                  {project.currentBranch}
+                                </span>
+                                <span className="group-hover:translate-x-1 transition-transform text-primary font-medium flex items-center gap-1">
+                                  Launch Workspace &rarr;
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="text-center pt-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-[11px] text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            addPaneWithShell(DEFAULT_QUICK_SHELLS[2]!);
+                          }}
+                        >
+                          Or open a standard local terminal
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <TerminalWorkspace
+                  key={storageScopeKey}
+                  availableShells={availableShells}
+                  availableCommands={ptyAvailability?.availableCommands ?? []}
+                  defaultCwd={defaultCwd}
+                  initialPanes={initialPanes}
+                  layout={layout}
+                  onLayoutRequestChange={requestLayoutChange}
+                  onPaneRuntimeStateChange={handlePaneRuntimeStateChange}
+                  opencodeAvailable={codingToolAvailability.opencode.available}
+                  panes={sanitizedPanes.length > 0 ? sanitizedPanes : initialPanes}
+                  preferences={terminalPreferences}
+                  requestedLaunch={requestedLaunch}
+                  requestedSessionId={selectedSession?.id ?? null}
+                  selectedSession={selectedSession}
+                  paneRuntimeStates={paneRuntimeStates}
+                  setLayout={setLayout}
+                  setPanes={setPanes}
+                  scopeKey={storageScopeKey}
+                />
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -755,6 +1246,7 @@ function TerminalWorkspace({
   const [activePaneId, setActivePaneId] = useState<string | null>(
     initialPanes[0]?.id ?? null,
   );
+  const desktopApi = getDesktopApi();
 
   useEffect(() => {
     setActivePaneId(initialPanes[0]?.id ?? null);
@@ -870,7 +1362,63 @@ function TerminalWorkspace({
   };
 
   return (
-    <div className="flex h-full min-h-[420px] min-w-0 flex-1 flex-col">
+    <div className="relative flex h-full min-h-[420px] min-w-0 flex-1 flex-col">
+      {selectedSession && (
+        <div className="absolute top-2.5 left-1/2 z-20 -translate-x-1/2 flex items-center gap-3 px-4 py-1.5 rounded-full border border-black/10 dark:border-white/10 bg-white/92 dark:bg-[#1a1a1c]/92 shadow-md backdrop-blur-md text-[10px] font-medium text-foreground transition-all">
+          <div className="flex items-center gap-1.5 border-r border-black/10 dark:border-white/10 pr-2.5">
+            <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="text-muted-foreground uppercase text-[8px] tracking-wider font-semibold">Active:</span>
+            <span className="font-semibold text-foreground max-w-[100px] truncate">{selectedSession.title}</span>
+          </div>
+
+          {selectedSession.resolvedProjectName && (
+            <div className="flex items-center gap-1.5 border-r border-black/10 dark:border-white/10 pr-2.5 text-muted-foreground">
+              <FolderGit2 className="h-3 w-3 shrink-0" />
+              <span className="font-mono text-[9px] text-foreground max-w-[120px] truncate">
+                {selectedSession.resolvedProjectName}
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={async () => {
+                if (selectedSession.projectPath) {
+                  try {
+                    await desktopApi?.openInCode(selectedSession.projectPath);
+                    toast({ title: "VS Code opened", description: "Launched VS Code workspace." });
+                  } catch (e) {
+                    toast({ title: "Failed to open VS Code", description: String(e), variant: "destructive" });
+                  }
+                }
+              }}
+              className="flex items-center gap-1 hover:text-primary transition-colors text-muted-foreground"
+              title="Open workspace in VS Code"
+            >
+              <Code className="h-3 w-3" />
+              <span>VS Code</span>
+            </button>
+
+            <button
+              onClick={async () => {
+                if (selectedSession.projectPath) {
+                  try {
+                    await desktopApi?.showItemInFinder(selectedSession.projectPath);
+                    toast({ title: "Finder revealed", description: "Revealed workspace path in Finder." });
+                  } catch (e) {
+                    toast({ title: "Failed to reveal Finder", description: String(e), variant: "destructive" });
+                  }
+                }
+              }}
+              className="flex items-center gap-1 hover:text-primary transition-colors text-muted-foreground"
+              title="Reveal in Finder"
+            >
+              <Compass className="h-3 w-3" />
+              <span>Finder</span>
+            </button>
+          </div>
+        </div>
+      )}
       <TerminalGrid
         layout={layout}
         onLayoutChange={onLayoutRequestChange}
