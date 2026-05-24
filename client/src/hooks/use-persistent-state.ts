@@ -21,6 +21,7 @@ export function usePersistentState<T>(
     [options?.serialize],
   );
 
+  const [prevKey, setPrevKey] = useState(storageKey);
   const [state, setState] = useState<T>(() => {
     if (!persist || typeof window === "undefined") {
       return initialValue;
@@ -38,6 +39,23 @@ export function usePersistentState<T>(
     }
   });
 
+  // Synchronously adjust state when the storageKey changes
+  if (storageKey !== prevKey) {
+    setPrevKey(storageKey);
+    let newValue = initialValue;
+    if (persist && typeof window !== "undefined") {
+      const rawValue = localStorage.getItem(storageKey);
+      if (rawValue !== null) {
+        try {
+          newValue = deserialize(rawValue);
+        } catch {
+          newValue = initialValue;
+        }
+      }
+    }
+    setState(newValue);
+  }
+
   useEffect(() => {
     if (!persist || typeof window === "undefined") {
       return;
@@ -48,3 +66,4 @@ export function usePersistentState<T>(
 
   return [state, setState];
 }
+
