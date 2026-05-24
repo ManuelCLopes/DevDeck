@@ -1004,18 +1004,18 @@ export default function Terminals() {
                   "fixed inset-0 z-[90] min-h-0 bg-[#fbfbfb] dark:bg-[#121212] p-3 sm:p-4 lg:p-5",
               )}
             >
-              {isFocusMode ? (
+              {isFocusMode && (selectedSession === null && sanitizedPanes.length === 0) ? (
                 <div className="pointer-events-none absolute right-3 top-3 z-[100] sm:right-4 sm:top-4 lg:right-5 lg:top-5">
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
-                    className="pointer-events-auto h-9 w-9 rounded-full bg-white/92 dark:bg-[#1e1e1e]/92 shadow-sm backdrop-blur-md"
+                    className="pointer-events-auto h-7 w-7 rounded-md bg-white/92 dark:bg-[#1e1e1e]/92 shadow-sm backdrop-blur-md"
                     onClick={() => setIsFocusMode(false)}
                     aria-label="Exit focus mode"
                     title="Exit focus mode"
                   >
-                    <Minimize2 className="h-4 w-4" />
+                    <Minimize2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               ) : null}
@@ -1198,6 +1198,8 @@ export default function Terminals() {
                   setLayout={setLayout}
                   setPanes={setPanes}
                   scopeKey={storageScopeKey}
+                  isFocusMode={isFocusMode}
+                  onExitFocusMode={() => setIsFocusMode(false)}
                 />
               )}
             </div>
@@ -1285,6 +1287,8 @@ interface TerminalWorkspaceProps {
   setLayout: (layout: TerminalLayout) => void;
   setPanes: React.Dispatch<React.SetStateAction<TerminalPaneConfig[]>>;
   scopeKey: string;
+  isFocusMode?: boolean;
+  onExitFocusMode?: () => void;
 }
 
 function TerminalWorkspace({
@@ -1305,6 +1309,8 @@ function TerminalWorkspace({
   setLayout,
   setPanes,
   scopeKey,
+  isFocusMode = false,
+  onExitFocusMode,
 }: TerminalWorkspaceProps) {
   const [paneSelectionSession, setPaneSelectionSession] = useState<OpenCodeSessionView | null>(null);
   const [, setLocation] = useLocation();
@@ -1445,6 +1451,28 @@ function TerminalWorkspace({
 
   return (
     <div className="relative flex h-full min-h-[420px] min-w-0 flex-1 flex-col">
+      {isFocusMode && (
+        <div className="flex items-center justify-end gap-2 pb-2.5 pr-1">
+          {!selectedSession && (
+            <QuickShellActions
+              availableShells={availableShells}
+              onAddPane={addPaneWithShell}
+              tiny
+            />
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            className="h-7 px-2.5 text-[11px] gap-1.5 rounded-md text-muted-foreground hover:text-foreground"
+            onClick={onExitFocusMode}
+            aria-label="Exit focus mode"
+            title="Exit focus mode"
+          >
+            <Minimize2 className="h-3.5 w-3.5" />
+            <span>Exit Focus</span>
+          </Button>
+        </div>
+      )}
       {/* HUD capsule removed to minimize redundant active indicators */}
       <TerminalGrid
         layout={layout}
@@ -1457,11 +1485,13 @@ function TerminalWorkspace({
         defaultCwd={defaultCwd}
         showLayoutPicker={false}
         headerSlot={
-          selectedSession ? null : (
-            <QuickShellActions
-              availableShells={availableShells}
-              onAddPane={addPaneWithShell}
-            />
+          isFocusMode ? null : (
+            selectedSession ? null : (
+              <QuickShellActions
+                availableShells={availableShells}
+                onAddPane={addPaneWithShell}
+              />
+            )
           )
         }
         activePaneId={activePaneId}
@@ -1645,31 +1675,43 @@ interface QuickShellActionsProps {
     args?: string[];
     env?: Record<string, string>;
   }) => void;
+  tiny?: boolean;
 }
 
 function QuickShellActions({
   availableShells,
   onAddPane,
+  tiny = false,
 }: QuickShellActionsProps) {
   const singleShell = availableShells.length === 1 ? availableShells[0] : null;
+
+  const buttonClass = tiny
+    ? "h-7 px-2.5 text-[11px] gap-1.5 rounded-md"
+    : "gap-2 text-[12px]";
+
+  const iconClass = "h-3.5 w-3.5";
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       {singleShell ? (
         <Button
           variant="outline"
-          size="sm"
-          className="gap-2 text-[12px]"
+          size={tiny ? "default" : "sm"}
+          className={buttonClass}
           onClick={() => onAddPane(singleShell)}
         >
-          <PlusSquare className="h-3.5 w-3.5" />
+          <PlusSquare className={iconClass} />
           Split Pane
         </Button>
       ) : (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2 text-[12px]">
-              <PlusSquare className="h-3.5 w-3.5" />
+            <Button
+              variant="outline"
+              size={tiny ? "default" : "sm"}
+              className={buttonClass}
+            >
+              <PlusSquare className={iconClass} />
               Split with…
             </Button>
           </DropdownMenuTrigger>
