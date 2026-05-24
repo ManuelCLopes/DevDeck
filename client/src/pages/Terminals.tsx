@@ -210,7 +210,7 @@ export default function Terminals() {
   const sessionMissing = Boolean(
     requestedSessionId && !selectedSession && !opencodeSessionsLoading,
   );
-  const storageScopeKey = buildTerminalWorkspaceScopeKey(selectedSession?.id);
+  const storageScopeKey = GLOBAL_TERMINAL_WORKSPACE_SCOPE;
   const [layout, setLayout] = usePersistentState<TerminalLayout>(
     buildTerminalLayoutStorageKey(storageScopeKey),
     "single",
@@ -1263,76 +1263,93 @@ function TerminalWorkspace({
   setPanes,
   scopeKey,
 }: TerminalWorkspaceProps) {
-  const appliedLaunchRef = useRef<string | null>(null);
+  const [paneSelectionSession, setPaneSelectionSession] = useState<OpenCodeSessionView | null>(null);
+  const [, setLocation] = useLocation();
+  const appliedLaunchSessionIdRef = useRef<string | null>(null);
   const [activePaneId, setActivePaneId] = useState<string | null>(
     initialPanes[0]?.id ?? null,
   );
   const desktopApi = getDesktopApi();
 
   useEffect(() => {
-    setActivePaneId(initialPanes[0]?.id ?? null);
+    setActivePaneId((currentId) => currentId ?? initialPanes[0]?.id ?? null);
   }, [scopeKey, initialPanes]);
 
   useEffect(() => {
-    const launchKey =
-      requestedLaunch === "opencode" && opencodeAvailable
-        ? `${scopeKey}:opencode`
-        : null;
-
-    if (!launchKey) {
-      appliedLaunchRef.current = null;
+    if (requestedLaunch !== "opencode" || !requestedSessionId || !opencodeAvailable) {
+      appliedLaunchSessionIdRef.current = null;
       return;
     }
 
-    if (appliedLaunchRef.current === launchKey) {
+    if (appliedLaunchSessionIdRef.current === requestedSessionId) {
       return;
     }
 
-    appliedLaunchRef.current = launchKey;
-    let nextActivePaneId: string | null = null;
-    setPanes((currentPanes) => {
-      const normalizedPanes = normalizeTerminalPanes(currentPanes);
-      const recoveredPanes =
-        normalizedPanes.length > 0 ? normalizedPanes : initialPanes;
-      const targetPane =
-        recoveredPanes.find((pane) => pane.id === activePaneId) ?? recoveredPanes[0];
+    // Check if there is already an active pane running this opencode session
+    const existingPane = panes.find(
+      (pane) =>
+        pane.command === "opencode" &&
+        pane.args?.includes(requestedSessionId)
+    );
 
-      if (!targetPane) {
-        return recoveredPanes;
-      }
+    if (existingPane) {
+      appliedLaunchSessionIdRef.current = requestedSessionId;
+      setActivePaneId(existingPane.id);
+      navigateInApp(buildTerminalsPath(requestedSessionId), setLocation);
+      return;
+    }
 
-      nextActivePaneId = targetPane.id;
+    // Check if there is a "fresh" pane.
+    // A pane is fresh if it is NOT running a custom tool (opencode or claude).
+    const freshPane = panes.find(
+      (pane) =>
+        pane.command !== "opencode" &&
+        pane.command !== "claude"
+    );
 
-      return recoveredPanes.map((pane) =>
-        pane.id === targetPane.id
-          ? {
-              ...pane,
-              args: buildOpenCodeSessionArgs(requestedSessionId),
-              command: "opencode",
-              cwd: pane.cwd ?? defaultCwd,
-              env: requestedSessionId
-                ? {
-                    ...(pane.env ?? {}),
-                    [DEVDECK_OPENCODE_SESSION_ID_ENV]: requestedSessionId,
-                  }
-                : pane.env,
-              label: "OpenCode",
-            }
-          : pane,
+    if (freshPane) {
+      appliedLaunchSessionIdRef.current = requestedSessionId;
+      setPanes((currentPanes) =>
+        currentPanes.map((p) =>
+          p.id === freshPane.id
+            ? {
+                ...p,
+                label: "OpenCode",
+                command: "opencode",
+                args: buildOpenCodeSessionArgs(requestedSessionId),
+                cwd: selectedSession?.projectPath ?? p.cwd ?? defaultCwd,
+                env: {
+                  ...(p.env ?? {}),
+                  [DEVDECK_OPENCODE_SESSION_ID_ENV]: requestedSessionId,
+                },
+              }
+            : p
+        )
       );
-    });
-    if (nextActivePaneId) {
-      setActivePaneId(nextActivePaneId);
+      setActivePaneId(freshPane.id);
+      navigateInApp(buildTerminalsPath(requestedSessionId), setLocation);
+      toast({
+        title: "Session opened",
+        description: `Running OpenCode in ${freshPane.label}`,
+      });
+      return;
+    }
+
+    // No fresh pane is available! Show the selection dialog.
+    appliedLaunchSessionIdRef.current = requestedSessionId;
+    if (selectedSession) {
+      setPaneSelectionSession(selectedSession);
     }
   }, [
-    activePaneId,
-    defaultCwd,
-    initialPanes,
-    opencodeAvailable,
     requestedLaunch,
     requestedSessionId,
-    scopeKey,
+    opencodeAvailable,
+    panes,
+    setActivePaneId,
+    setLocation,
     setPanes,
+    selectedSession,
+    defaultCwd,
   ]);
 
   const addPaneWithShell = (shell: {
@@ -1461,6 +1478,140 @@ function TerminalWorkspace({
         activePaneId={activePaneId}
         onActivePaneIdChange={setActivePaneId}
       />
+      <AlertDialog
+        open={Boolean(paneSelectionSession)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPaneSelectionSession(null);
+            if (selectedSession) {
+              navigateInApp(buildTerminalsPath(selectedSession.id), setLocation);
+            }
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-base font-semibold">
+              Select Terminal for OpenCode
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs">
+              All of your active terminals are currently running customized tools or busy contexts. Where would you like to launch the session <strong>"{paneSelectionSession?.title}"</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="space-y-2 py-2">
+            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+              Active Terminals
+            </span>
+            <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+              {panes.map((pane) => {
+                const runtime = paneRuntimeStates[pane.id];
+                const activeTool = pane.command === "opencode" ? "OpenCode" : pane.command === "claude" ? "Claude" : "Shell";
+                
+                return (
+                  <button
+                    key={pane.id}
+                    onClick={() => {
+                      if (!paneSelectionSession) return;
+                      setPanes((currentPanes) =>
+                        currentPanes.map((p) =>
+                          p.id === pane.id
+                            ? {
+                                ...p,
+                                label: "OpenCode",
+                                command: "opencode",
+                                args: buildOpenCodeSessionArgs(paneSelectionSession.id),
+                                cwd: paneSelectionSession.projectPath ?? p.cwd,
+                                env: {
+                                  ...(p.env ?? {}),
+                                  [DEVDECK_OPENCODE_SESSION_ID_ENV]: paneSelectionSession.id,
+                                },
+                              }
+                            : p
+                        )
+                      );
+                      setActivePaneId(pane.id);
+                      setPaneSelectionSession(null);
+                      navigateInApp(buildTerminalsPath(paneSelectionSession.id), setLocation);
+                      toast({
+                        title: "Session opened",
+                        description: `Running OpenCode in ${pane.label}`,
+                      });
+                    }}
+                    className="w-full text-left p-2.5 rounded-lg border border-border bg-white dark:bg-zinc-950 hover:bg-secondary/80 flex items-center justify-between text-xs transition-colors"
+                  >
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-semibold text-foreground truncate">{pane.label}</span>
+                      <span className="text-[10px] text-muted-foreground truncate font-mono">
+                        {pane.cwd ?? "~"} · {activeTool}
+                      </span>
+                    </div>
+                    {runtime?.status === "ready" && (
+                      <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            
+            <div className="pt-2 border-t border-border/50 flex flex-col gap-1.5">
+              <button
+                onClick={() => {
+                  if (!paneSelectionSession) return;
+                  
+                  const currentCapacity = layoutCapacity(layout);
+                  if (layout === "grid" && panes.length >= currentCapacity) {
+                    toast({
+                      title: "Grid is full",
+                      description: "Please overwrite an existing terminal or change layout.",
+                      variant: "destructive"
+                    });
+                    return;
+                  }
+                  
+                  const nextLayout = getExpandedTerminalLayout(layout);
+                  const nextPane: TerminalPaneConfig = {
+                    ...createDefaultPane(panes.length, paneSelectionSession.projectPath ?? defaultCwd),
+                    label: "OpenCode",
+                    command: "opencode",
+                    args: buildOpenCodeSessionArgs(paneSelectionSession.id),
+                    cwd: paneSelectionSession.projectPath ?? defaultCwd,
+                    env: {
+                      [DEVDECK_OPENCODE_SESSION_ID_ENV]: paneSelectionSession.id,
+                    },
+                  };
+
+                  setLayout(nextLayout);
+                  setPanes((currentPanes) => [...currentPanes, nextPane]);
+                  setActivePaneId(nextPane.id);
+                  setPaneSelectionSession(null);
+                  navigateInApp(buildTerminalsPath(paneSelectionSession.id), setLocation);
+                  toast({
+                    title: "Opened in new pane",
+                    description: `Launched a new terminal pane for OpenCode`,
+                  });
+                }}
+                className="w-full p-2.5 rounded-lg border border-dashed border-primary/30 hover:border-primary/60 bg-primary/5 hover:bg-primary/10 text-primary font-medium text-xs text-center transition-colors"
+              >
+                + Open in a new terminal pane
+              </button>
+            </div>
+          </div>
+          
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setPaneSelectionSession(null);
+                if (selectedSession) {
+                  navigateInApp(buildTerminalsPath(selectedSession.id), setLocation);
+                }
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
