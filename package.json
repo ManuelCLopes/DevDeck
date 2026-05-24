@@ -27,7 +27,7 @@
   "scripts": {
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron:watch\" \"npm:dev:electron\"",
     "dev:client": "vite dev --host 127.0.0.1 --port 5000",
-    "dev:electron": "wait-on tcp:127.0.0.1:5000 file:dist-electron/main.cjs file:dist-electron/preload.cjs && DEVDECK_RENDERER_URL=http://127.0.0.1:5000 electron dist-electron/main.cjs",
+    "dev:electron": "wait-on tcp:127.0.0.1:5000 file:dist-electron/main.cjs file:dist-electron/preload.cjs && ELECTRON_ENABLE_LOGGING=1 DEVDECK_RENDERER_URL=http://127.0.0.1:5000 electron dist-electron/main.cjs",
     "dev:electron:watch": "tsx script/build-electron.ts --watch",
     "dev:renderer": "npm run dev:client",
     "dev:web": "NODE_ENV=development tsx server/index.ts",

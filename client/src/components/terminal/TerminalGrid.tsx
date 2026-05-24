@@ -3,7 +3,6 @@ import {
   Columns2,
   Grid2x2,
   Rows2,
-  Settings,
   Square,
 } from "lucide-react";
 import {
@@ -396,33 +395,6 @@ function TerminalPane({
       className="flex h-full min-h-0 min-w-0 flex-col gap-2"
       onPointerDownCapture={onFocus}
     >
-      <div className="flex items-center justify-between gap-2 text-[11px]">
-        <div className="flex min-w-0 items-center gap-2 truncate text-muted-foreground">
-          <span
-            className={cn(
-              "inline-block h-1.5 w-1.5 rounded-full",
-              active ? "bg-primary" : "bg-muted-foreground/30",
-            )}
-          />
-          <span className="truncate font-medium text-foreground/85">
-            {pane.label}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowConfig((value) => !value)}
-          className={cn(
-            "rounded-md p-1 text-muted-foreground hover:bg-black/5 hover:text-foreground",
-            showConfig && "bg-black/5 text-foreground",
-          )}
-          aria-expanded={showConfig}
-          aria-controls={configPanelId}
-          aria-label="Configure pane"
-          title="Configure pane"
-        >
-          <Settings className="h-3 w-3" />
-        </button>
-      </div>
       {showConfig ? (
         <div
           id={configPanelId}
@@ -564,6 +536,8 @@ function TerminalPane({
           themeOverride={pane.theme}
           onClose={onClose}
           onFocusRequest={onFocus}
+          onSettingsToggle={() => setShowConfig((value) => !value)}
+          settingsActive={showConfig}
           onStateChange={onStateChange}
         />
       </div>

@@ -131,7 +131,7 @@ function buildInitialPanes(options: {
   }
 
   if (options.shouldStartInOpenCode) {
-    pane.label = "OpenCode";
+    pane.label = options.selectedSession ? `OpenCode (${options.selectedSession.title})` : "OpenCode";
     pane.command = "opencode";
     pane.args = buildOpenCodeSessionArgs(options.opencodeSessionId);
   }
@@ -141,7 +141,9 @@ function buildInitialPanes(options: {
   }
 
   if (!pane.label || pane.label === "Shell 1") {
-    pane.label = options.shouldStartInOpenCode ? "OpenCode" : "Shell";
+    pane.label = options.shouldStartInOpenCode
+      ? (options.selectedSession ? `OpenCode (${options.selectedSession.title})` : "OpenCode")
+      : "Shell";
   }
 
   return [pane];
@@ -159,7 +161,7 @@ export default function Terminals() {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const { preferences, setPreference } = useAppPreferences();
-  const { availability: codingToolAvailability, preferredTool } = useCodingTool();
+  const { availability: codingToolAvailability, preferredTool, isLoading: codingToolLoading } = useCodingTool();
   const { isLoading: opencodeSessionsLoading, sessions: opencodeSessions, refresh: refreshSessions } =
     useOpenCodeSessions();
   const { data: snapshot } = useWorkspaceSnapshot();
@@ -403,45 +405,44 @@ export default function Terminals() {
   const ptyAvailabilityPending = ptyAvailability === null;
   const ptyBlocked = Boolean(ptyAvailability && !ptyAvailability.available);
   const sanitizedPanes = useMemo(() => {
-    let basePanes = normalizeTerminalPanes(panes).length > 0 ? normalizeTerminalPanes(panes) : initialPanes;
-
-    if (
-      selectedSession &&
-      (preferredTool === "opencode" || requestedLaunch === "opencode") &&
-      codingToolAvailability.opencode.available
-    ) {
-      const hasOpenCodePane = basePanes.some((p) => p.command === "opencode");
-      if (!hasOpenCodePane && basePanes[0]) {
-        basePanes = [
-          {
-            ...basePanes[0],
-            label: "OpenCode",
-            command: "opencode",
-            args: buildOpenCodeSessionArgs(selectedSession.id),
-            cwd: selectedSession.projectPath ?? basePanes[0].cwd,
-            env: {
-              ...basePanes[0].env,
-              [DEVDECK_OPENCODE_SESSION_ID_ENV]: selectedSession.id,
-            },
-          },
-          ...basePanes.slice(1),
-        ];
-      }
+    console.log(`Terminals sanitizedPanes evaluation: ptyAvailabilityPending=${ptyAvailabilityPending}, codingToolLoading=${codingToolLoading}, opencodeAvailable=${codingToolAvailability.opencode.available}, panes=${JSON.stringify(panes)}`);
+    if (ptyAvailabilityPending || codingToolLoading) {
+      return normalizeTerminalPanes(panes).length > 0 ? normalizeTerminalPanes(panes) : initialPanes;
     }
 
-    return sanitizeUnavailableTerminalPanes(basePanes, {
-      availableCommands: ptyAvailability?.availableCommands ?? [],
-      opencodeAvailable: codingToolAvailability.opencode.available,
-    });
+    const res = sanitizeUnavailableTerminalPanes(
+      normalizeTerminalPanes(panes).length > 0 ? normalizeTerminalPanes(panes) : initialPanes,
+      {
+        availableCommands: ptyAvailability?.availableCommands ?? [],
+        opencodeAvailable: codingToolAvailability.opencode.available,
+      },
+    );
+    console.log(`Terminals sanitizedPanes output: ${JSON.stringify(res)}`);
+    return res;
   }, [
+    ptyAvailabilityPending,
+    codingToolLoading,
     codingToolAvailability.opencode.available,
     initialPanes,
     panes,
-    preferredTool,
     ptyAvailability?.availableCommands,
-    requestedLaunch,
-    selectedSession,
   ]);
+
+  const isSessionRunningInAnyPane = useCallback(
+    (sessionId: string) => {
+      console.log("Terminals isSessionRunningInAnyPane DEBUG:", {
+        sessionId,
+        sanitizedPanes,
+      });
+      return sanitizedPanes.some(
+        (pane) =>
+          pane.command === "opencode" &&
+          (pane.args?.includes(sessionId) ||
+            pane.env?.[DEVDECK_OPENCODE_SESSION_ID_ENV] === sessionId),
+      );
+    },
+    [sanitizedPanes],
+  );
   const openCodeFallbackWarningKey =
     selectedSession &&
     requestedLaunch === "opencode" &&
@@ -469,17 +470,7 @@ export default function Terminals() {
     setPaneRuntimeStates({});
   }, [storageScopeKey]);
 
-  useEffect(() => {
-    if (sanitizedPanes.length === 0) {
-      return;
-    }
 
-    setPanes((currentPanes) =>
-      areTerminalPanesEqual(normalizeTerminalPanes(currentPanes), sanitizedPanes)
-        ? currentPanes
-        : sanitizedPanes,
-    );
-  }, [sanitizedPanes, setPanes]);
 
   const handleSessionChange = (value: string) => {
     navigateInApp(
@@ -499,6 +490,7 @@ export default function Terminals() {
     if (shell.command === "opencode" && selectedSession) {
       shell = {
         ...shell,
+        label: `OpenCode (${selectedSession.title})`,
         args: buildOpenCodeSessionArgs(selectedSession.id),
         env: {
           [DEVDECK_OPENCODE_SESSION_ID_ENV]: selectedSession.id,
@@ -601,6 +593,7 @@ export default function Terminals() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 xl:min-w-[360px] xl:justify-end">
+              <LayoutPicker layout={layout} onChange={requestLayoutChange} />
               <TerminalPersonalization
                 iconOnly
                 value={terminalPreferences}
@@ -816,8 +809,8 @@ export default function Terminals() {
                                 <div className="flex items-center gap-2 min-w-0 flex-1">
                                   <div className={cn(
                                     "h-1.5 w-1.5 rounded-full shrink-0 mt-1.5",
-                                    isSelected 
-                                      ? "bg-emerald-500 animate-pulse" 
+                                    isSessionRunningInAnyPane(session.id)
+                                      ? "bg-emerald-500 animate-pulse"
                                       : "bg-muted-foreground/45"
                                   )} />
                                   
@@ -939,43 +932,6 @@ export default function Terminals() {
                   </Button>
                 </div>
               ) : null}
-
-              {selectedSession && !isFocusMode && (
-                <div className="mb-3 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white/75 dark:bg-[#1e1e1f]/75 p-4 shadow-sm backdrop-blur-md">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                        <span className="font-medium uppercase tracking-wide text-muted-foreground">
-                          OpenCode Session
-                        </span>
-                        <span className="font-mono text-foreground">
-                          {selectedSession.id}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={getProjectTagClassName(
-                            selectedSession.resolvedProjectName ?? "Global context",
-                            "px-2.5 py-1",
-                          )}
-                        >
-                          {selectedSession.resolvedProjectName ?? "Global context"}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                      <LayoutPicker layout={layout} onChange={requestLayoutChange} />
-                      <QuickShellActions
-                        availableShells={availableShells}
-                        onAddPane={addPaneWithShell}
-                      />
-                      {selectedSession.projectPath ? (
-                        <OpenInCodeButton targetPath={selectedSession.projectPath} />
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Launcher empty state vs active terminal workspace */}
               {selectedSession === null && sanitizedPanes.length === 0 ? (
@@ -1314,7 +1270,7 @@ function TerminalWorkspace({
           p.id === freshPane.id
             ? {
                 ...p,
-                label: "OpenCode",
+                label: selectedSession ? `OpenCode (${selectedSession.title})` : "OpenCode",
                 command: "opencode",
                 args: buildOpenCodeSessionArgs(requestedSessionId),
                 cwd: selectedSession?.projectPath ?? p.cwd ?? defaultCwd,
@@ -1369,6 +1325,7 @@ function TerminalWorkspace({
       if (selectedSession) {
         shell = {
           ...shell,
+          label: `OpenCode (${selectedSession.title})`,
           args: buildOpenCodeSessionArgs(selectedSession.id),
           env: {
             [DEVDECK_OPENCODE_SESSION_ID_ENV]: selectedSession.id,
@@ -1401,62 +1358,7 @@ function TerminalWorkspace({
 
   return (
     <div className="relative flex h-full min-h-[420px] min-w-0 flex-1 flex-col">
-      {selectedSession && (
-        <div className="absolute top-2.5 left-1/2 z-20 -translate-x-1/2 flex items-center gap-3 px-4 py-1.5 rounded-full border border-black/10 dark:border-white/10 bg-white/92 dark:bg-[#1a1a1c]/92 shadow-md backdrop-blur-md text-[10px] font-medium text-foreground transition-all">
-          <div className="flex items-center gap-1.5 border-r border-black/10 dark:border-white/10 pr-2.5">
-            <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-            <span className="text-muted-foreground uppercase text-[8px] tracking-wider font-semibold">Active:</span>
-            <span className="font-semibold text-foreground max-w-[100px] truncate">{selectedSession.title}</span>
-          </div>
-
-          {selectedSession.resolvedProjectName && (
-            <div className="flex items-center gap-1.5 border-r border-black/10 dark:border-white/10 pr-2.5 text-muted-foreground">
-              <FolderGit2 className="h-3 w-3 shrink-0" />
-              <span className="font-mono text-[9px] text-foreground max-w-[120px] truncate">
-                {selectedSession.resolvedProjectName}
-              </span>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={async () => {
-                if (selectedSession.projectPath) {
-                  try {
-                    await desktopApi?.openInCode(selectedSession.projectPath);
-                    toast({ title: "VS Code opened", description: "Launched VS Code workspace." });
-                  } catch (e) {
-                    toast({ title: "Failed to open VS Code", description: String(e), variant: "destructive" });
-                  }
-                }
-              }}
-              className="flex items-center gap-1 hover:text-primary transition-colors text-muted-foreground"
-              title="Open workspace in VS Code"
-            >
-              <Code className="h-3 w-3" />
-              <span>VS Code</span>
-            </button>
-
-            <button
-              onClick={async () => {
-                if (selectedSession.projectPath) {
-                  try {
-                    await desktopApi?.showItemInFinder(selectedSession.projectPath);
-                    toast({ title: "Finder revealed", description: "Revealed workspace path in Finder." });
-                  } catch (e) {
-                    toast({ title: "Failed to reveal Finder", description: String(e), variant: "destructive" });
-                  }
-                }
-              }}
-              className="flex items-center gap-1 hover:text-primary transition-colors text-muted-foreground"
-              title="Reveal in Finder"
-            >
-              <Compass className="h-3 w-3" />
-              <span>Finder</span>
-            </button>
-          </div>
-        </div>
-      )}
+      {/* HUD capsule removed to minimize redundant active indicators */}
       <TerminalGrid
         layout={layout}
         onLayoutChange={onLayoutRequestChange}
@@ -1466,7 +1368,7 @@ function TerminalWorkspace({
         preferences={preferences}
         availableShells={availableShells}
         defaultCwd={defaultCwd}
-        showLayoutPicker={!selectedSession}
+        showLayoutPicker={false}
         headerSlot={
           selectedSession ? null : (
             <QuickShellActions
@@ -1518,7 +1420,7 @@ function TerminalWorkspace({
                           p.id === pane.id
                             ? {
                                 ...p,
-                                label: "OpenCode",
+                                label: `OpenCode (${paneSelectionSession.title})`,
                                 command: "opencode",
                                 args: buildOpenCodeSessionArgs(paneSelectionSession.id),
                                 cwd: paneSelectionSession.projectPath ?? p.cwd,
@@ -1572,7 +1474,7 @@ function TerminalWorkspace({
                   const nextLayout = getExpandedTerminalLayout(layout);
                   const nextPane: TerminalPaneConfig = {
                     ...createDefaultPane(panes.length, paneSelectionSession.projectPath ?? defaultCwd),
-                    label: "OpenCode",
+                    label: `OpenCode (${paneSelectionSession.title})`,
                     command: "opencode",
                     args: buildOpenCodeSessionArgs(paneSelectionSession.id),
                     cwd: paneSelectionSession.projectPath ?? defaultCwd,

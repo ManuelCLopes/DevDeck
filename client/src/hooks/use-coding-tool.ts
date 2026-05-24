@@ -16,12 +16,14 @@ import {
 export function useCodingTool() {
   const desktopApi = getDesktopApi();
   const { preferences } = useAppPreferences();
+  const [isLoading, setIsLoading] = useState(true);
   const [availability, setAvailability] = useState<DesktopCodingToolAvailability>(
     DEFAULT_DESKTOP_CODING_TOOL_AVAILABILITY,
   );
 
   useEffect(() => {
     if (!desktopApi?.getDesktopCodingToolAvailability) {
+      setIsLoading(false);
       return;
     }
 
@@ -31,11 +33,13 @@ export function useCodingTool() {
       .then((nextAvailability) => {
         if (!cancelled) {
           setAvailability(nextAvailability);
+          setIsLoading(false);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setAvailability(DEFAULT_DESKTOP_CODING_TOOL_AVAILABILITY);
+          setIsLoading(false);
         }
       });
 
@@ -72,6 +76,7 @@ export function useCodingTool() {
 
   return useMemo(
     () => ({
+      isLoading,
       availability,
       isToolAvailable: (tool: CodingToolId) =>
         isCodingToolAvailable(availability, tool),
@@ -80,6 +85,6 @@ export function useCodingTool() {
       preferredToolLabel: getCodingToolLabel(preferredTool),
       preferredToolShortLabel: getCodingToolShortLabel(preferredTool),
     }),
-    [availability, openTool, preferredTool],
+    [isLoading, availability, openTool, preferredTool],
   );
 }

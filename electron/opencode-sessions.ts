@@ -3,11 +3,64 @@ import { basename } from "path";
 import { createServer } from "net";
 import { promisify } from "util";
 import { homedir, tmpdir } from "os";
+import http from "node:http";
 import type { OpenCodeSessionRecord } from "../shared/opencode-sessions";
 
 const execFileAsync = promisify(execFile);
 const SERVER_HOSTNAME = "127.0.0.1";
 const SERVER_START_TIMEOUT_MS = 8_000;
+
+async function nodeFetchJson(url: string, options?: { method?: string; body?: string; headers?: Record<string, string> }): Promise<{ ok: boolean; status: number; json: () => Promise<any> }> {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const reqOptions: http.RequestOptions = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: options?.method ?? "GET",
+      headers: options?.headers ?? {},
+    };
+
+    if (options?.body) {
+      reqOptions.headers = {
+        ...reqOptions.headers,
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(options.body),
+      };
+    }
+
+    const req = http.request(reqOptions, (res) => {
+      let data = "";
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
+      res.on("end", () => {
+        let parsed = null;
+        try {
+          parsed = data ? JSON.parse(data) : null;
+        } catch {
+          // ignored
+        }
+        resolve({
+          ok: (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300,
+          status: res.statusCode ?? 0,
+          json: async () => parsed,
+        });
+      });
+    });
+
+    req.on("error", (err) => {
+      reject(err);
+    });
+
+    if (options?.body) {
+      req.write(options.body);
+    }
+    req.end();
+  });
+}
+
+const fetch = nodeFetchJson;
 
 interface OpenCodeProjectRecord {
   id: string;
@@ -190,28 +243,70 @@ async function waitForServer(baseUrl: string) {
   throw new Error("Timed out while starting the OpenCode session service.");
 }
 
-async function withOpenCodeServer<T>(action: (baseUrl: string) => Promise<T>) {
-  const port = await getAvailablePort();
-  const baseUrl = `http://${SERVER_HOSTNAME}:${port}`;
-  const serverProcess = spawn(
-    "opencode",
-    ["serve", "--hostname", SERVER_HOSTNAME, "--port", String(port)],
-    {
-      cwd: tmpdir(),
-      detached: false,
-      env: process.env,
-      stdio: "ignore",
-    },
+function getMacosPath(): string {
+  const base = process.env.PATH ?? "";
+  const extraPaths = ["/opt/homebrew/bin", "/usr/local/bin"];
+  const pathParts = base.split(":");
+  const missing = extraPaths.filter(p => !pathParts.includes(p));
+  if (missing.length > 0) {
+    return [...missing, ...pathParts].join(":");
+  }
+  return base;
+}
+
+let withServerQueuePromise = Promise.resolve<any>(undefined);
+
+async function withOpenCodeServer<T>(action: (baseUrl: string) => Promise<T>): Promise<T> {
+  const resultPromise = withServerQueuePromise.then(async () => {
+    const port = await getAvailablePort();
+    const baseUrl = `http://${SERVER_HOSTNAME}:${port}`;
+    const env = { ...process.env };
+    if (process.platform === "darwin") {
+      env.PATH = getMacosPath();
+    }
+
+    const serverProcess = spawn(
+      "opencode",
+      ["serve", "--hostname", SERVER_HOSTNAME, "--port", String(port)],
+      {
+        cwd: tmpdir(),
+        detached: false,
+        env,
+        stdio: "pipe",
+      },
+    );
+
+    let serverOutput = "";
+    serverProcess.stdout?.on("data", (data) => {
+      serverOutput += String(data);
+    });
+    serverProcess.stderr?.on("data", (data) => {
+      serverOutput += String(data);
+    });
+
+    serverProcess.on("error", (err) => {
+      console.error("OpenCode server process SPAWN ERROR:", err);
+    });
+
+    try {
+      await waitForServer(baseUrl);
+      return await action(baseUrl);
+    } catch (err) {
+      console.error(`OpenCode server failed to boot on port ${port}. Process output:\n${serverOutput}`);
+      throw err;
+    } finally {
+      if (!serverProcess.killed) {
+        serverProcess.kill("SIGTERM");
+      }
+    }
+  });
+
+  withServerQueuePromise = resultPromise.then(
+    () => undefined,
+    () => undefined
   );
 
-  try {
-    await waitForServer(baseUrl);
-    return await action(baseUrl);
-  } finally {
-    if (!serverProcess.killed) {
-      serverProcess.kill("SIGTERM");
-    }
-  }
+  return resultPromise;
 }
 
 export async function listOpenCodeSessions() {
@@ -298,7 +393,11 @@ export async function renameOpenCodeSession(sessionId: string, title: string) {
 
 export async function isOpenCodeCliAvailable() {
   try {
-    await execFileAsync(process.platform === "win32" ? "where" : "which", ["opencode"]);
+    const env = { ...process.env };
+    if (process.platform === "darwin") {
+      env.PATH = getMacosPath();
+    }
+    await execFileAsync(process.platform === "win32" ? "where" : "which", ["opencode"], { env });
     return true;
   } catch {
     return false;

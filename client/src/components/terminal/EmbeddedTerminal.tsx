@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import "@xterm/xterm/css/xterm.css";
-import { AlertTriangle, RotateCcw, X } from "lucide-react";
+import { AlertTriangle, RotateCcw, Settings, X } from "lucide-react";
 import {
   useEmbeddedTerminal,
   type EmbeddedTerminalStatus,
@@ -24,6 +24,8 @@ interface EmbeddedTerminalProps {
   themeOverride?: TerminalThemeName;
   onClose?: () => void;
   onFocusRequest?: () => void;
+  onSettingsToggle?: () => void;
+  settingsActive?: boolean;
   onStateChange?: (state: {
     error: string | null;
     info: {
@@ -52,6 +54,8 @@ export function EmbeddedTerminal({
   themeOverride,
   onClose,
   onFocusRequest,
+  onSettingsToggle,
+  settingsActive,
   onStateChange,
 }: EmbeddedTerminalProps) {
   const effectivePreferences = useMemo(
@@ -162,6 +166,20 @@ export function EmbeddedTerminal({
         >
           <RotateCcw className="h-3.5 w-3.5" />
         </button>
+        {onSettingsToggle && (
+          <button
+            type="button"
+            onClick={onSettingsToggle}
+            className={cn(
+              "rounded-md p-1 text-muted-foreground hover:bg-black/5 hover:text-foreground",
+              settingsActive && "bg-black/5 text-foreground",
+            )}
+            aria-label="Configure pane"
+            title="Configure pane"
+          >
+            <Settings className="h-3.5 w-3.5" />
+          </button>
+        )}
         {onClose ? (
           <button
             type="button"

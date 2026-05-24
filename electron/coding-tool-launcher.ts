@@ -24,10 +24,25 @@ const LINUX_TERMINAL_CANDIDATES = [
   "kitty",
 ];
 
+function getMacosPath(): string {
+  const base = process.env.PATH ?? "";
+  const extraPaths = ["/opt/homebrew/bin", "/usr/local/bin"];
+  const pathParts = base.split(":");
+  const missing = extraPaths.filter(p => !pathParts.includes(p));
+  if (missing.length > 0) {
+    return [...missing, ...pathParts].join(":");
+  }
+  return base;
+}
+
 async function commandExists(command: string): Promise<boolean> {
   const lookup = process.platform === "win32" ? "where" : "which";
   try {
-    await execFileAsync(lookup, [command]);
+    const env = { ...process.env };
+    if (process.platform === "darwin") {
+      env.PATH = getMacosPath();
+    }
+    await execFileAsync(lookup, [command], { env });
     return true;
   } catch {
     return false;

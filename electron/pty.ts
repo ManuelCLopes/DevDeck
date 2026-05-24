@@ -141,6 +141,17 @@ function resolveCwd(requested: string | undefined) {
   return app.getPath("home");
 }
 
+function getMacosPath(customPath?: string): string {
+  const base = customPath ?? process.env.PATH ?? "";
+  const extraPaths = ["/opt/homebrew/bin", "/usr/local/bin"];
+  const pathParts = base.split(":");
+  const missing = extraPaths.filter(p => !pathParts.includes(p));
+  if (missing.length > 0) {
+    return [...missing, ...pathParts].join(":");
+  }
+  return base;
+}
+
 function mergeEnv(extra: Record<string, string> | undefined) {
   const merged: Record<string, string> = {};
 
@@ -164,6 +175,10 @@ function mergeEnv(extra: Record<string, string> | undefined) {
     }
   }
 
+  if (process.platform === "darwin") {
+    merged.PATH = getMacosPath(merged.PATH);
+  }
+
   return merged;
 }
 
@@ -178,7 +193,12 @@ function resolveLabel(label: string | undefined, shell: string) {
 
 function commandExists(command: string) {
   try {
+    const env = { ...process.env };
+    if (process.platform === "darwin") {
+      env.PATH = getMacosPath();
+    }
     execFileSync(process.platform === "win32" ? "where" : "which", [command], {
+      env,
       stdio: "ignore",
     });
     return true;
