@@ -66,9 +66,26 @@ import {
   RefreshCw,
   SquareTerminal,
   TerminalSquare,
+  GitBranch,
 } from "lucide-react";
 
 const AddProjectsDialog = lazy(() => import("@/components/workspace/AddProjectsDialog"));
+
+function getProjectColors(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h = Math.abs(hash) % 360;
+  return {
+    bg: `hsla(${h}, 55%, 50%, 0.1)`,
+    border: `hsla(${h}, 50%, 50%, 0.35)`,
+    text: `hsla(${h}, 60%, 45%, 1)`,
+    darkText: `hsla(${h}, 85%, 75%, 1)`,
+    darkBg: `hsla(${h}, 50%, 40%, 0.18)`,
+    darkBorder: `hsla(${h}, 55%, 45%, 0.35)`,
+  };
+}
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -233,11 +250,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }, [deferredSearchQuery, hiddenProjectIds, hiddenProjectNames, snapshot]);
 
   const navItems = [
-    { href: "/", icon: LayoutGrid, label: "Overview" },
-    { href: "/reviews", icon: MessageSquare, label: "Pull Requests" },
-    { href: "/projects", icon: FolderGit2, label: "Repositories" },
-    { href: "/terminals", icon: TerminalSquare, label: "Terminals" },
-    { href: "/activity", icon: Activity, label: "Activity Inbox" },
+    { href: "/", icon: LayoutGrid, label: "Overview", collapsedLabel: "Overview" },
+    { href: "/reviews", icon: MessageSquare, label: "Pull Requests", collapsedLabel: "PRs" },
+    { href: "/projects", icon: FolderGit2, label: "Repositories", collapsedLabel: "Repos" },
+    { href: "/terminals", icon: TerminalSquare, label: "Terminals", collapsedLabel: "Terminals" },
+    { href: "/activity", icon: Activity, label: "Activity Inbox", collapsedLabel: "Activity" },
   ];
 
   useEffect(() => {
@@ -376,19 +393,24 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   key={item.href}
                   type="button"
                   onClick={() => handleNavigate(item.href)}
-                  className={`relative flex w-full items-center rounded-md text-left transition-all ${
+                  className={`relative group flex w-full items-center rounded-md text-left transition-all ${
                     isSidebarCollapsed
-                      ? "flex-col justify-center gap-1 px-0 py-1.5"
+                      ? "flex-col justify-center gap-1.5 px-0 py-2.5"
                       : "gap-2 px-2.5 py-1.5"
                   } ${
                     active
                       ? "bg-primary text-primary-foreground font-medium shadow-sm"
                       : "text-foreground/80 hover:bg-black/5"
                   }`}
-                  title={isSidebarCollapsed ? item.label : undefined}
                 >
                   <item.icon className={`w-4 h-4 ${active ? "opacity-100" : "opacity-70 text-primary"}`} />
-                  {!isSidebarCollapsed ? item.label : null}
+                  {!isSidebarCollapsed ? item.label : (
+                    <span className={`text-[9px] font-medium tracking-tight text-center leading-none mt-0.5 max-w-[64px] truncate transition-all duration-150 ${
+                      active ? "text-primary-foreground/95" : "text-muted-foreground group-hover:text-foreground"
+                    }`}>
+                      {item.collapsedLabel}
+                    </span>
+                  )}
                   {badgeCount !== null ? (
                     <span
                       className={`text-[10px] font-bold ${
@@ -400,6 +422,20 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       {badgeCount}
                     </span>
                   ) : null}
+
+                  {/* Hover Tooltip Popout */}
+                  {isSidebarCollapsed && (
+                    <div className="pointer-events-none absolute left-[calc(100%-8px)] top-1/2 -translate-y-1/2 z-[100] opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 ease-out pl-4">
+                      <div className="rounded-lg border border-black/10 dark:border-border/60 bg-white/95 dark:bg-[#1a1a1c]/95 px-3 py-1.5 text-xs text-foreground shadow-md backdrop-blur-md whitespace-nowrap font-medium flex items-center gap-2">
+                        <span>{item.label}</span>
+                        {badgeCount !== null && (
+                          <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[10px] font-bold leading-none">
+                            {badgeCount}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </button>
               );
             })}
@@ -447,53 +483,84 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     </button>
                   ) : null}
                   {(isSidebarCollapsed || !collapsedCollectionIdSet.has(collection.id)) &&
-                    collection.projects.map((project) => (
-                    <div
-                      key={project.localPath ?? project.id}
-                      className={`group flex items-center rounded-md transition-colors ${
-                        isSidebarCollapsed ? "justify-center px-0 py-1.5" : "gap-2 px-2 py-1"
-                      } ${
-                        selectedProjectId === project.id && location === "/"
-                          ? "bg-black/7 text-foreground font-medium"
-                          : "text-foreground/80 hover:bg-black/5"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          navigateInApp(
-                            `/?project=${encodeURIComponent(project.id)}`,
-                            setLocation,
-                          )
-                        }
-                        className={`flex min-w-0 flex-1 items-center overflow-hidden text-left ${
-                          isSidebarCollapsed ? "justify-center px-0 py-1" : "gap-2 px-0.5 py-0.5"
-                        }`}
-                        title={project.localPath ?? project.name}
-                      >
-                        {isSidebarCollapsed ? (
-                          <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border/60 bg-white/70 text-[11px] font-semibold uppercase text-foreground/85 shadow-sm">
-                            {project.name.slice(0, 2)}
-                          </span>
-                        ) : (
-                          <>
-                            <HardDrive className="w-3.5 h-3.5 opacity-60 text-primary group-hover:opacity-100 transition-opacity" />
-                            <span className="block min-w-0 truncate leading-tight">
-                              {project.name}
-                            </span>
-                          </>
-                        )}
-                      </button>
-                      {!isSidebarCollapsed && project.localPath ? (
-                        <ProjectQuickActions
-                          compact
-                          projectId={project.id}
-                          projectName={project.name}
-                          projectPath={project.localPath}
-                        />
-                      ) : null}
-                    </div>
-                  ))}
+                    collection.projects.map((project) => {
+                      const colors = getProjectColors(project.name);
+                      const snapshotProject = snapshot?.projects.find((p) => p.id === project.id);
+                      const branchName = snapshotProject?.currentBranch;
+
+                      return (
+                        <div
+                          key={project.localPath ?? project.id}
+                          className={`relative group flex items-center rounded-md transition-colors ${
+                            isSidebarCollapsed ? "justify-center px-0 py-1.5" : "gap-2 px-2 py-1"
+                          } ${
+                            selectedProjectId === project.id && location === "/"
+                              ? "bg-black/7 text-foreground font-medium"
+                              : "text-foreground/80 hover:bg-black/5"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigateInApp(
+                                `/?project=${encodeURIComponent(project.id)}`,
+                                setLocation,
+                              )
+                            }
+                            className={`flex min-w-0 flex-1 items-center overflow-hidden text-left ${
+                              isSidebarCollapsed ? "justify-center px-0 py-1" : "gap-2 px-0.5 py-0.5"
+                            }`}
+                          >
+                            {isSidebarCollapsed ? (
+                              <>
+                                <span 
+                                  className="flex h-8 w-8 items-center justify-center rounded-md border text-[11px] font-bold uppercase shadow-sm transition-all duration-150 group-hover:scale-105 bg-[var(--pj-bg)] border-[var(--pj-border)] text-[var(--pj-text)] dark:bg-[var(--pj-dark-bg)] dark:border-[var(--pj-dark-border)] dark:text-[var(--pj-dark-text)]"
+                                  style={{
+                                    "--pj-bg": colors.bg,
+                                    "--pj-border": colors.border,
+                                    "--pj-text": colors.text,
+                                    "--pj-dark-bg": colors.darkBg,
+                                    "--pj-dark-border": colors.darkBorder,
+                                    "--pj-dark-text": colors.darkText,
+                                  } as React.CSSProperties}
+                                >
+                                  {project.name.slice(0, 2)}
+                                </span>
+                                
+                                {/* Hover Tooltip Popout */}
+                                <div className="pointer-events-none absolute left-[calc(100%-8px)] top-1/2 -translate-y-1/2 z-[100] opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 ease-out pl-4">
+                                  <div className="rounded-lg border border-black/10 dark:border-border/60 bg-white/95 dark:bg-[#1a1a1c]/95 px-3 py-2 text-xs text-foreground shadow-md backdrop-blur-md whitespace-nowrap space-y-1 leading-normal">
+                                    <p className="font-semibold text-[12px]">{project.name}</p>
+                                    <p className="font-mono text-[9.5px] text-muted-foreground">{project.localPath}</p>
+                                    {branchName && (
+                                      <p className="text-[10px] text-primary font-semibold flex items-center gap-1 mt-1">
+                                        <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                                        <span>{branchName}</span>
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <HardDrive className="w-3.5 h-3.5 opacity-60 text-primary group-hover:opacity-100 transition-opacity" />
+                                <span className="block min-w-0 truncate leading-tight">
+                                  {project.name}
+                                </span>
+                              </>
+                            )}
+                          </button>
+                          {!isSidebarCollapsed && project.localPath ? (
+                            <ProjectQuickActions
+                              compact
+                              projectId={project.id}
+                              projectName={project.name}
+                              projectPath={project.localPath}
+                            />
+                          ) : null}
+                        </div>
+                      );
+                    })}
                 </div>
               ))}
             </div>
@@ -504,17 +571,25 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <button
               type="button"
               onClick={() => handleNavigate("/settings")}
-              className={`flex w-full items-center rounded-md text-left transition-colors ${
+              className={`relative group flex w-full items-center rounded-md text-left transition-colors ${
                 isSidebarCollapsed ? "justify-center px-0 py-2" : "gap-2 px-2.5 py-1.5"
               } ${
                 location === "/settings"
                   ? "bg-primary text-primary-foreground font-medium shadow-sm"
                   : "text-foreground/80 hover:bg-black/5"
               }`}
-              title={isSidebarCollapsed ? "Preferences" : undefined}
             >
               <Settings className="w-4 h-4 opacity-70" />
               {!isSidebarCollapsed ? "Preferences" : null}
+
+              {/* Hover Tooltip Popout */}
+              {isSidebarCollapsed && (
+                <div className="pointer-events-none absolute left-[calc(100%-8px)] top-1/2 -translate-y-1/2 z-[100] opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 ease-out pl-4">
+                  <div className="rounded-lg border border-black/10 dark:border-border/60 bg-white/95 dark:bg-[#1a1a1c]/95 px-3 py-1.5 text-xs text-foreground shadow-md backdrop-blur-md whitespace-nowrap font-medium">
+                    Preferences
+                  </div>
+                </div>
+              )}
             </button>
             
             <div
