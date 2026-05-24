@@ -341,7 +341,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           <button
             type="button"
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className="no-drag absolute right-0 translate-x-1/2 top-[60%] -translate-y-1/2 z-[90] flex h-10 w-4.5 items-center justify-center rounded-md border border-black/15 dark:border-white/15 bg-white dark:bg-[#202022] text-foreground hover:text-primary hover:bg-primary/5 hover:scale-105 transition-all shadow-md cursor-pointer"
+            className="no-drag absolute right-0 translate-x-1/2 bottom-[34px] z-[90] flex h-10 w-4.5 items-center justify-center rounded-md border border-black/15 dark:border-white/15 bg-white dark:bg-[#202022] text-foreground hover:text-primary hover:bg-primary/5 hover:scale-105 transition-all shadow-md cursor-pointer"
             aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
@@ -391,7 +391,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                       : "text-foreground/80 hover:bg-black/5"
                   }`}
                 >
-                  <item.icon className={`w-4 h-4 ${active ? "opacity-100" : "opacity-70 text-primary"}`} />
+                  <item.icon className={`w-4 h-4 ${active ? "" : "text-primary"}`} />
                   {!isSidebarCollapsed ? item.label : (
                     <span className={`text-[9px] font-medium tracking-tight text-center leading-none mt-0.5 max-w-[64px] truncate transition-all duration-150 ${
                       active ? "text-primary-foreground/95" : "text-muted-foreground group-hover:text-foreground"
@@ -531,7 +531,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                               </>
                             ) : (
                               <>
-                                <HardDrive className="w-3.5 h-3.5 opacity-60 text-primary group-hover:opacity-100 transition-opacity" />
+                                <HardDrive className="w-3.5 h-3.5 text-primary" />
                                 <span className="block min-w-0 truncate leading-tight">
                                   {project.name}
                                 </span>
@@ -567,7 +567,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   : "text-foreground/80 hover:bg-black/5"
               }`}
             >
-              <Settings className="w-4 h-4 opacity-70" />
+              <Settings className="w-4 h-4" />
               {!isSidebarCollapsed ? "Preferences" : null}
 
               {/* Hover Tooltip Popout */}
