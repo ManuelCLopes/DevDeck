@@ -2,6 +2,7 @@ import { execFile, spawn } from "child_process";
 import { basename } from "path";
 import { createServer } from "net";
 import { promisify } from "util";
+import { homedir } from "os";
 import type { OpenCodeSessionRecord } from "../shared/opencode-sessions";
 
 const execFileAsync = promisify(execFile);
@@ -196,6 +197,7 @@ async function withOpenCodeServer<T>(action: (baseUrl: string) => Promise<T>) {
     "opencode",
     ["serve", "--hostname", SERVER_HOSTNAME, "--port", String(port)],
     {
+      cwd: homedir(),
       detached: false,
       env: process.env,
       stdio: "ignore",
