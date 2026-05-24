@@ -141,10 +141,7 @@ function buildInitialPanes(options: {
   }
 
   if (!pane.label || pane.label === "Shell 1") {
-    pane.label =
-      options.preferredTool === "opencode" && options.shouldStartInOpenCode
-        ? "OpenCode"
-        : "Shell";
+    pane.label = options.shouldStartInOpenCode ? "OpenCode" : "Shell";
   }
 
   return [pane];
@@ -398,29 +395,53 @@ export default function Terminals() {
         selectedSession,
         shouldStartInOpenCode:
           Boolean(selectedSession) &&
-          preferredTool === "opencode" &&
+          (preferredTool === "opencode" || requestedLaunch === "opencode") &&
           codingToolAvailability.opencode.available,
       }),
-    [codingToolAvailability.opencode.available, defaultCwd, preferredTool, selectedSession],
+    [codingToolAvailability.opencode.available, defaultCwd, preferredTool, selectedSession, requestedLaunch],
   );
   const ptyAvailabilityPending = ptyAvailability === null;
   const ptyBlocked = Boolean(ptyAvailability && !ptyAvailability.available);
-  const sanitizedPanes = useMemo(
-    () =>
-      sanitizeUnavailableTerminalPanes(
-        normalizeTerminalPanes(panes).length > 0 ? normalizeTerminalPanes(panes) : initialPanes,
-        {
-          availableCommands: ptyAvailability?.availableCommands ?? [],
-          opencodeAvailable: codingToolAvailability.opencode.available,
-        },
-      ),
-    [
-      codingToolAvailability.opencode.available,
-      initialPanes,
-      panes,
-      ptyAvailability?.availableCommands,
-    ],
-  );
+  const sanitizedPanes = useMemo(() => {
+    let basePanes = normalizeTerminalPanes(panes).length > 0 ? normalizeTerminalPanes(panes) : initialPanes;
+
+    if (
+      selectedSession &&
+      (preferredTool === "opencode" || requestedLaunch === "opencode") &&
+      codingToolAvailability.opencode.available
+    ) {
+      const hasOpenCodePane = basePanes.some((p) => p.command === "opencode");
+      if (!hasOpenCodePane && basePanes[0]) {
+        basePanes = [
+          {
+            ...basePanes[0],
+            label: "OpenCode",
+            command: "opencode",
+            args: buildOpenCodeSessionArgs(selectedSession.id),
+            cwd: selectedSession.projectPath ?? basePanes[0].cwd,
+            env: {
+              ...basePanes[0].env,
+              [DEVDECK_OPENCODE_SESSION_ID_ENV]: selectedSession.id,
+            },
+          },
+          ...basePanes.slice(1),
+        ];
+      }
+    }
+
+    return sanitizeUnavailableTerminalPanes(basePanes, {
+      availableCommands: ptyAvailability?.availableCommands ?? [],
+      opencodeAvailable: codingToolAvailability.opencode.available,
+    });
+  }, [
+    codingToolAvailability.opencode.available,
+    initialPanes,
+    panes,
+    preferredTool,
+    ptyAvailability?.availableCommands,
+    requestedLaunch,
+    selectedSession,
+  ]);
   const openCodeFallbackWarningKey =
     selectedSession &&
     requestedLaunch === "opencode" &&
