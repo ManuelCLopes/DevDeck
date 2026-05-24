@@ -360,7 +360,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           <nav className="flex-1 px-3 pb-4 space-y-[2px] overflow-y-auto">
             {!isSidebarCollapsed ? (
               <div className="mb-2 mt-2 flex items-center justify-between px-2">
-                <p className="text-[11px] font-semibold text-muted-foreground/80">WORKSPACE</p>
+                <p className="text-[11px] font-semibold text-muted-foreground">WORKSPACE</p>
               </div>
             ) : (
               <div className="h-4" />
@@ -388,13 +388,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   } ${
                     active
                       ? "bg-primary text-primary-foreground font-medium shadow-sm"
-                      : "text-foreground/80 hover:bg-black/5"
+                      : "text-foreground hover:bg-black/5"
                   }`}
                 >
                   <item.icon className={`w-4 h-4 ${active ? "" : "text-primary"}`} />
                   {!isSidebarCollapsed ? item.label : (
                     <span className={`text-[9px] font-medium tracking-tight text-center leading-none mt-0.5 max-w-[64px] truncate transition-all duration-150 ${
-                      active ? "text-primary-foreground/95" : "text-muted-foreground group-hover:text-foreground"
+                      active ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground"
                     }`}>
                       {item.collapsedLabel}
                     </span>
@@ -434,12 +434,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
               }`}
             >
               {!isSidebarCollapsed ? (
-                <p className="text-[11px] font-semibold text-muted-foreground/80">PROJECTS</p>
+                <p className="text-[11px] font-semibold text-muted-foreground">PROJECTS</p>
               ) : null}
               <button
                 type="button"
                 onClick={() => setIsAddProjectsOpen(true)}
-                className={`text-muted-foreground/50 hover:text-foreground/80 no-drag ${
+                className={`text-muted-foreground hover:text-foreground no-drag ${
                   isSidebarCollapsed ? "rounded-md p-1 hover:bg-black/5" : ""
                 }`}
                 aria-label="Add repositories"
@@ -455,7 +455,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     <button
                       type="button"
                       onClick={() => toggleCollectionCollapsed(collection.id)}
-                      className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 transition-colors hover:bg-black/5 hover:text-foreground/80"
+                      className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground"
                       aria-expanded={!collapsedCollectionIdSet.has(collection.id)}
                       title={collection.workspacePath ?? collection.workspaceName}
                     >
@@ -465,7 +465,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                         <ChevronDown className="h-3 w-3 flex-shrink-0" />
                       )}
                       <span className="truncate">{collection.name}</span>
-                      <span className="ml-auto text-[9px] normal-case tracking-normal text-muted-foreground/70">
+                      <span className="ml-auto text-[9px] normal-case tracking-normal text-muted-foreground">
                         {collection.projects.length}
                       </span>
                     </button>
@@ -484,7 +484,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                           } ${
                             selectedProjectId === project.id && location === "/"
                               ? "bg-black/7 text-foreground font-medium"
-                              : "text-foreground/80 hover:bg-black/5"
+                              : "text-foreground hover:bg-black/5"
                           }`}
                         >
                           <button
@@ -564,7 +564,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               } ${
                 location === "/settings"
                   ? "bg-primary text-primary-foreground font-medium shadow-sm"
-                  : "text-foreground/80 hover:bg-black/5"
+                  : "text-foreground hover:bg-black/5"
               }`}
             >
               <Settings className="w-4 h-4" />
@@ -646,7 +646,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               >
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <span className="block truncate">Search repositories, PRs, activity...</span>
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground/80">
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground">
                   {typeof navigator !== "undefined" && navigator.platform.includes("Mac")
                     ? "⌘K"
                     : "Ctrl K"}
