@@ -703,199 +703,286 @@ export default function Terminals() {
         ) : (
           <div className="flex flex-1 min-h-0 min-w-0 gap-4">
             {/* 1. Collapsible Sidebar */}
-            {!isFocusMode && sidebarOpen && (
-              <aside className="w-80 shrink-0 flex flex-col rounded-xl border border-black/10 dark:border-white/10 bg-white/75 dark:bg-[#1a1a1c]/75 backdrop-blur-md shadow-sm overflow-hidden transition-all duration-200">
-                {/* Header */}
-                <div className="p-4 border-b border-black/10 dark:border-white/10 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={cn(
-                      "h-2 w-2 rounded-full",
-                      codingToolAvailability.opencode.available 
-                        ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" 
-                        : "bg-amber-500"
-                    )} />
-                    <span className="text-xs font-semibold text-foreground uppercase tracking-wider">OpenCode Hub</span>
-                  </div>
-                  
-                  {/* Refresh Button */}
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    onClick={() => {
-                      void refreshSessions();
-                      toast({ title: "Refreshing sessions...", description: "Querying active OpenCode daemon." });
-                    }}
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  {/* OpenCode Diagnostic / Installer Card */}
-                  {!codingToolAvailability.opencode.available && (
-                    <div className="rounded-lg border border-amber-200/60 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 p-3 text-[11px] text-amber-900 dark:text-amber-300 space-y-3 shadow-xs">
-                      <div className="flex items-center gap-1.5 font-semibold text-[12px]">
-                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                        <span>OpenCode CLI Offline</span>
+            {!isFocusMode && (
+              <aside className={cn(
+                "shrink-0 flex flex-col rounded-xl border border-black/10 dark:border-white/10 bg-white/75 dark:bg-[#1a1a1c]/75 backdrop-blur-md shadow-sm overflow-hidden transition-all duration-200",
+                sidebarOpen ? "w-80" : "w-12"
+              )}>
+                {sidebarOpen ? (
+                  <>
+                    {/* Header */}
+                    <div className="p-4 border-b border-black/10 dark:border-white/10 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className={cn(
+                          "h-2 w-2 rounded-full",
+                          codingToolAvailability.opencode.available 
+                            ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" 
+                            : "bg-amber-500"
+                        )} />
+                        <span className="text-xs font-semibold text-foreground uppercase tracking-wider">OpenCode Hub</span>
                       </div>
-                      <p className="leading-relaxed text-muted-foreground">
-                        To enable session automation, repository worktrees, and full diagnostic tracing, make sure the OpenCode CLI is installed and running.
-                      </p>
                       
-                      <div className="space-y-1.5">
-                        <span className="font-medium text-amber-950 dark:text-amber-200">Installation Command:</span>
-                        <div className="relative group/copy">
-                          <pre className="rounded bg-white/70 dark:bg-[#111]/70 border border-amber-200/50 dark:border-amber-950/50 p-2 font-mono text-[9.5px] overflow-x-auto text-amber-950 dark:text-amber-200 leading-normal select-all">
-                            curl -fsSL https://opencode.ai/install.sh | sh
-                          </pre>
-                          <button
-                            onClick={() => void copyCommandToClipboard("curl -fsSL https://opencode.ai/install.sh | sh")}
-                            className="absolute right-2 top-2 p-1 rounded bg-amber-200/60 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 opacity-80 hover:opacity-100 transition-opacity"
-                            title="Copy command"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </button>
+                      {/* Refresh Button */}
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          void refreshSessions();
+                          toast({ title: "Refreshing sessions...", description: "Querying active OpenCode daemon." });
+                        }}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                      {/* OpenCode Diagnostic / Installer Card */}
+                      {!codingToolAvailability.opencode.available && (
+                        <div className="rounded-lg border border-amber-200/60 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 p-3 text-[11px] text-amber-900 dark:text-amber-300 space-y-3 shadow-xs">
+                          <div className="flex items-center gap-1.5 font-semibold text-[12px]">
+                            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                            <span>OpenCode CLI Offline</span>
+                          </div>
+                          <p className="leading-relaxed text-muted-foreground">
+                            To enable session automation, repository worktrees, and full diagnostic tracing, make sure the OpenCode CLI is installed and running.
+                          </p>
+                          
+                          <div className="space-y-1.5">
+                            <span className="font-medium text-amber-950 dark:text-amber-200">Installation Command:</span>
+                            <div className="relative group/copy">
+                              <pre className="rounded bg-white/70 dark:bg-[#111]/70 border border-amber-200/50 dark:border-amber-950/50 p-2 font-mono text-[9.5px] overflow-x-auto text-amber-950 dark:text-amber-200 leading-normal select-all">
+                                curl -fsSL https://opencode.ai/install.sh | sh
+                              </pre>
+                              <button
+                                onClick={() => void copyCommandToClipboard("curl -fsSL https://opencode.ai/install.sh | sh")}
+                                className="absolute right-2 top-2 p-1 rounded bg-amber-200/60 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 opacity-80 hover:opacity-100 transition-opacity"
+                                title="Copy command"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
+                      )}
+
+                      {/* Sessions Inventory */}
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
+                          Active Sessions
+                        </span>
+                        
+                        {/* Shared Terminal Workspace Link */}
+                        <button
+                          onClick={() => handleSessionChange(GLOBAL_TERMINAL_WORKSPACE_SCOPE)}
+                          className={cn(
+                            "w-full text-left p-2.5 rounded-lg border text-xs flex items-center justify-between transition-all duration-150",
+                            selectedSession === null
+                              ? "bg-primary/5 border-primary/20 dark:bg-primary/10 dark:border-primary/30 text-primary font-medium shadow-xs"
+                              : "bg-white/50 dark:bg-[#202022]/40 border-black/5 dark:border-white/5 text-foreground hover:bg-secondary/80"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <TerminalSquare className="h-3.5 w-3.5 shrink-0" />
+                            <span>Shared terminals workspace</span>
+                          </div>
+                        </button>
+
+                        {/* Active Sessions List */}
+                        {activeSessions.length === 0 ? (
+                          <div className="py-6 text-center text-muted-foreground text-[11px] bg-secondary/20 dark:bg-secondary/5 rounded-lg border border-dashed border-border/40">
+                            No active OpenCode sessions. Use the launcher grid to start one.
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {activeSessions.map((session) => {
+                              const isSelected = selectedSession?.id === session.id;
+                              const isEditing = editingSessionId === session.id;
+
+                              return (
+                                <div
+                                  key={session.id}
+                                  className={cn(
+                                    "group relative w-full p-2.5 rounded-lg border text-xs flex flex-col transition-all duration-150",
+                                    isSelected
+                                      ? "bg-primary/5 border-primary/20 dark:bg-primary/10 dark:border-primary/30 text-foreground font-medium shadow-xs"
+                                      : "bg-white/50 dark:bg-[#202022]/40 border-black/5 dark:border-white/5 text-foreground/90 hover:bg-secondary/80 hover:border-black/10 dark:hover:border-white/10"
+                                  )}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                      <div className={cn(
+                                        "h-1.5 w-1.5 rounded-full shrink-0 mt-1.5",
+                                        isSessionRunningInAnyPane(session.id)
+                                          ? "bg-emerald-500 animate-pulse"
+                                          : "bg-muted-foreground/45"
+                                      )} />
+                                      
+                                      {isEditing ? (
+                                        <div className="flex items-center gap-1 w-full" onClick={(e) => e.stopPropagation()}>
+                                          <input
+                                            type="text"
+                                            value={editingSessionTitle}
+                                            onChange={(e) => setEditingSessionTitle(e.target.value)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") void handleRename(session.id);
+                                              else if (e.key === "Escape") setEditingSessionId(null);
+                                            }}
+                                            className="h-6 w-full text-xs bg-white dark:bg-background border border-primary/30 rounded px-1.5 focus:outline-none"
+                                            autoFocus
+                                          />
+                                          <button 
+                                            onClick={() => void handleRename(session.id)}
+                                            className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 rounded"
+                                          >
+                                            <Check className="h-3.5 w-3.5" />
+                                          </button>
+                                          <button 
+                                            onClick={() => setEditingSessionId(null)}
+                                            className="p-1 text-destructive hover:bg-destructive/5 rounded"
+                                          >
+                                            <X className="h-3.5 w-3.5" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleSessionChange(session.id)}
+                                          className="font-medium text-left truncate hover:text-primary transition-colors flex-1"
+                                        >
+                                          {session.title}
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {!isEditing && (
+                                      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0">
+                                        <button
+                                          onClick={() => {
+                                            setEditingSessionId(session.id);
+                                            setEditingSessionTitle(session.title);
+                                          }}
+                                          className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-secondary"
+                                          title="Rename Session"
+                                        >
+                                          <Edit2 className="h-3 w-3" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleRelaunch(session)}
+                                          className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-secondary"
+                                          title="Focus Shell"
+                                        >
+                                          <Play className="h-3 w-3" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleArchiveSession(session.id)}
+                                          className="p-1 text-muted-foreground hover:text-destructive rounded hover:bg-secondary"
+                                          title="Archive Session"
+                                        >
+                                          <Archive className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-1 pl-3.5 flex flex-col gap-0.5 text-[10px] text-muted-foreground">
+                                    <span className="truncate">Path: {session.projectPath ?? "Global"}</span>
+                                    {session.resolvedProjectName && (
+                                      <span className="inline-flex items-center gap-1 mt-0.5">
+                                        <FolderGit2 className="h-2.5 w-2.5 shrink-0" />
+                                        <span>{session.resolvedProjectName}</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  )}
-
-                  {/* Sessions Inventory */}
-                  <div className="space-y-2">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                      Active Sessions
-                    </span>
-                    
-                    {/* Shared Terminal Workspace Link */}
-                    <button
-                      onClick={() => handleSessionChange(GLOBAL_TERMINAL_WORKSPACE_SCOPE)}
-                      className={cn(
-                        "w-full text-left p-2.5 rounded-lg border text-xs flex items-center justify-between transition-all duration-150",
-                        selectedSession === null
-                          ? "bg-primary/5 border-primary/20 dark:bg-primary/10 dark:border-primary/30 text-primary font-medium shadow-xs"
-                          : "bg-white/50 dark:bg-[#202022]/40 border-black/5 dark:border-white/5 text-foreground hover:bg-secondary/80"
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <TerminalSquare className="h-3.5 w-3.5 shrink-0" />
-                        <span>Shared terminals workspace</span>
+                  </>
+                ) : (
+                  <div className="flex flex-col h-full items-center py-4 justify-between">
+                    {/* Top: Status & Shared Workspace */}
+                    <div className="flex flex-col items-center gap-3 w-full">
+                      {/* Pulse Status Dot */}
+                      <div 
+                        className={cn(
+                          "h-6 w-6 rounded-full flex items-center justify-center bg-secondary/50 border border-black/5 dark:border-white/5 cursor-help",
+                          codingToolAvailability.opencode.available ? "text-emerald-500" : "text-amber-500"
+                        )}
+                        title={codingToolAvailability.opencode.available ? "OpenCode Hub: Online" : "OpenCode Hub: Offline"}
+                      >
+                        <div className={cn(
+                          "h-2 w-2 rounded-full",
+                          codingToolAvailability.opencode.available 
+                            ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" 
+                            : "bg-amber-500"
+                        )} />
                       </div>
-                    </button>
 
-                    {/* Active Sessions List */}
-                    {activeSessions.length === 0 ? (
-                      <div className="py-6 text-center text-muted-foreground text-[11px] bg-secondary/20 dark:bg-secondary/5 rounded-lg border border-dashed border-border/40">
-                        No active OpenCode sessions. Use the launcher grid to start one.
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {activeSessions.map((session) => {
-                          const isSelected = selectedSession?.id === session.id;
-                          const isEditing = editingSessionId === session.id;
+                      <div className="w-8 border-b border-black/5 dark:border-white/5" />
 
-                          return (
-                            <div
-                              key={session.id}
-                              className={cn(
-                                "group relative w-full p-2.5 rounded-lg border text-xs flex flex-col transition-all duration-150",
-                                isSelected
-                                  ? "bg-primary/5 border-primary/20 dark:bg-primary/10 dark:border-primary/30 text-foreground font-medium shadow-xs"
-                                  : "bg-white/50 dark:bg-[#202022]/40 border-black/5 dark:border-white/5 text-foreground/90 hover:bg-secondary/80 hover:border-black/10 dark:hover:border-white/10"
-                              )}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                  <div className={cn(
-                                    "h-1.5 w-1.5 rounded-full shrink-0 mt-1.5",
-                                    isSessionRunningInAnyPane(session.id)
-                                      ? "bg-emerald-500 animate-pulse"
-                                      : "bg-muted-foreground/45"
-                                  )} />
-                                  
-                                  {isEditing ? (
-                                    <div className="flex items-center gap-1 w-full" onClick={(e) => e.stopPropagation()}>
-                                      <input
-                                        type="text"
-                                        value={editingSessionTitle}
-                                        onChange={(e) => setEditingSessionTitle(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") void handleRename(session.id);
-                                          else if (e.key === "Escape") setEditingSessionId(null);
-                                        }}
-                                        className="h-6 w-full text-xs bg-white dark:bg-background border border-primary/30 rounded px-1.5 focus:outline-none"
-                                        autoFocus
-                                      />
-                                      <button 
-                                        onClick={() => void handleRename(session.id)}
-                                        className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 rounded"
-                                      >
-                                        <Check className="h-3.5 w-3.5" />
-                                      </button>
-                                      <button 
-                                        onClick={() => setEditingSessionId(null)}
-                                        className="p-1 text-destructive hover:bg-destructive/5 rounded"
-                                      >
-                                        <X className="h-3.5 w-3.5" />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleSessionChange(session.id)}
-                                      className="font-medium text-left truncate hover:text-primary transition-colors flex-1"
-                                    >
-                                      {session.title}
-                                    </button>
-                                  )}
-                                </div>
+                      {/* Shared Terminal Workspace Shortcut */}
+                      <button
+                        onClick={() => handleSessionChange(GLOBAL_TERMINAL_WORKSPACE_SCOPE)}
+                        className={cn(
+                          "h-8 w-8 rounded-lg border flex items-center justify-center transition-all duration-150",
+                          selectedSession === null
+                            ? "bg-primary/10 border-primary/20 dark:bg-primary/20 dark:border-primary/40 text-primary"
+                            : "bg-transparent border-transparent text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+                        )}
+                        title="Shared terminals workspace"
+                      >
+                        <TerminalSquare className="h-4 w-4" />
+                      </button>
+                    </div>
 
-                                {!isEditing && (
-                                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0">
-                                    <button
-                                      onClick={() => {
-                                        setEditingSessionId(session.id);
-                                        setEditingSessionTitle(session.title);
-                                      }}
-                                      className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-secondary"
-                                      title="Rename Session"
-                                    >
-                                      <Edit2 className="h-3 w-3" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleRelaunch(session)}
-                                      className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-secondary"
-                                      title="Focus Shell"
-                                    >
-                                      <Play className="h-3 w-3" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleArchiveSession(session.id)}
-                                      className="p-1 text-muted-foreground hover:text-destructive rounded hover:bg-secondary"
-                                      title="Archive Session"
-                                    >
-                                      <Archive className="h-3 w-3" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
+                    {/* Middle: Sessions List */}
+                    <div className="flex-1 w-full my-4 overflow-y-auto py-2 flex flex-col items-center gap-2">
+                      {activeSessions.map((session) => {
+                        const isSelected = selectedSession?.id === session.id;
+                        const isRunning = isSessionRunningInAnyPane(session.id);
+                        const initials = session.title.substring(0, 2).toUpperCase();
 
-                              <div className="mt-1 pl-3.5 flex flex-col gap-0.5 text-[10px] text-muted-foreground">
-                                <span className="truncate">Path: {session.projectPath ?? "Global"}</span>
-                                {session.resolvedProjectName && (
-                                  <span className="inline-flex items-center gap-1 mt-0.5">
-                                    <FolderGit2 className="h-2.5 w-2.5 shrink-0" />
-                                    <span>{session.resolvedProjectName}</span>
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                        return (
+                          <button
+                            key={session.id}
+                            onClick={() => handleSessionChange(session.id)}
+                            className={cn(
+                              "relative h-8 w-8 rounded-full border flex items-center justify-center text-[9px] font-extrabold transition-all duration-150",
+                              isSelected
+                                ? "bg-primary/15 border-primary text-primary shadow-xs scale-105"
+                                : "bg-white/60 dark:bg-[#202022]/60 border-black/5 dark:border-white/5 text-muted-foreground hover:bg-secondary/80 hover:text-foreground hover:scale-105"
+                            )}
+                            title={`${session.title}\nPath: ${session.projectPath ?? "Global"}`}
+                          >
+                            {initials}
+                            {isRunning && (
+                              <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 border border-white dark:border-[#1a1a1c] animate-pulse" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Bottom: Refresh Trigger */}
+                    <div className="flex flex-col items-center w-full gap-2">
+                      <div className="w-8 border-b border-black/5 dark:border-white/5" />
+                      <button
+                        onClick={() => {
+                          void refreshSessions();
+                          toast({ title: "Refreshing sessions...", description: "Querying active OpenCode daemon." });
+                        }}
+                        className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-secondary/85 hover:text-foreground transition-all"
+                        title="Refresh Sessions"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
               </aside>
             )}
 
