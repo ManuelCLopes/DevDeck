@@ -39,6 +39,12 @@ export function useOpenCodeSessions() {
 
   useEffect(() => {
     void refresh();
+
+    const interval = setInterval(() => {
+      void refresh();
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, [refresh]);
 
   const mappedSessions = useMemo(() => {
