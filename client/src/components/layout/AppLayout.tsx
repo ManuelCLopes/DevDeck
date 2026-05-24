@@ -56,8 +56,6 @@ import {
   LayoutGrid,
   Plus,
   ShieldCheck,
-  PanelLeftClose,
-  PanelLeftOpen,
   ChevronLeft,
   ChevronDown,
   ChevronRight,
@@ -329,7 +327,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
   };
 
   const sidebarWidthClass = isSidebarCollapsed ? "w-[76px]" : "w-[240px]";
-  const SidebarToggleIcon = isSidebarCollapsed ? PanelLeftOpen : PanelLeftClose;
 
   return (
     <>
@@ -338,45 +335,36 @@ export default function AppLayout({ children }: AppLayoutProps) {
         
         {/* Sidebar - macOS visual style */}
         <aside
-          className={`${sidebarWidthClass} flex-shrink-0 border-r border-black/10 dark:border-border/60 bg-sidebar flex flex-col transition-[width] duration-200`}
+          className={`${sidebarWidthClass} flex-shrink-0 border-r border-black/10 dark:border-border/60 bg-sidebar flex flex-col transition-[width] duration-200 relative`}
         >
+          {/* Border Toggle Tab */}
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="no-drag absolute right-0 translate-x-1/2 top-1/2 -translate-y-1/2 z-[90] flex h-14 w-3.5 items-center justify-center rounded-r-md border border-l-0 border-black/10 dark:border-border/60 bg-white dark:bg-[#1e1e1f] text-muted-foreground/60 hover:text-foreground hover:bg-secondary transition-all shadow-sm cursor-pointer"
+            aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {isSidebarCollapsed ? (
+              <ChevronRight className="h-3 w-3" />
+            ) : (
+              <ChevronLeft className="h-3 w-3 -ml-0.5" />
+            )}
+          </button>
+
           {/* Traffic Lights & Titlebar Drag Area */}
           <div className="titlebar-drag-region relative flex h-[52px] items-start pl-[18px] pt-[16px]">
             <WindowControls />
-            {!isSidebarCollapsed ? (
-              <button
-                type="button"
-                onClick={() => setIsSidebarCollapsed(true)}
-                className="no-drag absolute right-3 top-3 rounded-md p-1 text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground"
-                aria-label="Collapse sidebar"
-                title="Collapse sidebar"
-              >
-                <SidebarToggleIcon className="h-4 w-4" />
-              </button>
-            ) : null}
           </div>
           
           <nav className="flex-1 px-3 pb-4 space-y-[2px] overflow-y-auto">
-            <div
-              className={`mb-2 mt-2 flex items-center ${
-                isSidebarCollapsed ? "justify-center px-0" : "justify-between px-2"
-              }`}
-            >
-              {!isSidebarCollapsed ? (
+            {!isSidebarCollapsed ? (
+              <div className="mb-2 mt-2 flex items-center justify-between px-2">
                 <p className="text-[11px] font-semibold text-muted-foreground/80">WORKSPACE</p>
-              ) : null}
-              {isSidebarCollapsed ? (
-                <button
-                  type="button"
-                  onClick={() => setIsSidebarCollapsed(false)}
-                  className="no-drag rounded-md p-1 text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground"
-                  aria-label="Expand sidebar"
-                  title="Expand sidebar"
-                >
-                  <SidebarToggleIcon className="h-4 w-4" />
-                </button>
-              ) : null}
-            </div>
+              </div>
+            ) : (
+              <div className="h-4" />
+            )}
             {navItems.map((item) => {
               const active = location === item.href;
               const badgeCount =
