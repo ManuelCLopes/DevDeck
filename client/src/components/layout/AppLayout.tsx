@@ -341,14 +341,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
           <button
             type="button"
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className="no-drag absolute right-0 translate-x-1/2 top-1/2 -translate-y-1/2 z-[90] flex h-14 w-3.5 items-center justify-center rounded-r-md border border-l-0 border-black/10 dark:border-border/60 bg-white dark:bg-[#1e1e1f] text-muted-foreground/60 hover:text-foreground hover:bg-secondary transition-all shadow-sm cursor-pointer"
+            className="no-drag absolute right-0 translate-x-1/2 top-[60%] -translate-y-1/2 z-[90] flex h-9 w-3 items-center justify-center rounded-r-md border border-l-0 border-black/10 dark:border-border/60 bg-white dark:bg-[#1e1e1f] text-muted-foreground/60 hover:text-foreground hover:bg-secondary transition-all shadow-sm cursor-pointer"
             aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {isSidebarCollapsed ? (
-              <ChevronRight className="h-3 w-3" />
+              <ChevronRight className="h-2.5 w-2.5" />
             ) : (
-              <ChevronLeft className="h-3 w-3 -ml-0.5" />
+              <ChevronLeft className="h-2.5 w-2.5 -ml-0.5" />
             )}
           </button>
 
