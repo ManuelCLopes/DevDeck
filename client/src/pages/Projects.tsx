@@ -41,6 +41,9 @@ const PullRequestDetailDialog = lazy(
   () => import("@/components/pull-requests/PullRequestDetailDialog"),
 );
 
+import GitGraphCanvas from "@/components/projects/GitGraphCanvas";
+import MergeConflictCanvas from "@/components/projects/MergeConflictCanvas";
+
 export default function Projects() {
   const [location, setLocation] = useLocation();
   const [showDependabotPullRequests, setShowDependabotPullRequests] =
@@ -58,6 +61,7 @@ export default function Projects() {
     null,
   );
   const [isWorktreeManagerOpen, setIsWorktreeManagerOpen] = useState(false);
+  const [activeProjectTab, setActiveProjectTab] = useState<"list" | "graph" | "conflicts">("list");
 
   useEffect(() => {
     const hash = window.location.hash;
@@ -153,6 +157,7 @@ export default function Projects() {
   const closeSelectedProject = () => {
     setSelectedProjectId(null);
     setSelectedPullRequestId(null);
+    setActiveProjectTab("list");
   };
 
 
@@ -183,70 +188,127 @@ export default function Projects() {
 
         <div className="flex min-h-0 flex-1 flex-col gap-6 xl:flex-row">
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-white/60 backdrop-blur-md shadow-sm">
-            <div className="flex-1 overflow-auto">
-              <div className="min-w-[720px]">
-                <div className="grid grid-cols-12 gap-4 border-b border-border/40 bg-secondary/30 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-md">
-                  <div className="col-span-5">Repository</div>
-                  <div className="col-span-2">Language</div>
-                  <div className="col-span-2">Attention</div>
-                  <div className="col-span-3 text-right">Last Updated</div>
-                </div>
-
-                <div className="flex flex-col">
-                  {projectsPagination.paginatedItems.map((project) => (
-                    (() => {
-                      const attentionMeta = getProjectAttentionMeta(project);
-
-                      return (
-                        <div
-                          key={project.id}
-                          onClick={() => setSelectedProjectId(project.id)}
-                          className={`grid grid-cols-12 gap-4 px-5 py-3 border-b border-border/40 last:border-0 cursor-pointer transition-colors items-center ${selectedProject?.id === project.id ? "bg-primary/[0.04]" : "hover:bg-black/[0.02]"}`}
-                        >
-                          <div className="col-span-5 flex min-w-0 flex-col pr-4">
-                            <span className="font-semibold text-[13px] text-foreground truncate">{project.name}</span>
-                            <span className="text-[10px] text-muted-foreground truncate font-mono mt-0.5 flex items-center gap-1">
-                              <HardDrive className="w-2.5 h-2.5 flex-shrink-0" />
-                              {project.localPath}
-                            </span>
-                          </div>
-
-                          <div className="col-span-2 text-[12px] text-muted-foreground">
-                            {project.language}
-                          </div>
-
-                          <div className="col-span-2">
-                            <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-sm border ${attentionMeta.className}`}>
-                              <span>{attentionMeta.label}</span>
-                            </span>
-                          </div>
-
-                          <div className="col-span-3 flex items-center justify-end gap-3 text-right text-[11px] text-muted-foreground">
-                            <span className="whitespace-nowrap">
-                              {formatDistanceToNow(new Date(project.lastUpdated), { addSuffix: true })}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })()
-                  ))}
-                  {filteredProjects.length === 0 && (
-                    <div className="p-8 text-center text-muted-foreground text-sm">
-                      {isLoading ? "Scanning your workspace..." : `No repositories found matching "${searchQuery}"`}
-                    </div>
-                  )}
+            {selectedProject && (
+              <div className="flex items-center justify-between px-5 py-3 border-b border-border/40 bg-secondary/15 shrink-0">
+                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Workspace Canvas ({selectedProject.name})
+                </span>
+                <div className="flex bg-neutral-200/50 dark:bg-neutral-800/50 p-0.5 rounded-lg border border-border">
+                  <button
+                    onClick={() => setActiveProjectTab("list")}
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${
+                      activeProjectTab === "list"
+                        ? "bg-white dark:bg-[#1a1a1c] text-primary shadow-xs font-extrabold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Monitored List
+                  </button>
+                  <button
+                    onClick={() => setActiveProjectTab("graph")}
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${
+                      activeProjectTab === "graph"
+                        ? "bg-white dark:bg-[#1a1a1c] text-primary shadow-xs font-extrabold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Branch Graph
+                  </button>
+                  <button
+                    onClick={() => setActiveProjectTab("conflicts")}
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-all ${
+                      activeProjectTab === "conflicts"
+                        ? "bg-white dark:bg-[#1a1a1c] text-primary shadow-xs font-extrabold"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Merge Conflicts
+                  </button>
                 </div>
               </div>
-            </div>
-            <div className="border-t border-border/40 px-5 py-3">
-              <PaginationControls
-                currentPage={projectsPagination.currentPage}
-                onPageChange={projectsPagination.setCurrentPage}
-                pageSize={projectsPagination.pageSize}
-                totalItems={projectsPagination.totalItems}
-                label="projects"
-              />
-            </div>
+            )}
+
+            {activeProjectTab === "list" ? (
+              <>
+                <div className="flex-1 overflow-auto">
+                  <div className="min-w-[720px]">
+                    <div className="grid grid-cols-12 gap-4 border-b border-border/40 bg-secondary/30 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-md">
+                      <div className="col-span-5">Repository</div>
+                      <div className="col-span-2">Language</div>
+                      <div className="col-span-2">Attention</div>
+                      <div className="col-span-3 text-right">Last Updated</div>
+                    </div>
+
+                    <div className="flex flex-col">
+                      {projectsPagination.paginatedItems.map((project) => (
+                        (() => {
+                          const attentionMeta = getProjectAttentionMeta(project);
+
+                          return (
+                            <div
+                              key={project.id}
+                              onClick={() => setSelectedProjectId(project.id)}
+                              className={`grid grid-cols-12 gap-4 px-5 py-3 border-b border-border/40 last:border-0 cursor-pointer transition-colors items-center ${selectedProject?.id === project.id ? "bg-primary/[0.04]" : "hover:bg-black/[0.02]"}`}
+                            >
+                              <div className="col-span-5 flex min-w-0 flex-col pr-4">
+                                <span className="font-semibold text-[13px] text-foreground truncate">{project.name}</span>
+                                <span className="text-[10px] text-muted-foreground truncate font-mono mt-0.5 flex items-center gap-1">
+                                  <HardDrive className="w-2.5 h-2.5 flex-shrink-0" />
+                                  {project.localPath}
+                                </span>
+                              </div>
+
+                              <div className="col-span-2 text-[12px] text-muted-foreground">
+                                {project.language}
+                              </div>
+
+                              <div className="col-span-2">
+                                <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-sm border ${attentionMeta.className}`}>
+                                  <span>{attentionMeta.label}</span>
+                                </span>
+                              </div>
+
+                              <div className="col-span-3 flex items-center justify-end gap-3 text-right text-[11px] text-muted-foreground">
+                                <span className="whitespace-nowrap">
+                                  {formatDistanceToNow(new Date(project.lastUpdated), { addSuffix: true })}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })()
+                      ))}
+                      {filteredProjects.length === 0 && (
+                        <div className="p-8 text-center text-muted-foreground text-sm">
+                          {isLoading ? "Scanning your workspace..." : `No repositories found matching "${searchQuery}"`}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="border-t border-border/40 px-5 py-3 shrink-0">
+                  <PaginationControls
+                    currentPage={projectsPagination.currentPage}
+                    onPageChange={projectsPagination.setCurrentPage}
+                    pageSize={projectsPagination.pageSize}
+                    totalItems={projectsPagination.totalItems}
+                    label="projects"
+                  />
+                </div>
+              </>
+            ) : activeProjectTab === "graph" ? (
+              <div className="flex-1 min-h-0 p-5">
+                <GitGraphCanvas repositoryPath={selectedProject!.localPath} />
+              </div>
+            ) : (
+              <div className="flex-1 min-h-0 p-5">
+                <MergeConflictCanvas
+                  repositoryPath={selectedProject!.localPath}
+                  onResolved={() => {
+                    // Refresh snapshots
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           {selectedProject ? (

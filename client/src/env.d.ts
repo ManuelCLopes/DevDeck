@@ -118,6 +118,37 @@ interface DevDeckDesktopApi {
       anthropicKey?: string;
     };
   }): Promise<string>;
+  getGitGraph(payload: {
+    repositoryPath: string;
+    limit?: number;
+  }): Promise<Array<{
+    hash: string;
+    parents: string[];
+    refs: string[];
+    authorName: string;
+    authorEmail: string;
+    timestamp: number;
+    subject: string;
+  }>>;
+  getMergeConflicts(payload: {
+    repositoryPath: string;
+  }): Promise<Array<{
+    filePath: string;
+    fileName: string;
+    conflicts: Array<{
+      id: string;
+      ourContent: string;
+      theirContent: string;
+      ourBranch: string;
+      theirBranch: string;
+    }>;
+    rawContent: string;
+  }>>;
+  resolveMergeConflict(payload: {
+    repositoryPath: string;
+    filePath: string;
+    selections: Record<string, "our" | "their" | "both" | "none">;
+  }): Promise<void>;
   showItemInFinder(targetPath: string): Promise<void>;
   showNotification(payload: { body?: string; title: string }): Promise<void>;
   startGitHubDeviceAuth(): Promise<{

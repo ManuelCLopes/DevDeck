@@ -208,6 +208,24 @@ const devdeck = {
   }): Promise<string> {
     return ipcRenderer.invoke("devdeck:generate-ai-completion", payload);
   },
+  getGitGraph(payload: {
+    repositoryPath: string;
+    limit?: number;
+  }) {
+    return ipcRenderer.invoke("devdeck:get-git-graph", payload);
+  },
+  getMergeConflicts(payload: {
+    repositoryPath: string;
+  }) {
+    return ipcRenderer.invoke("devdeck:get-merge-conflicts", payload);
+  },
+  resolveMergeConflict(payload: {
+    repositoryPath: string;
+    filePath: string;
+    selections: Record<string, "our" | "their" | "both" | "none">;
+  }) {
+    return ipcRenderer.invoke("devdeck:resolve-merge-conflict", payload);
+  },
   terminal: {
     available(): Promise<PtyAvailability> {
       return ipcRenderer.invoke("devdeck:pty:available");

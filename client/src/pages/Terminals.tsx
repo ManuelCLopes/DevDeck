@@ -635,13 +635,13 @@ export default function Terminals() {
                 variant="outline"
                 size="icon"
                 className={cn(
-                  "h-9 w-9 transition-all hover:scale-105",
+                  "h-9 w-9",
                   snippetsOpen && "border-primary text-primary bg-primary/5 dark:bg-primary/[0.03]"
                 )}
                 onClick={() => setSnippetsOpen(true)}
                 title="Open Snippets Shelf"
               >
-                <Sparkles className="h-4 w-4" />
+                <Sparkles className="h-3.5 w-3.5" />
               </Button>
               <Button
                 type="button"
@@ -652,7 +652,7 @@ export default function Terminals() {
                 aria-label="Enter terminal focus mode"
                 title="Enter focus mode"
               >
-                <Maximize2 className="h-4 w-4" />
+                <Maximize2 className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
@@ -1793,8 +1793,8 @@ function TerminalPersonalization(props: TerminalPersonalizationProps) {
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          size="sm"
-          className={iconOnly ? "h-9 w-9 px-0" : "gap-2 text-[12px]"}
+          size={iconOnly ? "icon" : "sm"}
+          className={iconOnly ? "h-9 w-9" : "gap-2 text-[12px]"}
           aria-label="Personalize terminals"
           title="Personalize terminals"
         >

@@ -64,6 +64,8 @@ import {
 import { registerPtyIpc } from "./pty";
 import { generateAICompletion, getPullRequestDiff } from "./ai-service";
 import { initializeMenubar, destroyMenubarTray, updateMenubarTray } from "./menubar";
+import { getGitCommitGraph } from "./git-graph";
+import { getConflictedFiles, resolveFileConflict } from "./git-conflict";
 
 const execFileAsync = promisify(execFile);
 const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
@@ -857,6 +859,49 @@ ipcMain.handle(
     payload: import("./ai-service").AICompletionRequest,
   ) => {
     return generateAICompletion(payload);
+  },
+);
+
+ipcMain.handle(
+  "devdeck:get-git-graph",
+  async (
+    _event,
+    payload: {
+      repositoryPath: string;
+      limit?: number;
+    },
+  ) => {
+    return getGitCommitGraph(payload.repositoryPath, payload.limit);
+  },
+);
+
+ipcMain.handle(
+  "devdeck:get-merge-conflicts",
+  async (
+    _event,
+    payload: {
+      repositoryPath: string;
+    },
+  ) => {
+    return getConflictedFiles(payload.repositoryPath);
+  },
+);
+
+ipcMain.handle(
+  "devdeck:resolve-merge-conflict",
+  async (
+    _event,
+    payload: {
+      repositoryPath: string;
+      filePath: string;
+      selections: Record<string, "our" | "their" | "both" | "none">;
+    },
+  ) => {
+    return resolveFileConflict(
+      payload.repositoryPath,
+      payload.filePath,
+      payload.selections,
+    );
   },
 );
 
