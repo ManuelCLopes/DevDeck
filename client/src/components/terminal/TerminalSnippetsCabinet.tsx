@@ -556,7 +556,7 @@ export default function TerminalSnippetsCabinet({
                       <div
                         key={snippet.id}
                         onClick={() => setSelectedSnippetId(isSelected ? null : snippet.id)}
-                        className={`group border rounded-xl p-3.5 transition-all cursor-pointer flex flex-col text-left ${
+                        className={`group border rounded-xl p-3.5 transition-all cursor-pointer flex flex-col text-left min-w-0 overflow-hidden ${
                           isSelected
                             ? "border-primary bg-primary/5 dark:bg-primary/[0.03] shadow-xs"
                             : "border-black/5 dark:border-white/5 bg-white/70 dark:bg-[#1b1b1e]/70 hover:border-black/15 dark:hover:border-white/15 hover:bg-neutral-50/50 dark:hover:bg-neutral-900/40"
@@ -633,7 +633,7 @@ export default function TerminalSnippetsCabinet({
 
                         {/* Static Single line preview when collapsed */}
                         {!isSelected && (
-                          <div className="mt-2 text-[10px] font-mono bg-neutral-50 dark:bg-neutral-900/60 p-2 rounded-lg border border-black/[0.03] dark:border-white/[0.03] text-muted-foreground truncate max-w-full">
+                          <div className="mt-2 text-[10px] font-mono bg-neutral-50 dark:bg-neutral-900/60 p-2 rounded-lg border border-black/[0.03] dark:border-white/[0.03] text-muted-foreground whitespace-pre-wrap break-all">
                             {snippet.command}
                           </div>
                         )}

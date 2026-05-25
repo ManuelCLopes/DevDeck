@@ -635,7 +635,7 @@ export default function Terminals() {
                 variant="outline"
                 size="icon"
                 className={cn(
-                  "h-9 w-9 border-black/10 dark:border-white/10 text-muted-foreground hover:text-foreground transition-all hover:scale-105",
+                  "h-9 w-9 text-muted-foreground hover:text-foreground transition-all hover:scale-105",
                   snippetsOpen && "border-primary text-primary bg-primary/5 dark:bg-primary/[0.03]"
                 )}
                 onClick={() => setSnippetsOpen(true)}
