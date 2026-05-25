@@ -103,6 +103,21 @@ interface DevDeckDesktopApi {
     title: string,
   ): Promise<OpenCodeSessionRecord>;
   setLaunchAtLogin(enabled: boolean): Promise<void>;
+  getPullRequestDiff(payload: {
+    repositorySlug: string;
+    pullRequestNumber: number;
+  }): Promise<string>;
+  generateAICompletion(payload: {
+    diff: string;
+    action: "changelog" | "security" | "draft-response";
+    config: {
+      provider: "ollama" | "gemini" | "anthropic";
+      ollamaHost?: string;
+      ollamaModel?: string;
+      geminiKey?: string;
+      anthropicKey?: string;
+    };
+  }): Promise<string>;
   showItemInFinder(targetPath: string): Promise<void>;
   showNotification(payload: { body?: string; title: string }): Promise<void>;
   startGitHubDeviceAuth(): Promise<{

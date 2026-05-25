@@ -189,6 +189,25 @@ const devdeck = {
   setLaunchAtLogin(enabled: boolean): Promise<void> {
     return ipcRenderer.invoke("devdeck:set-launch-at-login", enabled);
   },
+  getPullRequestDiff(payload: {
+    repositorySlug: string;
+    pullRequestNumber: number;
+  }): Promise<string> {
+    return ipcRenderer.invoke("devdeck:get-pull-request-diff", payload);
+  },
+  generateAICompletion(payload: {
+    diff: string;
+    action: "changelog" | "security" | "draft-response";
+    config: {
+      provider: "ollama" | "gemini" | "anthropic";
+      ollamaHost?: string;
+      ollamaModel?: string;
+      geminiKey?: string;
+      anthropicKey?: string;
+    };
+  }): Promise<string> {
+    return ipcRenderer.invoke("devdeck:generate-ai-completion", payload);
+  },
   terminal: {
     available(): Promise<PtyAvailability> {
       return ipcRenderer.invoke("devdeck:pty:available");

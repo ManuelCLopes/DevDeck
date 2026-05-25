@@ -62,6 +62,7 @@ import {
   renameOpenCodeSession,
 } from "./opencode-sessions";
 import { registerPtyIpc } from "./pty";
+import { generateAICompletion, getPullRequestDiff } from "./ai-service";
 
 const execFileAsync = promisify(execFile);
 const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
@@ -920,6 +921,29 @@ ipcMain.handle(
     },
   ) => {
     applyWorkspaceMonitorState(state);
+  },
+);
+
+ipcMain.handle(
+  "devdeck:get-pull-request-diff",
+  async (
+    _event,
+    payload: {
+      repositorySlug: string;
+      pullRequestNumber: number;
+    },
+  ) => {
+    return getPullRequestDiff(payload);
+  },
+);
+
+ipcMain.handle(
+  "devdeck:generate-ai-completion",
+  async (
+    _event,
+    payload: import("./ai-service").AICompletionRequest,
+  ) => {
+    return generateAICompletion(payload);
   },
 );
 

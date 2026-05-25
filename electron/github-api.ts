@@ -609,3 +609,87 @@ export async function requestGitHubPullRequestReviewers(
     },
   );
 }
+
+async function githubApiRequestText(
+  pathname: string,
+  token: string | null,
+  options?: GitHubApiRequestOptions,
+): Promise<string> {
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(
+    () => abortController.abort(),
+    options?.timeoutMs ?? 8000,
+  );
+
+  try {
+    const requestUrl = `${GITHUB_API_BASE_URL}${pathname}`;
+    const method = options?.method ?? "GET";
+    const createHeaders = (includeAuthorization: boolean) => ({
+      Accept: options?.overrideAccept ?? "application/vnd.github+json",
+      ...(includeAuthorization && token
+        ? { Authorization: `Bearer ${token}` }
+        : {}),
+      ...(options?.body ? { "Content-Type": "application/json" } : {}),
+      "X-GitHub-Api-Version": GITHUB_API_VERSION,
+    });
+    const request = (includeAuthorization: boolean) =>
+      fetch(requestUrl, {
+        body: options?.body,
+        headers: createHeaders(includeAuthorization),
+        method,
+        signal: abortController.signal,
+      });
+    let response = await request(true);
+
+    if (
+      !response.ok &&
+      options?.allowPublicFallback &&
+      token &&
+      method === "GET" &&
+      (response.status === 403 || response.status === 404)
+    ) {
+      response = await request(false);
+    }
+
+    if (!response.ok) {
+      const errorText = (await response.text()).trim();
+      throw new GitHubApiError(
+        errorText || `GitHub API request failed with status ${response.status}.`,
+        response.status,
+      );
+    }
+
+    return await response.text();
+  } catch (error) {
+    if (error instanceof GitHubApiError || error instanceof GitHubConnectivityError) {
+      throw error;
+    }
+
+    if (abortController.signal.aborted || isConnectivityFailure(error)) {
+      throw new GitHubConnectivityError(
+        "GitHub could not be reached. Check your connection and retry.",
+        { cause: error },
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function fetchGitHubPullRequestDiff(
+  repositorySlug: string,
+  pullRequestNumber: number,
+  token: string | null,
+): Promise<string> {
+  return githubApiRequestText(
+    `/repos/${repositorySlug}/pulls/${pullRequestNumber}`,
+    token,
+    {
+      overrideAccept: "application/vnd.github.v3.diff",
+      allowPublicFallback: true,
+    },
+  );
+}
+

@@ -8,9 +8,11 @@ import {
   MessageSquare,
   User2,
   Users,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PullRequestQueueControl from "@/components/pull-requests/PullRequestQueueControl";
+import AICopilotDrawer from "@/components/pull-requests/AICopilotDrawer";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -48,6 +50,7 @@ export default function PullRequestDetailDialog({
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isSubmittingReviewers, setIsSubmittingReviewers] = useState(false);
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
   const ciStatusMeta = pullRequest
     ? getPullRequestCiStatusMeta(pullRequest.ciStatus)
     : null;
@@ -225,6 +228,15 @@ export default function PullRequestDetailDialog({
                     }
                     status={queueStatus}
                   />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setAiDrawerOpen(true)}
+                    className="h-9 gap-1.5 border-primary/20 hover:border-primary/40 text-primary bg-primary/5 hover:bg-primary/10 transition-all font-semibold"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 fill-current" />
+                    AI Review
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
@@ -493,6 +505,12 @@ export default function PullRequestDetailDialog({
               </div>
             )}
             </div>
+
+            <AICopilotDrawer
+              open={aiDrawerOpen}
+              onOpenChange={setAiDrawerOpen}
+              pullRequest={pullRequest}
+            />
           </div>
         )}
       </DialogContent>
