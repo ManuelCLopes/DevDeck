@@ -30,6 +30,9 @@ interface Entry {
   pty: IPty;
   webContentsId: number;
   label: string;
+  command: string;
+  args: string[];
+  cwd: string;
 }
 
 const entries = new Map<string, Entry>();
@@ -316,6 +319,9 @@ function spawnPty(sender: WebContents, request: SpawnPtyRequest): SpawnPtyResult
     pty,
     webContentsId: sender.id,
     label: resolveLabel(request.label, shell),
+    command: shell,
+    args,
+    cwd,
   };
 
   entries.set(id, entry);
@@ -441,4 +447,15 @@ export function registerPtyIpc() {
   app.on("before-quit", () => {
     disposeAll();
   });
+}
+
+export function getActivePtySessions() {
+  return Array.from(entries.entries()).map(([id, entry]) => ({
+    id,
+    label: entry.label,
+    pid: entry.pty.pid,
+    command: entry.command,
+    args: entry.args,
+    cwd: entry.cwd,
+  }));
 }

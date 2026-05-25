@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo, useState } from "react";
+import { Suspense, lazy, useMemo, useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import AppLayout from "@/components/layout/AppLayout";
 import WorktreeManager from "@/components/projects/WorktreeManager";
@@ -42,7 +42,7 @@ const PullRequestDetailDialog = lazy(
 );
 
 export default function Projects() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [showDependabotPullRequests, setShowDependabotPullRequests] =
     usePersistentState<boolean>(SHOW_DEPENDABOT_PULL_REQUESTS_STORAGE_KEY, true);
   const [searchQuery, setSearchQuery] = usePersistentState(
@@ -58,6 +58,16 @@ export default function Projects() {
     null,
   );
   const [isWorktreeManagerOpen, setIsWorktreeManagerOpen] = useState(false);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    const searchPart = hash.includes("?") ? hash.split("?")[1] : window.location.search;
+    const params = new URLSearchParams(searchPart);
+    const projId = params.get("project") || params.get("id");
+    if (projId) {
+      setSelectedProjectId(projId);
+    }
+  }, [location, setSelectedProjectId]);
 
   const { data: snapshot, isLoading } = useWorkspaceSnapshot();
   const desktopApi = getDesktopApi();

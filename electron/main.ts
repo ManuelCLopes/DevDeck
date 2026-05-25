@@ -63,6 +63,7 @@ import {
 } from "./opencode-sessions";
 import { registerPtyIpc } from "./pty";
 import { generateAICompletion, getPullRequestDiff } from "./ai-service";
+import { initializeMenubar, destroyMenubarTray, updateMenubarTray } from "./menubar";
 
 const execFileAsync = promisify(execFile);
 const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
@@ -137,7 +138,6 @@ function buildFailedWorkspaceSnapshot(
 }
 
 let mainWindow: BrowserWindow | null = null;
-let appTray: Tray | null = null;
 let isQuitting = false;
 const workspaceMonitorState: WorkspaceMonitorState = {
   intervalId: null,
@@ -249,118 +249,31 @@ function navigateMainWindow(targetPath: string) {
   showMainWindow();
 }
 
-function buildTrayTooltip(snapshot: WorkspaceSnapshot | null) {
-  if (!snapshot) {
-    return "DevDeck";
-  }
-
-  const attention = getWorkspaceAttentionSummary(snapshot);
-  if (attention.totalAttentionCount === 0) {
-    return "DevDeck · Workspace idle";
-  }
-
-  const parts: string[] = [];
-  if (attention.needsViewerReviewCount > 0) {
-    parts.push(`${attention.needsViewerReviewCount} need review`);
-  }
-  if (attention.needsAuthorFollowUpCount > 0) {
-    parts.push(`${attention.needsAuthorFollowUpCount} need follow-up`);
-  }
-
-  return `DevDeck · ${parts.join(" · ")}`;
-}
-
 function updateTrayMenu() {
-  if (!appTray) {
-    return;
-  }
-
-  const snapshot = workspaceMonitorState.latestSnapshot;
-  const attention = snapshot ? getWorkspaceAttentionSummary(snapshot) : null;
-  const statusLabel = attention
-    ? attention.totalAttentionCount > 0
-      ? `${attention.needsViewerReviewCount} need review · ${attention.needsAuthorFollowUpCount} need follow-up`
-      : "Workspace idle"
-    : "Waiting for first workspace snapshot";
-
-  appTray.setToolTip(buildTrayTooltip(snapshot));
-  if (process.platform === "darwin") {
-    appTray.setTitle(
-      attention && attention.totalAttentionCount > 0
-        ? ` ${attention.totalAttentionCount}`
-        : "",
-    );
-  }
-
-  appTray.setContextMenu(
-    Menu.buildFromTemplate([
-      { enabled: false, label: `DevDeck · ${statusLabel}` },
-      { type: "separator" },
-      {
-        click: () => {
-          showMainWindow();
-        },
-        label: "Open DevDeck",
-      },
-      {
-        click: () => {
-          navigateMainWindow("/reviews");
-        },
-        label: "Open Pull Requests",
-      },
-      {
-        click: () => {
-          navigateMainWindow("/reviews?focus=needs_my_review");
-        },
-        label: "Open Review Queue",
-      },
-      {
-        click: () => {
-          void refreshWorkspaceSnapshot("settings");
-        },
-        label: "Refresh Now",
-      },
-      { type: "separator" },
-      {
-        click: () => {
-          isQuitting = true;
-          app.quit();
-        },
-        label: "Quit DevDeck",
-      },
-    ]),
-  );
-}
-
-function ensureTray() {
-  if (appTray || !workspaceMonitorState.preferences.showMenuBarIcon) {
-    return;
-  }
-
-  appTray = new Tray(createTrayImage());
-  appTray.on("click", () => {
-    showMainWindow();
-  });
-  updateTrayMenu();
+  updateMenubarTray();
 }
 
 function destroyTray() {
-  if (!appTray) {
-    return;
-  }
-
-  appTray.destroy();
-  appTray = null;
+  destroyMenubarTray();
 }
 
 function syncTrayPresence() {
-  if (workspaceMonitorState.preferences.showMenuBarIcon) {
-    ensureTray();
-    updateTrayMenu();
-    return;
+  const prefs = workspaceMonitorState.preferences;
+  if (prefs.showMenuBarIcon) {
+    initializeMenubar({
+      getLatestSnapshot: () => workspaceMonitorState.latestSnapshot,
+      getPreferences: () => workspaceMonitorState.preferences,
+      showMainWindow,
+      navigateMainWindow,
+      refreshWorkspace: () => refreshWorkspaceSnapshot("settings"),
+      quitApp: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    });
+  } else {
+    destroyMenubarTray();
   }
-
-  destroyTray();
 }
 
 function createMainWindow() {
