@@ -1,6 +1,7 @@
-import { Suspense, lazy, useMemo } from "react";
+import { Suspense, lazy, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import AppLayout from "@/components/layout/AppLayout";
+import WorktreeManager from "@/components/projects/WorktreeManager";
 import { PullRequestCiStatusIcon } from "@/components/pull-requests/PullRequestStatusIndicators";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
@@ -56,6 +57,7 @@ export default function Projects() {
     "devdeck:projects:selected-pr",
     null,
   );
+  const [isWorktreeManagerOpen, setIsWorktreeManagerOpen] = useState(false);
 
   const { data: snapshot, isLoading } = useWorkspaceSnapshot();
   const desktopApi = getDesktopApi();
@@ -429,6 +431,14 @@ export default function Projects() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setIsWorktreeManagerOpen(true)}
+                      className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-md hover:bg-secondary transition-colors text-foreground flex items-center gap-2"
+                    >
+                      <GitBranch className="w-3.5 h-3.5" />
+                      Manage Git Worktrees
+                    </button>
+                    <button
+                      type="button"
                       disabled={!selectedProject.remoteUrl}
                       onClick={() => void openRemote(selectedProject)}
                       className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-md hover:bg-secondary transition-colors text-foreground disabled:text-muted-foreground disabled:hover:bg-transparent"
@@ -459,6 +469,13 @@ export default function Projects() {
             />
           </Suspense>
         ) : null}
+        {selectedProject && (
+          <WorktreeManager
+            open={isWorktreeManagerOpen}
+            onOpenChange={setIsWorktreeManagerOpen}
+            project={selectedProject}
+          />
+        )}
       </>
     </AppLayout>
   );

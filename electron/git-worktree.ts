@@ -165,6 +165,64 @@ export async function removeGitWorktreeSession(
   ]);
 }
 
+export interface GitWorktreeInfo {
+  path: string;
+  sha: string;
+  branch: string | null;
+  isMain: boolean;
+}
+
+export async function listGitWorktrees(
+  repositoryPath: string,
+): Promise<GitWorktreeInfo[]> {
+  try {
+    const { stdout } = await execGit(repositoryPath, ["worktree", "list", "--porcelain"]);
+    const lines = stdout.split("\n");
+    const worktrees: GitWorktreeInfo[] = [];
+    let current: Partial<GitWorktreeInfo> = {};
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (current.path) {
+          worktrees.push({
+            path: current.path,
+            sha: current.sha ?? "",
+            branch: current.branch ?? null,
+            isMain: worktrees.length === 0,
+          });
+          current = {};
+        }
+        continue;
+      }
+
+      if (trimmed.startsWith("worktree ")) {
+        current.path = trimmed.slice("worktree ".length).trim();
+      } else if (trimmed.startsWith("commit ")) {
+        current.sha = trimmed.slice("commit ".length).trim();
+      } else if (trimmed.startsWith("branch ")) {
+        const fullBranch = trimmed.slice("branch ".length).trim();
+        current.branch = fullBranch.replace(/^refs\/heads\//, "");
+      }
+    }
+
+    if (current.path) {
+      worktrees.push({
+        path: current.path,
+        sha: current.sha ?? "",
+        branch: current.branch ?? null,
+        isMain: worktrees.length === 0,
+      });
+    }
+
+    return worktrees;
+  } catch (error) {
+    console.error("Failed to list git worktrees:", error);
+    return [];
+  }
+}
+
+
 async function getBranchSyncStatus(repositoryPath: string) {
   try {
     const stdout = await readGitOutput(repositoryPath, [

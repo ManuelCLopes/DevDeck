@@ -26,6 +26,7 @@ import {
   Copy,
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
+import TerminalSnippetsCabinet from "@/components/terminal/TerminalSnippetsCabinet";
 import OpenInCodeButton from "@/components/coding-tool/OpenInCodeButton";
 import {
   AlertDialog,
@@ -190,6 +191,8 @@ export default function Terminals() {
   const [newBranchName, setNewBranchName] = useState("");
   const [baseRef, setBaseRef] = useState("");
   const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [activePaneId, setActivePaneId] = useState<string | null>(null);
+  const [snippetsOpen, setSnippetsOpen] = useState(false);
 
   const terminalPreferences = preferences.terminal;
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
@@ -402,6 +405,11 @@ export default function Terminals() {
       }),
     [codingToolAvailability.opencode.available, defaultCwd, preferredTool, selectedSession, requestedLaunch],
   );
+
+  useEffect(() => {
+    setActivePaneId((currentId) => currentId ?? initialPanes[0]?.id ?? null);
+  }, [storageScopeKey, initialPanes]);
+
   const ptyAvailabilityPending = ptyAvailability === null;
   const ptyBlocked = Boolean(ptyAvailability && !ptyAvailability.available);
   const sanitizedPanes = useMemo(() => {
@@ -622,6 +630,19 @@ export default function Terminals() {
                   })
                 }
               />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className={cn(
+                  "h-9 w-9 border-black/10 dark:border-white/10 text-muted-foreground hover:text-foreground transition-all hover:scale-105",
+                  snippetsOpen && "border-primary text-primary bg-primary/5 dark:bg-primary/[0.03]"
+                )}
+                onClick={() => setSnippetsOpen(true)}
+                title="Open Snippets Shelf"
+              >
+                <Sparkles className="h-4 w-4" />
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -1200,6 +1221,8 @@ export default function Terminals() {
                   scopeKey={storageScopeKey}
                   isFocusMode={isFocusMode}
                   onExitFocusMode={() => setIsFocusMode(false)}
+                  activePaneId={activePaneId}
+                  setActivePaneId={setActivePaneId}
                 />
               )}
             </div>
@@ -1245,6 +1268,20 @@ export default function Terminals() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <TerminalSnippetsCabinet
+        open={snippetsOpen}
+        onOpenChange={setSnippetsOpen}
+        activePaneId={activePaneId}
+        activePaneCwd={
+          (activePaneId ? paneRuntimeStates[activePaneId]?.info?.cwd : null) ??
+          (panes.find((pane) => pane.id === activePaneId) ?? panes[0] ?? initialPanes[0])?.cwd ??
+          defaultCwd ??
+          null
+        }
+        paneRuntimeStates={paneRuntimeStates}
+        snapshot={snapshot ?? null}
+      />
     </AppLayout>
   );
 }
@@ -1289,6 +1326,8 @@ interface TerminalWorkspaceProps {
   scopeKey: string;
   isFocusMode?: boolean;
   onExitFocusMode?: () => void;
+  activePaneId: string | null;
+  setActivePaneId: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 function TerminalWorkspace({
@@ -1311,18 +1350,13 @@ function TerminalWorkspace({
   scopeKey,
   isFocusMode = false,
   onExitFocusMode,
+  activePaneId,
+  setActivePaneId,
 }: TerminalWorkspaceProps) {
   const [paneSelectionSession, setPaneSelectionSession] = useState<OpenCodeSessionView | null>(null);
   const [, setLocation] = useLocation();
   const appliedLaunchSessionIdRef = useRef<string | null>(null);
-  const [activePaneId, setActivePaneId] = useState<string | null>(
-    initialPanes[0]?.id ?? null,
-  );
   const desktopApi = getDesktopApi();
-
-  useEffect(() => {
-    setActivePaneId((currentId) => currentId ?? initialPanes[0]?.id ?? null);
-  }, [scopeKey, initialPanes]);
 
   useEffect(() => {
     if (requestedLaunch !== "opencode" || !requestedSessionId || !opencodeAvailable) {

@@ -67,6 +67,16 @@ const devdeck = {
   }): Promise<CreateGitWorktreeSessionResult> {
     return ipcRenderer.invoke("devdeck:create-git-worktree-session", payload);
   },
+  listGitWorktrees(
+    repositoryPath: string,
+  ): Promise<Array<{
+    path: string;
+    sha: string;
+    branch: string | null;
+    isMain: boolean;
+  }>> {
+    return ipcRenderer.invoke("devdeck:list-git-worktrees", repositoryPath);
+  },
   inspectDevSessions(
     payload: InspectDevSessionRequest[],
   ): Promise<DevSessionOperationalSnapshot[]> {

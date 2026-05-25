@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -7,12 +7,13 @@ import { execFileSync } from "node:child_process";
 import {
   createGitWorktreeSession,
   inspectDevSession,
+  listGitWorktrees,
   removeGitWorktreeSession,
   sanitizeWorktreeSegment,
 } from "./git-worktree";
 
 function createFixtureRepository() {
-  const rootDirectory = mkdtempSync(path.join(tmpdir(), "devdeck-worktree-"));
+  const rootDirectory = realpathSync(mkdtempSync(path.join(tmpdir(), "devdeck-worktree-")));
   const repositoryPath = path.join(rootDirectory, "repo");
 
   execFileSync("git", ["init", repositoryPath], { stdio: "ignore" });
@@ -152,6 +153,41 @@ test("inspectDevSession reports uncommitted changes", async () => {
     });
 
     assert.equal(snapshot.hasUncommittedChanges, true);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("listGitWorktrees returns active worktrees including main", async () => {
+  const fixture = createFixtureRepository();
+
+  try {
+    const listBefore = await listGitWorktrees(fixture.repositoryPath);
+    assert.equal(listBefore.length, 1);
+    assert.equal(listBefore[0]?.isMain, true);
+    assert.equal(listBefore[0]?.path, fixture.repositoryPath);
+
+    const session = await createGitWorktreeSession({
+      baseRef: "HEAD",
+      branchName: "feature/graph-check",
+      repositoryPath: fixture.repositoryPath,
+    });
+
+    const listAfter = await listGitWorktrees(fixture.repositoryPath);
+    assert.equal(listAfter.length, 2);
+    
+    const mainWt = listAfter.find(wt => wt.isMain);
+    const sessionWt = listAfter.find(wt => !wt.isMain);
+    
+    assert.ok(mainWt);
+    assert.ok(sessionWt);
+    assert.equal(sessionWt.path, session.localPath);
+    assert.equal(sessionWt.branch, session.branchName);
+    
+    await removeGitWorktreeSession({
+      repositoryPath: fixture.repositoryPath,
+      worktreePath: session.localPath,
+    });
   } finally {
     fixture.cleanup();
   }

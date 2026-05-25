@@ -48,6 +48,7 @@ import {
 import {
   createGitWorktreeSession,
   inspectDevSessions,
+  listGitWorktrees,
   removeGitWorktreeSession,
 } from "./git-worktree";
 import {
@@ -714,6 +715,13 @@ ipcMain.handle(
     },
   ) => {
     return createGitWorktreeSession(payload);
+  },
+);
+
+ipcMain.handle(
+  "devdeck:list-git-worktrees",
+  async (_event, repositoryPath: string) => {
+    return listGitWorktrees(repositoryPath);
   },
 );
 

@@ -52,6 +52,12 @@ interface DevDeckDesktopApi {
     repositoryPath: string;
     sessionPath?: string | null;
   }): Promise<CreateGitWorktreeSessionResult>;
+  listGitWorktrees(repositoryPath: string): Promise<Array<{
+    path: string;
+    sha: string;
+    branch: string | null;
+    isMain: boolean;
+  }>>;
   inspectDevSessions(
     payload: InspectDevSessionRequest[],
   ): Promise<DevSessionOperationalSnapshot[]>;
