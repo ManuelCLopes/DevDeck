@@ -15,6 +15,7 @@ function createFixtureRepository() {
 
   // Initialize repo
   execFileSync("git", ["init", repositoryPath], { stdio: "ignore" });
+  execFileSync("git", ["-C", repositoryPath, "checkout", "-b", "main"], { stdio: "ignore" });
   execFileSync("git", ["-C", repositoryPath, "config", "user.name", "DevDeck"], {
     stdio: "ignore",
   });
