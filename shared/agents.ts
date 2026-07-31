@@ -50,7 +50,7 @@ export type AgentRunStatus =
   | "paused";
 
 export interface AgentRun {
-  agentId: string;
+  agentId: string | null;
   branchName: string | null;
   endedAt: string | null;
   id: string;

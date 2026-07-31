@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import {
   AlertTriangle,
+  Bot,
   Maximize2,
   Minimize2,
   ExternalLink,
@@ -24,6 +25,7 @@ import {
   Compass,
   Code,
   Copy,
+  Workflow,
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import TerminalSnippetsCabinet from "@/components/terminal/TerminalSnippetsCabinet";
@@ -61,6 +63,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useCodingTool } from "@/hooks/use-coding-tool";
+import { useAgentHarness } from "@/hooks/use-agent-harness";
 import { useOpenCodeSessions } from "@/hooks/use-opencode-sessions";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
@@ -89,6 +92,14 @@ import type { TerminalLayout, TerminalPaneConfig } from "@/lib/terminal-panes";
 import { navigateInApp } from "@/lib/app-navigation";
 import { useAppPreferences } from "@/lib/app-preferences";
 import { getDesktopApi } from "@/lib/desktop";
+import {
+  AGENT_RUNS_STORAGE_KEY,
+  buildAgentLaunchSummary,
+  buildAgentRunEnvironment,
+  createAgentRunId,
+  normalizeAgentRuns,
+  sortAgentRuns,
+} from "@/lib/agent-runs";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import { cn } from "@/lib/utils";
 import {
@@ -103,6 +114,11 @@ import type {
   TerminalThemeName,
 } from "@/lib/app-preferences";
 import type { OpenCodeSessionView } from "@/hooks/use-opencode-sessions";
+import type {
+  AgentDefinition,
+  AgentRun,
+  WorkflowDefinition,
+} from "@shared/agents";
 import type { PtyAvailability } from "@shared/terminals";
 import type { WorkspaceProject } from "@shared/workspace";
 const DEFAULT_QUICK_SHELLS: Array<{
@@ -115,6 +131,7 @@ const DEFAULT_QUICK_SHELLS: Array<{
   { label: "zsh", command: "/bin/zsh", args: ["-l"] },
 ];
 const DEVDECK_OPENCODE_SESSION_ID_ENV = "DEVDECK_OPENCODE_SESSION_ID";
+const DEVDECK_AGENT_LAUNCH_SUMMARY_ENV = "DEVDECK_AGENT_LAUNCH_SUMMARY";
 const ARCHIVED_OPENCODE_SESSIONS_STORAGE_KEY = "devdeck:archived-opencode-session-ids";
 
 function buildInitialPanes(options: {
@@ -158,6 +175,40 @@ function buildOpenCodeSessionArgs(sessionId?: string | null) {
   return ["."];
 }
 
+function orderAgentsForProject(
+  agents: AgentDefinition[],
+  project: WorkspaceProject | null,
+) {
+  if (!project) {
+    return agents;
+  }
+
+  const exactAgents = agents.filter((agent) => agent.projectId === project.id);
+  const workspaceAgents = agents.filter((agent) => agent.projectId === null);
+  const fallbackAgents = agents.filter(
+    (agent) => agent.projectId !== project.id && agent.projectId !== null,
+  );
+
+  return [...exactAgents, ...workspaceAgents, ...fallbackAgents];
+}
+
+function orderWorkflowsForProject(
+  workflows: WorkflowDefinition[],
+  project: WorkspaceProject | null,
+) {
+  if (!project) {
+    return workflows;
+  }
+
+  const exactWorkflows = workflows.filter((workflow) => workflow.projectId === project.id);
+  const workspaceWorkflows = workflows.filter((workflow) => workflow.projectId === null);
+  const fallbackWorkflows = workflows.filter(
+    (workflow) => workflow.projectId !== project.id && workflow.projectId !== null,
+  );
+
+  return [...exactWorkflows, ...workspaceWorkflows, ...fallbackWorkflows];
+}
+
 export default function Terminals() {
   const [, setLocation] = useLocation();
   const search = useSearch();
@@ -165,6 +216,7 @@ export default function Terminals() {
   const { availability: codingToolAvailability, preferredTool, isLoading: codingToolLoading } = useCodingTool();
   const { isLoading: opencodeSessionsLoading, sessions: opencodeSessions, refresh: refreshSessions } =
     useOpenCodeSessions();
+  const { data: agentHarness } = useAgentHarness();
   const { data: snapshot } = useWorkspaceSnapshot();
   const desktopApi = getDesktopApi();
   const [ptyAvailability, setPtyAvailability] = useState<PtyAvailability | null>(null);
@@ -190,9 +242,19 @@ export default function Terminals() {
   const [selectedRepoForLaunch, setSelectedRepoForLaunch] = useState<WorkspaceProject | null>(null);
   const [newBranchName, setNewBranchName] = useState("");
   const [baseRef, setBaseRef] = useState("");
+  const [selectedAgentId, setSelectedAgentId] = useState("none");
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState("none");
+  const [launchTaskTitle, setLaunchTaskTitle] = useState("");
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
+  const [, setAgentRuns] = usePersistentState<AgentRun[]>(
+    AGENT_RUNS_STORAGE_KEY,
+    [],
+    {
+      deserialize: (value) => normalizeAgentRuns(JSON.parse(value)),
+    },
+  );
 
   const terminalPreferences = preferences.terminal;
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
@@ -210,6 +272,22 @@ export default function Terminals() {
   const selectedSession =
     opencodeSessions.find((session) => session.id === requestedSessionId) ?? null;
   const trackedProjects = snapshot?.projects ?? [];
+  const launchAgents = useMemo(
+    () => orderAgentsForProject(agentHarness?.agents ?? [], selectedRepoForLaunch),
+    [agentHarness?.agents, selectedRepoForLaunch],
+  );
+  const launchWorkflows = useMemo(
+    () =>
+      orderWorkflowsForProject(
+        agentHarness?.workflows ?? [],
+        selectedRepoForLaunch,
+      ),
+    [agentHarness?.workflows, selectedRepoForLaunch],
+  );
+  const selectedAgent =
+    launchAgents.find((agent) => agent.id === selectedAgentId) ?? null;
+  const selectedWorkflow =
+    launchWorkflows.find((workflow) => workflow.id === selectedWorkflowId) ?? null;
   const requestedProject =
     trackedProjects.find((project) => project.id === requestedProjectId) ?? null;
   const sessionMissing = Boolean(
@@ -290,11 +368,67 @@ export default function Terminals() {
     });
   };
 
+  useEffect(() => {
+    if (!selectedRepoForLaunch) {
+      return;
+    }
+
+    if (launchAgents.length === 0) {
+      if (selectedAgentId !== "none") {
+        setSelectedAgentId("none");
+      }
+      return;
+    }
+
+    if (!launchAgents.some((agent) => agent.id === selectedAgentId)) {
+      setSelectedAgentId(launchAgents[0]?.id ?? "none");
+    }
+  }, [launchAgents, selectedAgentId, selectedRepoForLaunch]);
+
+  useEffect(() => {
+    if (!selectedRepoForLaunch) {
+      return;
+    }
+
+    if (launchWorkflows.length === 0) {
+      if (selectedWorkflowId !== "none") {
+        setSelectedWorkflowId("none");
+      }
+      return;
+    }
+
+    if (!launchWorkflows.some((workflow) => workflow.id === selectedWorkflowId)) {
+      setSelectedWorkflowId(launchWorkflows[0]?.id ?? "none");
+    }
+  }, [launchWorkflows, selectedRepoForLaunch, selectedWorkflowId]);
+
+  const handleWorkflowSelection = (workflowId: string) => {
+    setSelectedWorkflowId(workflowId);
+
+    const workflow = launchWorkflows.find((candidate) => candidate.id === workflowId);
+    const workflowAgentId = workflow?.steps
+      .map((step) => step.agentId)
+      .find(
+        (agentId): agentId is string =>
+          Boolean(agentId) && launchAgents.some((agent) => agent.id === agentId),
+      );
+
+    if (workflowAgentId) {
+      setSelectedAgentId(workflowAgentId);
+    }
+  };
+
   const handleLaunchSession = async () => {
     if (!selectedRepoForLaunch || !desktopApi?.createGitWorktreeSession) return;
     
     const branchToUse = newBranchName.trim() || `opencode-dev-${Math.random().toString(36).substring(2, 7)}`;
     const baseToUse = baseRef || selectedRepoForLaunch.defaultBranch || "HEAD";
+    const agentForRun = selectedAgentId === "none" ? null : selectedAgent;
+    const workflowForRun =
+      selectedWorkflowId === "none" ? null : selectedWorkflow;
+    const taskTitle =
+      launchTaskTitle.trim() ||
+      `${agentForRun?.name ?? "OpenCode"} on ${branchToUse}`;
     
     setIsCreatingSession(true);
     try {
@@ -314,19 +448,61 @@ export default function Terminals() {
         description: `Staging OpenCode terminal shell at ${result.branchName}`,
       });
 
+      const runId = createAgentRunId();
+      const basePane = createDefaultPane(panes.length, result.localPath);
+      const agentRun: AgentRun = {
+        agentId: agentForRun?.id ?? null,
+        branchName: result.branchName,
+        endedAt: null,
+        id: runId,
+        opencodeSessionId: null,
+        projectId: selectedRepoForLaunch.id,
+        startedAt: new Date().toISOString(),
+        status: "active",
+        taskTitle,
+        terminalPaneId: basePane.id,
+        tokenBudget: agentForRun?.tokenBudget ?? null,
+        workflowRunId: workflowForRun?.id ?? null,
+        worktreePath: result.localPath,
+      };
+      const launchSummary = buildAgentLaunchSummary({
+        agent: agentForRun,
+        branchName: result.branchName,
+        projectName: selectedRepoForLaunch.name,
+        taskTitle,
+        workflow: workflowForRun,
+      });
+
       setSelectedRepoForLaunch(null);
       setNewBranchName("");
       setBaseRef("");
+      setSelectedAgentId("none");
+      setSelectedWorkflowId("none");
+      setLaunchTaskTitle("");
 
       const newPane: TerminalPaneConfig = {
-        ...createDefaultPane(panes.length, result.localPath),
-        label: `OpenCode (${result.branchName})`,
+        ...basePane,
+        label: agentForRun
+          ? `OpenCode (${agentForRun.name})`
+          : `OpenCode (${result.branchName})`,
         command: "opencode",
         args: ["."],
         cwd: result.localPath,
+        env: {
+          ...buildAgentRunEnvironment({
+            agent: agentForRun,
+            run: agentRun,
+            workflow: workflowForRun,
+          }),
+          [DEVDECK_AGENT_LAUNCH_SUMMARY_ENV]: launchSummary,
+        },
       };
 
+      setAgentRuns((currentRuns) =>
+        sortAgentRuns([...normalizeAgentRuns(currentRuns), agentRun]).slice(0, 200),
+      );
       setPanes((currentPanes) => [...normalizeTerminalPanes(currentPanes), newPane]);
+      setActivePaneId(newPane.id);
       setLayout("single");
 
       setTimeout(() => {
@@ -334,6 +510,11 @@ export default function Terminals() {
           void refreshSessions();
         }
       }, 2500);
+
+      toast({
+        title: "Agent run started",
+        description: `${taskTitle} is linked to ${agentForRun?.name ?? "an unassigned OpenCode run"}.`,
+      });
 
     } catch (e) {
       toast({
@@ -1060,7 +1241,12 @@ export default function Terminals() {
                           variant="ghost" 
                           size="icon" 
                           className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          onClick={() => setSelectedRepoForLaunch(null)}
+                          onClick={() => {
+                            setSelectedRepoForLaunch(null);
+                            setSelectedAgentId("none");
+                            setSelectedWorkflowId("none");
+                            setLaunchTaskTitle("");
+                          }}
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -1102,10 +1288,102 @@ export default function Terminals() {
                         </div>
                       </div>
 
+                      <div className="space-y-4 border-t border-black/10 dark:border-white/10 pt-4">
+                        <div className="space-y-2">
+                          <Label className="text-[11px] text-muted-foreground block font-medium">
+                            Task Title
+                          </Label>
+                          <input
+                            type="text"
+                            value={launchTaskTitle}
+                            onChange={(e) => setLaunchTaskTitle(e.target.value)}
+                            placeholder="e.g. Implement agent-aware OpenCode launch"
+                            className="h-9 w-full bg-white dark:bg-background border border-black/10 dark:border-white/10 rounded-md px-3 focus:outline-none focus:border-primary/50 text-[12px]"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                          <div className="space-y-2">
+                            <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
+                              <Workflow className="h-3.5 w-3.5" />
+                              Workflow
+                            </Label>
+                            <Select
+                              value={selectedWorkflowId}
+                              onValueChange={handleWorkflowSelection}
+                            >
+                              <SelectTrigger className="h-9 w-full bg-white text-[12px]">
+                                <SelectValue placeholder="Choose workflow" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No workflow</SelectItem>
+                                {launchWorkflows.map((workflow) => (
+                                  <SelectItem key={workflow.id} value={workflow.id}>
+                                    {workflow.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
+                              <Bot className="h-3.5 w-3.5" />
+                              Agent
+                            </Label>
+                            <Select
+                              value={selectedAgentId}
+                              onValueChange={setSelectedAgentId}
+                            >
+                              <SelectTrigger className="h-9 w-full bg-white text-[12px]">
+                                <SelectValue placeholder="Choose agent" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">Unassigned OpenCode</SelectItem>
+                                {launchAgents.map((agent) => (
+                                  <SelectItem key={agent.id} value={agent.id}>
+                                    {agent.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        {selectedAgent ? (
+                          <div className="border-l-2 border-primary/50 pl-3 text-[11px] leading-5 text-muted-foreground">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-semibold text-foreground">
+                                {selectedAgent.name}
+                              </span>
+                              <span className="font-mono">
+                                {selectedAgent.tokenBudget
+                                  ? `${selectedAgent.tokenBudget.toLocaleString()} tokens`
+                                  : "No token budget"}
+                              </span>
+                            </div>
+                            {selectedAgent.responsibilities.length > 0 ? (
+                              <p className="mt-1 line-clamp-2">
+                                {selectedAgent.responsibilities.slice(0, 3).join(" | ")}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <div className="border-l-2 border-amber-400 pl-3 text-[11px] leading-5 text-amber-900 dark:text-amber-200">
+                            No harness agent is selected. DevDeck will still track this as an unassigned OpenCode run.
+                          </div>
+                        )}
+                      </div>
+
                       <div className="flex items-center justify-end gap-3 pt-2">
                         <Button 
                           variant="outline" 
-                          onClick={() => setSelectedRepoForLaunch(null)}
+                          onClick={() => {
+                            setSelectedRepoForLaunch(null);
+                            setSelectedAgentId("none");
+                            setSelectedWorkflowId("none");
+                            setLaunchTaskTitle("");
+                          }}
                           disabled={isCreatingSession}
                           className="text-xs"
                         >
@@ -1155,6 +1433,9 @@ export default function Terminals() {
                                 setSelectedRepoForLaunch(project);
                                 setNewBranchName(`feature/opencode-${Math.random().toString(36).substring(2, 6)}`);
                                 setBaseRef(project.defaultBranch || "main");
+                                setSelectedAgentId("none");
+                                setSelectedWorkflowId("none");
+                                setLaunchTaskTitle("");
                               }}
                               className="group relative p-4 rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#202022]/70 hover:border-primary/50 dark:hover:border-primary/50 cursor-pointer shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between h-36"
                             >
