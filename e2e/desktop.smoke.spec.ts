@@ -1,4 +1,4 @@
-import { _electron as electron, expect, test } from "@playwright/test";
+import { _electron as electron, expect, test, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -45,13 +45,57 @@ function createCommittedRepository(repositoryPath: string) {
   );
 }
 
+function writeAgentHarness(repositoryPath: string) {
+  writeFileSync(
+    join(repositoryPath, "agents.json"),
+    JSON.stringify(
+      {
+        agents: [
+          {
+            boundaries: ["Keep changes scoped to the selected repository"],
+            defaultModel: "gpt-5",
+            id: "builder",
+            name: "Builder Agent",
+            responsibilities: [
+              "Implement scoped changes",
+              "Run focused verification",
+            ],
+            skills: ["typescript"],
+            tokenBudget: 120000,
+            tools: ["shell"],
+          },
+        ],
+        workflows: [
+          {
+            id: "feature",
+            name: "Feature Build",
+            steps: [
+              {
+                agent: "builder",
+                id: "implement",
+                name: "Implement",
+                verification: ["npm test"],
+              },
+            ],
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+}
+
 function createTestWorkspace() {
   const tempDir = mkdtempSync(join(tmpdir(), "devdeck-e2e-"));
   const rootDir = join(tempDir, "workspace");
   const userHome = join(tempDir, "home");
   mkdirSync(rootDir, { recursive: true });
   mkdirSync(userHome, { recursive: true });
-  createCommittedRepository(join(rootDir, "alpha"));
+  const alphaPath = join(rootDir, "alpha");
+  createCommittedRepository(alphaPath);
+  writeAgentHarness(alphaPath);
   createCommittedRepository(join(rootDir, "beta"));
 
   return { rootDir, tempDir, userHome };
@@ -117,6 +161,26 @@ async function launchDesktopApp(
   });
   await page.waitForLoadState("domcontentloaded");
   return { electronApp, page };
+}
+
+async function navigateDesktopApp(page: Page, targetPath: string) {
+  await page.evaluate((nextPath) => {
+    const normalizedTarget = nextPath.startsWith("/") ? nextPath : `/${nextPath}`;
+    const [pathnamePart, searchPart = ""] = normalizedTarget
+      .replace(/^#?\/?/, "")
+      .split("?");
+    const oldURL = window.location.href;
+    const url = new URL(oldURL);
+    url.hash = `/${pathnamePart}`;
+    url.search = searchPart ? `?${searchPart}` : "";
+    window.history.pushState(null, "", url.href);
+
+    const event =
+      typeof HashChangeEvent !== "undefined"
+        ? new HashChangeEvent("hashchange", { newURL: url.href, oldURL })
+        : new Event("hashchange");
+    window.dispatchEvent(event);
+  }, targetPath);
 }
 
 test("desktop app loads overview for a prepared local workspace", async () => {
@@ -205,6 +269,74 @@ test("preferences exposes the production token fallback when device flow is unav
     await expect(page.getByText("Paste a GitHub Token")).toBeVisible();
     await expect(
       page.getByText(/local DevDeck credential file/),
+    ).toBeVisible();
+  } finally {
+    await electronApp.close();
+    rmSync(workspace.tempDir, { force: true, recursive: true });
+  }
+});
+
+test("agent registry imports harness definitions and tracking surfaces", async () => {
+  const workspace = createTestWorkspace();
+  const selection = createWorkspaceSelection(workspace.rootDir);
+  const { electronApp, page } = await launchDesktopApp(
+    workspace.userHome,
+    selection,
+  );
+
+  try {
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Agent Registry", exact: true }),
+    ).toBeVisible();
+
+    await expect(page.getByText("Builder Agent", { exact: true })).toBeVisible();
+    await expect(page.getByText("Implement scoped changes")).toBeVisible();
+    await expect(page.getByText("120,000")).toBeVisible();
+    await expect(page.getByText("Feature Build", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Agent Runs", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Token Usage by Agent", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/No agent runs have been recorded yet/),
+    ).toBeVisible();
+  } finally {
+    await electronApp.close();
+    rmSync(workspace.tempDir, { force: true, recursive: true });
+  }
+});
+
+test("terminal launcher exposes agent-aware OpenCode setup before launch", async () => {
+  const workspace = createTestWorkspace();
+  const selection = createWorkspaceSelection(workspace.rootDir);
+  const { electronApp, page } = await launchDesktopApp(
+    workspace.userHome,
+    selection,
+  );
+
+  try {
+    await expect(
+      page.getByRole("heading", { name: /Overview$/ }),
+    ).toBeVisible();
+    await navigateDesktopApp(page, "/terminals?launch=opencode&project=alpha");
+
+    await expect(
+      page.locator("main").getByRole("heading", { name: "alpha", exact: true }),
+    ).toBeVisible();
+
+    await expect(page.getByText("Task Title", { exact: true })).toBeVisible();
+    await expect(page.getByText("Workflow", { exact: true })).toBeVisible();
+    await expect(page.getByText("Agent", { exact: true })).toBeVisible();
+    await expect(page.getByText("Feature Build", { exact: true })).toBeVisible();
+    await expect(
+      page.locator("main").getByText("Builder Agent", { exact: true }).first(),
+    ).toBeVisible();
+    await expect(page.getByText("Implement scoped changes")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Launch OpenCode Workspace", exact: true }),
     ).toBeVisible();
   } finally {
     await electronApp.close();

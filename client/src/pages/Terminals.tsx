@@ -290,6 +290,8 @@ export default function Terminals() {
     launchWorkflows.find((workflow) => workflow.id === selectedWorkflowId) ?? null;
   const requestedProject =
     trackedProjects.find((project) => project.id === requestedProjectId) ?? null;
+  const isRepositoryLaunchRequest =
+    requestedLaunch === "opencode" && Boolean(requestedProject);
   const sessionMissing = Boolean(
     requestedSessionId && !selectedSession && !opencodeSessionsLoading,
   );
@@ -402,6 +404,36 @@ export default function Terminals() {
     }
   }, [launchWorkflows, selectedRepoForLaunch, selectedWorkflowId]);
 
+  useEffect(() => {
+    if (requestedLaunch !== "opencode" || !requestedProject) {
+      return;
+    }
+
+    if (selectedRepoForLaunch?.id === requestedProject.id) {
+      return;
+    }
+
+    setSelectedRepoForLaunch(requestedProject);
+    setNewBranchName(`feature/opencode-${Math.random().toString(36).substring(2, 6)}`);
+    setBaseRef(requestedProject.defaultBranch || "main");
+    setSelectedAgentId("none");
+    setSelectedWorkflowId("none");
+    setLaunchTaskTitle("");
+  }, [requestedLaunch, requestedProject, selectedRepoForLaunch?.id]);
+
+  const clearSelectedLaunchRepository = useCallback(() => {
+    setSelectedRepoForLaunch(null);
+    setNewBranchName("");
+    setBaseRef("");
+    setSelectedAgentId("none");
+    setSelectedWorkflowId("none");
+    setLaunchTaskTitle("");
+
+    if (requestedLaunch === "opencode" && requestedProjectId) {
+      navigateInApp("/terminals", setLocation);
+    }
+  }, [requestedLaunch, requestedProjectId, setLocation]);
+
   const handleWorkflowSelection = (workflowId: string) => {
     setSelectedWorkflowId(workflowId);
 
@@ -473,12 +505,7 @@ export default function Terminals() {
         workflow: workflowForRun,
       });
 
-      setSelectedRepoForLaunch(null);
-      setNewBranchName("");
-      setBaseRef("");
-      setSelectedAgentId("none");
-      setSelectedWorkflowId("none");
-      setLaunchTaskTitle("");
+      clearSelectedLaunchRepository();
 
       const newPane: TerminalPaneConfig = {
         ...basePane,
@@ -574,17 +601,26 @@ export default function Terminals() {
   );
   const initialPanes = useMemo(
     () =>
-      buildInitialPanes({
-        defaultCwd,
-        opencodeSessionId: selectedSession?.id,
-        preferredTool,
-        selectedSession,
-        shouldStartInOpenCode:
-          Boolean(selectedSession) &&
-          (preferredTool === "opencode" || requestedLaunch === "opencode") &&
-          codingToolAvailability.opencode.available,
-      }),
-    [codingToolAvailability.opencode.available, defaultCwd, preferredTool, selectedSession, requestedLaunch],
+      isRepositoryLaunchRequest
+        ? []
+        : buildInitialPanes({
+            defaultCwd,
+            opencodeSessionId: selectedSession?.id,
+            preferredTool,
+            selectedSession,
+            shouldStartInOpenCode:
+              Boolean(selectedSession) &&
+              (preferredTool === "opencode" || requestedLaunch === "opencode") &&
+              codingToolAvailability.opencode.available,
+          }),
+    [
+      codingToolAvailability.opencode.available,
+      defaultCwd,
+      isRepositoryLaunchRequest,
+      preferredTool,
+      requestedLaunch,
+      selectedSession,
+    ],
   );
 
   useEffect(() => {
@@ -1234,12 +1270,7 @@ export default function Terminals() {
                           variant="ghost" 
                           size="icon" 
                           className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          onClick={() => {
-                            setSelectedRepoForLaunch(null);
-                            setSelectedAgentId("none");
-                            setSelectedWorkflowId("none");
-                            setLaunchTaskTitle("");
-                          }}
+                          onClick={clearSelectedLaunchRepository}
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -1371,12 +1402,7 @@ export default function Terminals() {
                       <div className="flex items-center justify-end gap-3 pt-2">
                         <Button 
                           variant="outline" 
-                          onClick={() => {
-                            setSelectedRepoForLaunch(null);
-                            setSelectedAgentId("none");
-                            setSelectedWorkflowId("none");
-                            setLaunchTaskTitle("");
-                          }}
+                          onClick={clearSelectedLaunchRepository}
                           disabled={isCreatingSession}
                           className="text-xs"
                         >
