@@ -17,9 +17,21 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAgentHarness } from "@/hooks/use-agent-harness";
 import { useCodingTool } from "@/hooks/use-coding-tool";
+import { usePersistentState } from "@/hooks/use-persistent-state";
 import { getDesktopApi } from "@/lib/desktop";
+import {
+  TOKEN_USAGE_EVENTS_STORAGE_KEY,
+  getTokenUsageSummaryTotal,
+  normalizeTokenUsageEvents,
+  summarizeTokenUsageByAgent,
+  type TokenUsageSummary,
+} from "@/lib/token-usage";
 import { cn } from "@/lib/utils";
-import type { AgentDefinition, WorkflowDefinition } from "@shared/agents";
+import type {
+  AgentDefinition,
+  TokenUsageEvent,
+  WorkflowDefinition,
+} from "@shared/agents";
 
 function formatSourceName(sourcePath: string) {
   return sourcePath.split("/").filter(Boolean).slice(-2).join("/");
@@ -31,6 +43,31 @@ function formatTokenBudget(tokenBudget: number | null) {
   }
 
   return new Intl.NumberFormat().format(tokenBudget);
+}
+
+function formatTokenCount(tokens: number) {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+
+  if (tokens >= 1_000) {
+    return `${(tokens / 1_000).toFixed(1)}K`;
+  }
+
+  return new Intl.NumberFormat().format(tokens);
+}
+
+function formatEstimatedCost(cost: number) {
+  if (cost <= 0) {
+    return "$0.00";
+  }
+
+  return new Intl.NumberFormat(undefined, {
+    currency: "USD",
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+    style: "currency",
+  }).format(cost);
 }
 
 function getProjectLabel(projectName: string | null) {
@@ -69,10 +106,12 @@ function AgentCard({
   agent,
   onOpenSource,
   onRevealSource,
+  tokenUsage,
 }: {
   agent: AgentDefinition;
   onOpenSource: (sourcePath: string) => void;
   onRevealSource: (sourcePath: string) => void;
+  tokenUsage: TokenUsageSummary | null;
 }) {
   const primaryResponsibilities =
     agent.responsibilities.length > 0
@@ -117,7 +156,7 @@ function AgentCard({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+      <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
         <div className="rounded-md border border-black/10 bg-secondary/35 px-3 py-2 dark:border-white/10">
           <p className="text-[10px] font-semibold uppercase text-muted-foreground">
             Token Budget
@@ -132,6 +171,14 @@ function AgentCard({
           </p>
           <p className="mt-1 truncate font-semibold text-foreground">
             {agent.defaultModel ?? agent.defaultProvider ?? "Unspecified"}
+          </p>
+        </div>
+        <div className="rounded-md border border-black/10 bg-secondary/35 px-3 py-2 dark:border-white/10">
+          <p className="text-[10px] font-semibold uppercase text-muted-foreground">
+            Used
+          </p>
+          <p className="mt-1 truncate font-semibold text-foreground">
+            {formatTokenCount(tokenUsage?.totalTokens ?? 0)}
           </p>
         </div>
       </div>
@@ -216,6 +263,13 @@ export default function Agents() {
   const { toast } = useToast();
   const { openPreferredTool, preferredToolShortLabel } = useCodingTool();
   const { data, error, isFetching, isLoading, refetch } = useAgentHarness();
+  const [tokenUsageEvents] = usePersistentState<TokenUsageEvent[]>(
+    TOKEN_USAGE_EVENTS_STORAGE_KEY,
+    [],
+    {
+      deserialize: (value) => normalizeTokenUsageEvents(JSON.parse(value)),
+    },
+  );
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>("all");
 
@@ -223,6 +277,24 @@ export default function Agents() {
   const workflows = data?.workflows ?? [];
   const sources = data?.sources ?? [];
   const sourceErrors = sources.filter((source) => source.errors.length > 0);
+  const tokenUsageSummaries = useMemo(
+    () => summarizeTokenUsageByAgent(tokenUsageEvents),
+    [tokenUsageEvents],
+  );
+  const tokenUsageByAgent = useMemo(
+    () =>
+      new Map(
+        tokenUsageSummaries.map((summary) => [
+          summary.agentId ?? "unassigned",
+          summary,
+        ]),
+      ),
+    [tokenUsageSummaries],
+  );
+  const tokenUsageTotal = useMemo(
+    () => getTokenUsageSummaryTotal(tokenUsageSummaries),
+    [tokenUsageSummaries],
+  );
   const projectOptions = useMemo(
     () => uniqueValues(agents.map((agent) => agent.projectName)),
     [agents],
@@ -254,21 +326,6 @@ export default function Agents() {
       }),
     [agents, normalizedQuery, projectFilter],
   );
-
-  const stats = useMemo(() => {
-    const tokenBudgetTotal = agents.reduce(
-      (total, agent) => total + (agent.tokenBudget ?? 0),
-      0,
-    );
-    const toolCount = new Set(agents.flatMap((agent) => agent.defaultTools)).size;
-    const skillCount = new Set(agents.flatMap((agent) => agent.defaultSkills)).size;
-
-    return {
-      skillCount,
-      tokenBudgetTotal,
-      toolCount,
-    };
-  }, [agents]);
 
   const handleRevealSource = async (sourcePath: string) => {
     try {
@@ -343,13 +400,16 @@ export default function Agents() {
             { label: "Agents", value: agents.length, icon: Bot },
             { label: "Sources", value: sources.length, icon: FileText },
             { label: "Workflows", value: workflows.length, icon: Workflow },
-            { label: "Tools", value: stats.toolCount, icon: Wrench },
+            { label: "Usage Events", value: tokenUsageTotal.eventCount, icon: Wrench },
             {
-              label: "Token Budget",
-              value: stats.tokenBudgetTotal
-                ? new Intl.NumberFormat().format(stats.tokenBudgetTotal)
-                : "None",
+              label: "Tokens Used",
+              value: formatTokenCount(tokenUsageTotal.totalTokens),
               icon: Sparkles,
+            },
+            {
+              label: "Est. Cost",
+              value: formatEstimatedCost(tokenUsageTotal.estimatedCost),
+              icon: ShieldCheck,
             },
           ].map((item) => (
             <div
@@ -441,10 +501,73 @@ export default function Agents() {
                 agent={agent}
                 onOpenSource={handleOpenSource}
                 onRevealSource={handleRevealSource}
+                tokenUsage={tokenUsageByAgent.get(agent.id) ?? null}
               />
             ))}
           </section>
         )}
+
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">Token Usage by Agent</h2>
+          </div>
+          {tokenUsageSummaries.length > 0 ? (
+            <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
+              <table className="w-full min-w-[640px] text-left text-xs">
+                <thead className="border-b border-black/10 bg-secondary/50 text-[10px] uppercase text-muted-foreground dark:border-white/10">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">Agent</th>
+                    <th className="px-3 py-2 font-semibold">Events</th>
+                    <th className="px-3 py-2 font-semibold">Input</th>
+                    <th className="px-3 py-2 font-semibold">Output</th>
+                    <th className="px-3 py-2 font-semibold">Cache</th>
+                    <th className="px-3 py-2 font-semibold">Tools</th>
+                    <th className="px-3 py-2 font-semibold">Total</th>
+                    <th className="px-3 py-2 font-semibold">Est. Cost</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-black/10 bg-white/70 dark:divide-white/10 dark:bg-white/5">
+                  {tokenUsageSummaries.map((summary) => {
+                    const agent = summary.agentId
+                      ? agents.find((candidate) => candidate.id === summary.agentId)
+                      : null;
+                    return (
+                      <tr key={summary.agentId ?? "unassigned"}>
+                        <td className="px-3 py-2 font-medium text-foreground">
+                          {agent?.name ?? "Unassigned"}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">{summary.eventCount}</td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {formatTokenCount(summary.inputTokens)}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {formatTokenCount(summary.outputTokens)}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {formatTokenCount(summary.cacheReadTokens + summary.cacheWriteTokens)}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {formatTokenCount(summary.toolCallTokens)}
+                        </td>
+                        <td className="px-3 py-2 font-semibold text-foreground">
+                          {formatTokenCount(summary.totalTokens)}
+                        </td>
+                        <td className="px-3 py-2 font-semibold text-foreground">
+                          {formatEstimatedCost(summary.estimatedCost)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-black/10 p-5 text-sm text-muted-foreground dark:border-white/10">
+              No token usage events have been recorded yet. Provider or OpenCode ingestion can attach events to these agent IDs.
+            </div>
+          )}
+        </section>
 
         <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-3">
