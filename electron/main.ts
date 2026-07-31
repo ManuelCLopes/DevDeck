@@ -64,6 +64,7 @@ import {
   isOpenCodeCliAvailable,
   listOpenCodeSessions,
   renameOpenCodeSession,
+  stopOpenCodeServer,
 } from "./opencode-sessions";
 import { listOpenCodeUsageRecords } from "./opencode-usage";
 import { discoverAgentHarness } from "./agent-harness";
@@ -976,6 +977,7 @@ app.whenReady().then(() => {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  stopOpenCodeServer();
 });
 
 app.on("window-all-closed", () => {

@@ -1,4 +1,4 @@
-import { execFile, spawn } from "child_process";
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import { basename } from "path";
 import { createServer } from "net";
 import { promisify } from "util";
@@ -9,6 +9,23 @@ import type { OpenCodeSessionRecord } from "../shared/opencode-sessions";
 const execFileAsync = promisify(execFile);
 const SERVER_HOSTNAME = "127.0.0.1";
 const SERVER_START_TIMEOUT_MS = 8_000;
+const MAX_SERVER_OUTPUT_LENGTH = 20_000;
+
+interface OpenCodeServerState {
+  baseUrl: string | null;
+  output: string;
+  port: number | null;
+  process: ChildProcessWithoutNullStreams | null;
+  startPromise: Promise<string> | null;
+}
+
+const openCodeServerState: OpenCodeServerState = {
+  baseUrl: null,
+  output: "",
+  port: null,
+  process: null,
+  startPromise: null,
+};
 
 async function nodeFetchJson(url: string, options?: { method?: string; body?: string; headers?: Record<string, string> }): Promise<{ ok: boolean; status: number; json: () => Promise<any> }> {
   return new Promise((resolve, reject) => {
@@ -254,59 +271,152 @@ function getMacosPath(): string {
   return base;
 }
 
-let withServerQueuePromise = Promise.resolve<any>(undefined);
+function appendServerOutput(serverProcess: ChildProcessWithoutNullStreams, data: Buffer | string) {
+  if (openCodeServerState.process !== serverProcess) {
+    return;
+  }
 
-async function withOpenCodeServer<T>(action: (baseUrl: string) => Promise<T>): Promise<T> {
-  const resultPromise = withServerQueuePromise.then(async () => {
-    const port = await getAvailablePort();
-    const baseUrl = `http://${SERVER_HOSTNAME}:${port}`;
-    const env = { ...process.env };
-    if (process.platform === "darwin") {
-      env.PATH = getMacosPath();
-    }
+  openCodeServerState.output = `${openCodeServerState.output}${String(data)}`.slice(
+    -MAX_SERVER_OUTPUT_LENGTH,
+  );
+}
 
-    const serverProcess = spawn(
-      "opencode",
-      ["serve", "--hostname", SERVER_HOSTNAME, "--port", String(port)],
-      {
-        cwd: tmpdir(),
-        detached: false,
-        env,
-        stdio: "pipe",
-      },
-    );
+function isServerProcessRunning(
+  serverProcess: ChildProcessWithoutNullStreams | null,
+): serverProcess is ChildProcessWithoutNullStreams {
+  return Boolean(serverProcess && serverProcess.exitCode === null && !serverProcess.killed);
+}
 
-    let serverOutput = "";
-    serverProcess.stdout?.on("data", (data) => {
-      serverOutput += String(data);
-    });
-    serverProcess.stderr?.on("data", (data) => {
-      serverOutput += String(data);
-    });
+function resetOpenCodeServerState(serverProcess?: ChildProcessWithoutNullStreams) {
+  if (serverProcess && openCodeServerState.process !== serverProcess) {
+    return;
+  }
 
-    serverProcess.on("error", (err) => {
-      console.error("OpenCode server process SPAWN ERROR:", err);
-    });
+  openCodeServerState.baseUrl = null;
+  openCodeServerState.output = "";
+  openCodeServerState.port = null;
+  openCodeServerState.process = null;
+  openCodeServerState.startPromise = null;
+}
 
-    try {
-      await waitForServer(baseUrl);
-      return await action(baseUrl);
-    } catch (err) {
-      console.error(`OpenCode server failed to boot on port ${port}. Process output:\n${serverOutput}`);
-      throw err;
-    } finally {
-      if (!serverProcess.killed) {
-        serverProcess.kill("SIGTERM");
-      }
-    }
+async function startOpenCodeServer() {
+  const port = await getAvailablePort();
+  const baseUrl = `http://${SERVER_HOSTNAME}:${port}`;
+  const env = { ...process.env };
+  if (process.platform === "darwin") {
+    env.PATH = getMacosPath();
+  }
+
+  const serverProcess = spawn(
+    "opencode",
+    ["serve", "--hostname", SERVER_HOSTNAME, "--port", String(port)],
+    {
+      cwd: tmpdir(),
+      detached: false,
+      env,
+      stdio: "pipe",
+    },
+  );
+  let startupSettled = false;
+  let serverOutput = "";
+  const appendOutput = (data: Buffer | string) => {
+    serverOutput = `${serverOutput}${String(data)}`.slice(-MAX_SERVER_OUTPUT_LENGTH);
+    appendServerOutput(serverProcess, data);
+  };
+
+  openCodeServerState.baseUrl = null;
+  openCodeServerState.output = "";
+  openCodeServerState.port = port;
+  openCodeServerState.process = serverProcess;
+
+  serverProcess.stdout.on("data", appendOutput);
+  serverProcess.stderr.on("data", appendOutput);
+  serverProcess.once("exit", () => {
+    resetOpenCodeServerState(serverProcess);
+  });
+  serverProcess.once("error", () => {
+    resetOpenCodeServerState(serverProcess);
   });
 
-  withServerQueuePromise = resultPromise.then(
-    () => undefined,
-    () => undefined
-  );
+  const startupFailure = new Promise<never>((_, reject) => {
+    serverProcess.once("error", (error) => {
+      if (!startupSettled) {
+        reject(error);
+      }
+    });
+    serverProcess.once("exit", (code, signal) => {
+      if (!startupSettled) {
+        const exitReason = signal ? `signal ${signal}` : `code ${code ?? "unknown"}`;
+        reject(new Error(`OpenCode server exited before it was ready (${exitReason}).`));
+      }
+    });
+  });
 
-  return resultPromise;
+  try {
+    await Promise.race([waitForServer(baseUrl), startupFailure]);
+    startupSettled = true;
+    openCodeServerState.baseUrl = baseUrl;
+    return baseUrl;
+  } catch (error) {
+    startupSettled = true;
+    if (isServerProcessRunning(serverProcess)) {
+      serverProcess.kill("SIGTERM");
+    }
+    resetOpenCodeServerState(serverProcess);
+
+    const detail = error instanceof Error ? error.message : String(error);
+    const output = serverOutput.trim();
+    throw new Error(
+      `OpenCode server failed to boot on port ${port}: ${detail}${output ? `\n${output}` : ""}`,
+    );
+  }
+}
+
+async function ensureOpenCodeServer() {
+  if (openCodeServerState.baseUrl && isServerProcessRunning(openCodeServerState.process)) {
+    return openCodeServerState.baseUrl;
+  }
+
+  if (openCodeServerState.startPromise) {
+    return openCodeServerState.startPromise;
+  }
+
+  if (openCodeServerState.process && !isServerProcessRunning(openCodeServerState.process)) {
+    resetOpenCodeServerState(openCodeServerState.process);
+  }
+
+  const startPromise = startOpenCodeServer();
+  openCodeServerState.startPromise = startPromise;
+
+  try {
+    return await startPromise;
+  } finally {
+    if (openCodeServerState.startPromise === startPromise) {
+      openCodeServerState.startPromise = null;
+    }
+  }
+}
+
+async function withOpenCodeServer<T>(action: (baseUrl: string) => Promise<T>): Promise<T> {
+  const baseUrl = await ensureOpenCodeServer();
+  try {
+    return await action(baseUrl);
+  } catch (error) {
+    if (!isServerProcessRunning(openCodeServerState.process)) {
+      resetOpenCodeServerState();
+      return action(await ensureOpenCodeServer());
+    }
+
+    throw error;
+  }
+}
+
+export function stopOpenCodeServer() {
+  const serverProcess = openCodeServerState.process;
+  if (isServerProcessRunning(serverProcess)) {
+    serverProcess.kill("SIGTERM");
+  }
+  resetOpenCodeServerState(serverProcess ?? undefined);
 }
 
 export async function listOpenCodeSessions() {
