@@ -49,6 +49,7 @@ import {
   Settings, 
   Activity, 
   Bookmark,
+  Bot,
   FolderOpen,
   FolderGit2,
   Github,
@@ -251,6 +252,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { href: "/", icon: LayoutGrid, label: "Overview", collapsedLabel: "Overview" },
     { href: "/reviews", icon: MessageSquare, label: "Pull Requests", collapsedLabel: "PRs" },
     { href: "/projects", icon: FolderGit2, label: "Repositories", collapsedLabel: "Repos" },
+    { href: "/agents", icon: Bot, label: "Agents", collapsedLabel: "Agents" },
     { href: "/terminals", icon: TerminalSquare, label: "Terminals", collapsedLabel: "Terminals" },
     { href: "/activity", icon: Activity, label: "Activity Inbox", collapsedLabel: "Activity" },
   ];
@@ -713,6 +715,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <CommandItem value="open pull requests inbox" onSelect={() => handleNavigate("/reviews")}>
               <MessageSquare className="w-4 h-4 text-primary" />
               <span className="font-medium">Open Pull Requests</span>
+            </CommandItem>
+            <CommandItem
+              value="open agents registry harness opencode skills"
+              onSelect={() => handleNavigate("/agents")}
+            >
+              <Bot className="w-4 h-4 text-primary" />
+              <span className="font-medium">Open Agent Registry</span>
             </CommandItem>
 
             <CommandItem

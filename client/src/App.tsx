@@ -20,6 +20,7 @@ const Settings = lazy(() => import("@/pages/Settings"));
 const Reviews = lazy(() => import("@/pages/Reviews"));
 const Activity = lazy(() => import("@/pages/Activity"));
 const Projects = lazy(() => import("@/pages/Projects"));
+const Agents = lazy(() => import("@/pages/Agents"));
 const Terminals = lazy(() => import("@/pages/Terminals"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
 
@@ -77,6 +78,7 @@ function AppRouter() {
         <Route path="/reviews">{() => <Reviews />}</Route>
         <Route path="/team">{() => <Dashboard />}</Route>
         <Route path="/projects">{() => <Projects />}</Route>
+        <Route path="/agents">{() => <Agents />}</Route>
         <Route path="/terminals">{() => <Terminals />}</Route>
         <Route path="/activity">{() => <Activity />}</Route>
         <Route path="/settings">{() => <Settings />}</Route>
