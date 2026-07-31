@@ -6,6 +6,10 @@ import type {
   WorkspaceSnapshot,
 } from "../shared/workspace";
 import type {
+  AgentHarnessDiscoveryRequest,
+  AgentHarnessDiscoveryResult,
+} from "../shared/agents";
+import type {
   CreateGitWorktreeSessionResult,
   DevSessionOperationalSnapshot,
   InspectDevSessionRequest,
@@ -124,6 +128,11 @@ const devdeck = {
     vscode: { available: boolean; reason: string | null };
   }> {
     return ipcRenderer.invoke("devdeck:get-desktop-coding-tool-availability");
+  },
+  discoverAgentHarness(
+    payload: AgentHarnessDiscoveryRequest,
+  ): Promise<AgentHarnessDiscoveryResult> {
+    return ipcRenderer.invoke("devdeck:discover-agent-harness", payload);
   },
   openInTerminal(targetPath: string): Promise<void> {
     return ipcRenderer.invoke("devdeck:open-in-terminal", targetPath);

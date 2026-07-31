@@ -15,6 +15,10 @@ import { existsSync } from "fs";
 import path from "path";
 import { promisify } from "util";
 import type {
+  AgentHarnessDiscoveryRequest,
+  AgentHarnessDiscoveryResult,
+} from "../shared/agents";
+import type {
   GitHubRepositoryCandidate,
   WorkspaceSelection,
   WorkspaceSnapshot,
@@ -61,6 +65,7 @@ import {
   listOpenCodeSessions,
   renameOpenCodeSession,
 } from "./opencode-sessions";
+import { discoverAgentHarness } from "./agent-harness";
 import { registerPtyIpc } from "./pty";
 import { generateAICompletion, getPullRequestDiff } from "./ai-service";
 import { initializeMenubar, destroyMenubarTray, updateMenubarTray } from "./menubar";
@@ -591,6 +596,16 @@ ipcMain.handle("devdeck:open-in-opencode", async (_event, targetPath: string) =>
 ipcMain.handle("devdeck:get-desktop-coding-tool-availability", async () => {
   return getDesktopCodingToolAvailability();
 });
+
+ipcMain.handle(
+  "devdeck:discover-agent-harness",
+  async (
+    _event,
+    payload: AgentHarnessDiscoveryRequest,
+  ): Promise<AgentHarnessDiscoveryResult> => {
+    return discoverAgentHarness(payload);
+  },
+);
 
 ipcMain.handle("devdeck:list-opencode-sessions", async () => {
   if (!(await isOpenCodeCliAvailable())) {

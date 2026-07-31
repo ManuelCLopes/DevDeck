@@ -5,6 +5,10 @@ import type {
   WorkspaceSnapshot,
 } from "@shared/workspace";
 import type {
+  AgentHarnessDiscoveryRequest,
+  AgentHarnessDiscoveryResult,
+} from "@shared/agents";
+import type {
   CreateGitWorktreeSessionResult,
   DevSessionOperationalSnapshot,
   InspectDevSessionRequest,
@@ -46,6 +50,9 @@ interface DevDeckDesktopApi {
     opencode: { available: boolean; reason: string | null };
     vscode: { available: boolean; reason: string | null };
   }>;
+  discoverAgentHarness(
+    payload: AgentHarnessDiscoveryRequest,
+  ): Promise<AgentHarnessDiscoveryResult>;
   createGitWorktreeSession(payload: {
     baseRef: string;
     branchName: string;
