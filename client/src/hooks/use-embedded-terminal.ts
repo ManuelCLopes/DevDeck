@@ -384,12 +384,6 @@ export function useEmbeddedTerminal(
   }, [options]);
 
   useEffect(() => {
-    console.log("useEmbeddedTerminal useEffect TRIGGERED:", {
-      cwd: options.cwd,
-      command: options.command,
-      args: options.args,
-      persistenceKey: options.persistenceKey,
-    });
     const desktopApi = getDesktopApi();
     const container = containerRef.current;
 

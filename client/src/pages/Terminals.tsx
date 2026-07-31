@@ -594,20 +594,17 @@ export default function Terminals() {
   const ptyAvailabilityPending = ptyAvailability === null;
   const ptyBlocked = Boolean(ptyAvailability && !ptyAvailability.available);
   const sanitizedPanes = useMemo(() => {
-    console.log(`Terminals sanitizedPanes evaluation: ptyAvailabilityPending=${ptyAvailabilityPending}, codingToolLoading=${codingToolLoading}, opencodeAvailable=${codingToolAvailability.opencode.available}, panes=${JSON.stringify(panes)}`);
     if (ptyAvailabilityPending || codingToolLoading) {
       return normalizeTerminalPanes(panes).length > 0 ? normalizeTerminalPanes(panes) : initialPanes;
     }
 
-    const res = sanitizeUnavailableTerminalPanes(
+    return sanitizeUnavailableTerminalPanes(
       normalizeTerminalPanes(panes).length > 0 ? normalizeTerminalPanes(panes) : initialPanes,
       {
         availableCommands: ptyAvailability?.availableCommands ?? [],
         opencodeAvailable: codingToolAvailability.opencode.available,
       },
     );
-    console.log(`Terminals sanitizedPanes output: ${JSON.stringify(res)}`);
-    return res;
   }, [
     ptyAvailabilityPending,
     codingToolLoading,
@@ -619,10 +616,6 @@ export default function Terminals() {
 
   const isSessionRunningInAnyPane = useCallback(
     (sessionId: string) => {
-      console.log("Terminals isSessionRunningInAnyPane DEBUG:", {
-        sessionId,
-        sanitizedPanes,
-      });
       return sanitizedPanes.some(
         (pane) =>
           pane.command === "opencode" &&

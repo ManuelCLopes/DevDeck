@@ -6,6 +6,7 @@ import { promisify } from "util";
 import type { OpenCodeUsageRecord } from "../shared/opencode-usage";
 
 const execFileAsync = promisify(execFile);
+const OPENCODE_USAGE_RECORD_LIMIT = 5_000;
 
 interface OpenCodeUsageRow {
   cacheReadTokens?: unknown;
@@ -90,7 +91,10 @@ function parseModel(value: unknown) {
 }
 
 function buildSqliteUri(databasePath: string) {
-  return `file:${databasePath.replaceAll("?", "%3f").replaceAll("#", "%23")}?mode=ro`;
+  const encodedPath = encodeURI(databasePath)
+    .replaceAll("?", "%3F")
+    .replaceAll("#", "%23");
+  return `file:${encodedPath}?mode=ro`;
 }
 
 export function normalizeOpenCodeUsageRows(rows: OpenCodeUsageRow[]) {
@@ -166,12 +170,16 @@ export async function listOpenCodeUsageRecords() {
       tokens_cache_write > 0 or
       cost > 0
     order by time_updated desc
+    limit ${OPENCODE_USAGE_RECORD_LIMIT}
   `;
-  const { stdout } = await execFileAsync("sqlite3", [
-    "-json",
-    buildSqliteUri(databasePath),
-    query,
-  ]);
+  const { stdout } = await execFileAsync(
+    "sqlite3",
+    ["-json", buildSqliteUri(databasePath), query],
+    {
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 5_000,
+    },
+  );
   const rows = JSON.parse(stdout || "[]") as OpenCodeUsageRow[];
   return normalizeOpenCodeUsageRows(rows);
 }

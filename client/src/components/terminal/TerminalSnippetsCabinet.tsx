@@ -105,19 +105,29 @@ const DEFAULT_SNIPPETS: Snippet[] = [
   },
   {
     id: "cleanup-deps",
-    label: "Reinstall Dependencies",
-    command: "rm -rf node_modules package-lock.json && npm install",
+    label: "Install Dependencies",
+    command: "npm install",
     category: "cleanup",
-    description: "Cleans cached dependencies and does a fresh install.",
+    description: "Installs dependencies without deleting local dependency state.",
   },
   {
     id: "git-clean",
-    label: "Force Git Clean",
-    command: "git clean -fdx",
+    label: "Preview Git Clean",
+    command: "git clean -ndx",
     category: "cleanup",
-    description: "Removes all untracked files and ignored build assets.",
+    description: "Shows untracked and ignored files that would be removed.",
   },
 ];
+
+function isPotentiallyDestructiveCommand(command: string) {
+  return [
+    /\brm\s+-[^\n]*r/,
+    /\bgit\s+clean\s+-[^ \n]*f/,
+    /\bgit\s+reset\s+--hard\b/,
+    /\bgit\s+checkout\s+--\b/,
+    /\bsudo\b/,
+  ].some((pattern) => pattern.test(command));
+}
 
 interface TerminalSnippetsCabinetProps {
   open: boolean;
@@ -294,6 +304,15 @@ export default function TerminalSnippetsCabinet({
         description: `Please specify a value for: ${missing.join(", ")}`,
         variant: "destructive",
       });
+      return;
+    }
+
+    if (
+      isPotentiallyDestructiveCommand(compiledCommand) &&
+      !window.confirm(
+        "This snippet appears to run a destructive command. Execute it in the active terminal?",
+      )
+    ) {
       return;
     }
 
