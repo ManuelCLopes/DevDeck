@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   buildAgentLaunchSummary,
   buildAgentRunEnvironment,
+  haveAgentRunLinksChanged,
+  linkAgentRunsToOpenCodeUsageRecords,
   normalizeAgentRuns,
   sortAgentRuns,
   summarizeAgentRunsByStatus,
@@ -108,6 +110,36 @@ test("summarizeAgentRunsByStatus counts each run state", () => {
   assert.equal(summary.blocked, 1);
   assert.equal(summary.completed, 1);
   assert.equal(summary.failed, 0);
+});
+
+test("linkAgentRunsToOpenCodeUsageRecords persists matched OpenCode session ids", () => {
+  const linkedRuns = linkAgentRunsToOpenCodeUsageRecords(
+    [run],
+    [
+      {
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        cost: 0,
+        createdAt: "2026-08-01T10:00:00.000Z",
+        directory: "/tmp/repo-feature",
+        inputTokens: 100,
+        model: "big-pickle",
+        opencodeAgent: "build",
+        outputTokens: 10,
+        projectId: "global",
+        provider: "opencode",
+        reasoningTokens: 0,
+        sessionId: "ses_real",
+        title: "Track usage",
+        totalTokens: 110,
+        updatedAt: "2026-08-01T10:01:00.000Z",
+      },
+    ],
+  );
+
+  assert.equal(linkedRuns[0]?.opencodeSessionId, "ses_real");
+  assert.equal(haveAgentRunLinksChanged([run], linkedRuns), true);
+  assert.equal(haveAgentRunLinksChanged(linkedRuns, linkedRuns), false);
 });
 
 test("buildAgentRunEnvironment exports agent and workflow identifiers", () => {

@@ -1,5 +1,6 @@
 import type { AgentRun, TokenUsageEvent } from "@shared/agents";
 import type { OpenCodeUsageRecord } from "@shared/opencode-usage";
+import { findAgentRunForOpenCodeUsage } from "@/lib/agent-runs";
 
 export const TOKEN_USAGE_EVENTS_STORAGE_KEY = "devdeck:token-usage-events";
 
@@ -170,51 +171,6 @@ export function getTokenUsageSummaryTotal(summaries: TokenUsageSummary[]) {
       toolCallTokens: 0,
       totalTokens: 0,
     },
-  );
-}
-
-function normalizePath(value: string | null | undefined) {
-  return value?.replace(/\/+$/, "") ?? null;
-}
-
-function findAgentRunForOpenCodeUsage(
-  record: OpenCodeUsageRecord,
-  agentRuns: AgentRun[],
-) {
-  const directMatch = agentRuns.find(
-    (run) => run.opencodeSessionId === record.sessionId,
-  );
-  if (directMatch) {
-    return directMatch;
-  }
-
-  const recordDirectory = normalizePath(record.directory);
-  if (!recordDirectory) {
-    return null;
-  }
-
-  const candidateRuns = agentRuns.filter(
-    (run) => normalizePath(run.worktreePath) === recordDirectory,
-  );
-  if (candidateRuns.length === 0) {
-    return null;
-  }
-
-  const recordTime = record.updatedAt
-    ? new Date(record.updatedAt).getTime()
-    : Date.now();
-  return (
-    candidateRuns
-      .filter((run) => new Date(run.startedAt).getTime() <= recordTime)
-      .sort(
-        (left, right) =>
-          new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime(),
-      )[0] ??
-    candidateRuns.sort(
-      (left, right) =>
-        new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime(),
-    )[0] ??
-    null
   );
 }
 

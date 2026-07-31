@@ -19,6 +19,8 @@ import { useCodingTool } from "@/hooks/use-coding-tool";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import {
   AGENT_RUNS_STORAGE_KEY,
+  haveAgentRunLinksChanged,
+  linkAgentRunsToOpenCodeUsageRecords,
   normalizeAgentRuns,
   summarizeAgentRunsByStatus,
   updateAgentRunStatus,
@@ -471,10 +473,16 @@ export default function Agents() {
           return;
         }
 
-        const events = buildTokenUsageEventsFromOpenCodeRecords(
+        const normalizedRuns = normalizeAgentRuns(agentRuns);
+        const linkedRuns = linkAgentRunsToOpenCodeUsageRecords(
+          normalizedRuns,
           records,
-          normalizeAgentRuns(agentRuns),
         );
+        if (haveAgentRunLinksChanged(normalizedRuns, linkedRuns)) {
+          setAgentRuns(linkedRuns);
+        }
+
+        const events = buildTokenUsageEventsFromOpenCodeRecords(records, linkedRuns);
         if (events.length > 0) {
           setTokenUsageEvents((currentEvents) =>
             mergeTokenUsageEvents(currentEvents, events).slice(0, 10_000),
@@ -495,7 +503,7 @@ export default function Agents() {
     return () => {
       cancelled = true;
     };
-  }, [agentRuns, desktopApi, setTokenUsageEvents]);
+  }, [agentRuns, desktopApi, setAgentRuns, setTokenUsageEvents]);
 
   const handleRevealSource = async (sourcePath: string) => {
     try {
