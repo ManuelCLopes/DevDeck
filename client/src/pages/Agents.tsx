@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Bot,
@@ -26,7 +26,9 @@ import {
 import { getDesktopApi } from "@/lib/desktop";
 import {
   TOKEN_USAGE_EVENTS_STORAGE_KEY,
+  buildTokenUsageEventsFromOpenCodeRecords,
   getTokenUsageSummaryTotal,
+  mergeTokenUsageEvents,
   normalizeTokenUsageEvents,
   summarizeTokenUsageByAgent,
   type TokenUsageSummary,
@@ -361,7 +363,7 @@ export default function Agents() {
       deserialize: (value) => normalizeAgentRuns(JSON.parse(value)),
     },
   );
-  const [tokenUsageEvents] = usePersistentState<TokenUsageEvent[]>(
+  const [tokenUsageEvents, setTokenUsageEvents] = usePersistentState<TokenUsageEvent[]>(
     TOKEN_USAGE_EVENTS_STORAGE_KEY,
     [],
     {
@@ -370,6 +372,8 @@ export default function Agents() {
   );
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [usageIngestionError, setUsageIngestionError] = useState<string | null>(null);
+  const [usageSyncedAt, setUsageSyncedAt] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
 
   const agents = data?.agents ?? [];
@@ -453,6 +457,45 @@ export default function Agents() {
       }),
     [agents, normalizedQuery, projectFilter],
   );
+
+  useEffect(() => {
+    if (!desktopApi?.listOpenCodeUsageRecords) {
+      return;
+    }
+
+    let cancelled = false;
+    void desktopApi
+      .listOpenCodeUsageRecords()
+      .then((records) => {
+        if (cancelled) {
+          return;
+        }
+
+        const events = buildTokenUsageEventsFromOpenCodeRecords(
+          records,
+          normalizeAgentRuns(agentRuns),
+        );
+        if (events.length > 0) {
+          setTokenUsageEvents((currentEvents) =>
+            mergeTokenUsageEvents(currentEvents, events).slice(0, 10_000),
+          );
+        }
+        setUsageIngestionError(null);
+        setUsageSyncedAt(new Date().toISOString());
+      })
+      .catch((nextError) => {
+        if (cancelled) {
+          return;
+        }
+        setUsageIngestionError(
+          nextError instanceof Error ? nextError.message : String(nextError),
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [agentRuns, desktopApi, setTokenUsageEvents]);
 
   const handleRevealSource = async (sourcePath: string) => {
     try {
@@ -665,9 +708,18 @@ export default function Agents() {
         </section>
 
         <section className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Token Usage by Agent</h2>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Token Usage by Agent</h2>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {usageIngestionError
+                ? `OpenCode sync failed: ${usageIngestionError}`
+                : usageSyncedAt
+                  ? `OpenCode usage synced ${new Date(usageSyncedAt).toLocaleTimeString()}`
+                  : "Waiting for OpenCode usage sync"}
+            </p>
           </div>
           {tokenUsageSummaries.length > 0 ? (
             <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
@@ -678,6 +730,7 @@ export default function Agents() {
                     <th className="px-3 py-2 font-semibold">Events</th>
                     <th className="px-3 py-2 font-semibold">Input</th>
                     <th className="px-3 py-2 font-semibold">Output</th>
+                    <th className="px-3 py-2 font-semibold">Reasoning</th>
                     <th className="px-3 py-2 font-semibold">Cache</th>
                     <th className="px-3 py-2 font-semibold">Tools</th>
                     <th className="px-3 py-2 font-semibold">Total</th>
@@ -700,6 +753,9 @@ export default function Agents() {
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">
                           {formatTokenCount(summary.outputTokens)}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {formatTokenCount(summary.reasoningTokens)}
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">
                           {formatTokenCount(summary.cacheReadTokens + summary.cacheWriteTokens)}

@@ -1,4 +1,5 @@
-import type { TokenUsageEvent } from "@shared/agents";
+import type { AgentRun, TokenUsageEvent } from "@shared/agents";
+import type { OpenCodeUsageRecord } from "@shared/opencode-usage";
 
 export const TOKEN_USAGE_EVENTS_STORAGE_KEY = "devdeck:token-usage-events";
 
@@ -11,6 +12,7 @@ export interface TokenUsageSummary {
   inputTokens: number;
   lastUsedAt: string | null;
   outputTokens: number;
+  reasoningTokens: number;
   toolCallTokens: number;
   totalTokens: number;
 }
@@ -61,6 +63,7 @@ export function getTokenUsageTotal(event: TokenUsageEvent) {
   return (
     event.inputTokens +
     event.outputTokens +
+    event.reasoningTokens +
     event.cacheReadTokens +
     event.cacheWriteTokens +
     event.toolCallTokens
@@ -90,6 +93,7 @@ export function normalizeTokenUsageEvents(rawValue: unknown): TokenUsageEvent[] 
       outputTokens: normalizeNumber(value.outputTokens),
       projectId: normalizeString(value.projectId),
       provider: normalizeString(value.provider),
+      reasoningTokens: normalizeNumber(value.reasoningTokens),
       toolCallTokens: normalizeNumber(value.toolCallTokens),
       workflowRunId: normalizeString(value.workflowRunId),
     }));
@@ -105,6 +109,7 @@ function createEmptySummary(agentId: string | null): TokenUsageSummary {
     inputTokens: 0,
     lastUsedAt: null,
     outputTokens: 0,
+    reasoningTokens: 0,
     toolCallTokens: 0,
     totalTokens: 0,
   };
@@ -123,6 +128,7 @@ export function summarizeTokenUsageByAgent(events: TokenUsageEvent[]) {
     summary.eventCount += 1;
     summary.inputTokens += event.inputTokens;
     summary.outputTokens += event.outputTokens;
+    summary.reasoningTokens += event.reasoningTokens;
     summary.toolCallTokens += event.toolCallTokens;
     summary.totalTokens += getTokenUsageTotal(event);
     if (
@@ -149,6 +155,7 @@ export function getTokenUsageSummaryTotal(summaries: TokenUsageSummary[]) {
       eventCount: total.eventCount + summary.eventCount,
       inputTokens: total.inputTokens + summary.inputTokens,
       outputTokens: total.outputTokens + summary.outputTokens,
+      reasoningTokens: total.reasoningTokens + summary.reasoningTokens,
       toolCallTokens: total.toolCallTokens + summary.toolCallTokens,
       totalTokens: total.totalTokens + summary.totalTokens,
     }),
@@ -159,8 +166,99 @@ export function getTokenUsageSummaryTotal(summaries: TokenUsageSummary[]) {
       eventCount: 0,
       inputTokens: 0,
       outputTokens: 0,
+      reasoningTokens: 0,
       toolCallTokens: 0,
       totalTokens: 0,
     },
+  );
+}
+
+function normalizePath(value: string | null | undefined) {
+  return value?.replace(/\/+$/, "") ?? null;
+}
+
+function findAgentRunForOpenCodeUsage(
+  record: OpenCodeUsageRecord,
+  agentRuns: AgentRun[],
+) {
+  const directMatch = agentRuns.find(
+    (run) => run.opencodeSessionId === record.sessionId,
+  );
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const recordDirectory = normalizePath(record.directory);
+  if (!recordDirectory) {
+    return null;
+  }
+
+  const candidateRuns = agentRuns.filter(
+    (run) => normalizePath(run.worktreePath) === recordDirectory,
+  );
+  if (candidateRuns.length === 0) {
+    return null;
+  }
+
+  const recordTime = record.updatedAt
+    ? new Date(record.updatedAt).getTime()
+    : Date.now();
+  return (
+    candidateRuns
+      .filter((run) => new Date(run.startedAt).getTime() <= recordTime)
+      .sort(
+        (left, right) =>
+          new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime(),
+      )[0] ??
+    candidateRuns.sort(
+      (left, right) =>
+        new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime(),
+    )[0] ??
+    null
+  );
+}
+
+export function buildTokenUsageEventsFromOpenCodeRecords(
+  records: OpenCodeUsageRecord[],
+  agentRuns: AgentRun[],
+) {
+  return records.map((record) => {
+    const matchingRun = findAgentRunForOpenCodeUsage(record, agentRuns);
+    return {
+      agentId: matchingRun?.agentId ?? null,
+      agentRunId: matchingRun?.id ?? null,
+      cacheReadTokens: record.cacheReadTokens,
+      cacheWriteTokens: record.cacheWriteTokens,
+      createdAt: record.updatedAt ?? record.createdAt ?? new Date().toISOString(),
+      estimatedCost: record.cost,
+      id: `opencode:${record.sessionId}`,
+      inputTokens: record.inputTokens,
+      model: record.model,
+      outputTokens: record.outputTokens,
+      projectId: matchingRun?.projectId ?? null,
+      provider: record.provider,
+      reasoningTokens: record.reasoningTokens,
+      toolCallTokens: 0,
+      workflowRunId: matchingRun?.workflowRunId ?? null,
+    } satisfies TokenUsageEvent;
+  });
+}
+
+export function mergeTokenUsageEvents(
+  currentEvents: TokenUsageEvent[],
+  incomingEvents: TokenUsageEvent[],
+) {
+  const eventsById = new Map<string, TokenUsageEvent>();
+
+  for (const event of normalizeTokenUsageEvents(currentEvents)) {
+    eventsById.set(event.id, event);
+  }
+  for (const event of normalizeTokenUsageEvents(incomingEvents)) {
+    eventsById.set(event.id, event);
+  }
+
+  return Array.from(eventsById.values()).sort(
+    (left, right) =>
+      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
   );
 }

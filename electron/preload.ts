@@ -15,6 +15,7 @@ import type {
   InspectDevSessionRequest,
 } from "../shared/sessions";
 import type { OpenCodeSessionRecord } from "../shared/opencode-sessions";
+import type { OpenCodeUsageRecord } from "../shared/opencode-usage";
 import type {
   PtyAvailability,
   SpawnPtyRequest,
@@ -167,6 +168,9 @@ const devdeck = {
   },
   listOpenCodeSessions(): Promise<OpenCodeSessionRecord[]> {
     return ipcRenderer.invoke("devdeck:list-opencode-sessions");
+  },
+  listOpenCodeUsageRecords(): Promise<OpenCodeUsageRecord[]> {
+    return ipcRenderer.invoke("devdeck:list-opencode-usage-records");
   },
   pollGitHubDeviceAuth(deviceCode: string) {
     return ipcRenderer.invoke("devdeck:poll-github-device-auth", deviceCode);

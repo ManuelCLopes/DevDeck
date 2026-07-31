@@ -65,6 +65,7 @@ import {
   listOpenCodeSessions,
   renameOpenCodeSession,
 } from "./opencode-sessions";
+import { listOpenCodeUsageRecords } from "./opencode-usage";
 import { discoverAgentHarness } from "./agent-harness";
 import { registerPtyIpc } from "./pty";
 import { generateAICompletion, getPullRequestDiff } from "./ai-service";
@@ -613,6 +614,14 @@ ipcMain.handle("devdeck:list-opencode-sessions", async () => {
   }
 
   return listOpenCodeSessions();
+});
+
+ipcMain.handle("devdeck:list-opencode-usage-records", async () => {
+  if (!(await isOpenCodeCliAvailable())) {
+    return [];
+  }
+
+  return listOpenCodeUsageRecords();
 });
 
 ipcMain.handle(

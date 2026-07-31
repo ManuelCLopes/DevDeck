@@ -78,6 +78,7 @@ export interface TokenUsageEvent {
   outputTokens: number;
   projectId: string | null;
   provider: string | null;
+  reasoningTokens: number;
   toolCallTokens: number;
   workflowRunId: string | null;
 }

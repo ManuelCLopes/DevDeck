@@ -14,6 +14,7 @@ import type {
   InspectDevSessionRequest,
 } from "@shared/sessions";
 import type { OpenCodeSessionRecord } from "@shared/opencode-sessions";
+import type { OpenCodeUsageRecord } from "@shared/opencode-usage";
 import type {
   PtyAvailability,
   PtyDataPayload,
@@ -84,6 +85,7 @@ interface DevDeckDesktopApi {
   openInOpencode(targetPath: string): Promise<void>;
   openInTerminal(targetPath: string): Promise<void>;
   listOpenCodeSessions(): Promise<OpenCodeSessionRecord[]>;
+  listOpenCodeUsageRecords(): Promise<OpenCodeUsageRecord[]>;
   pickWorkspaceDirectory(): Promise<WorkspaceDiscoveryResult | null>;
   requestPullRequestReviewers(payload: {
     pullRequestNumber: number;
