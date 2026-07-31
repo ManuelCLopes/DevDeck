@@ -10,7 +10,6 @@ import {
   ShieldCheck,
   Sparkles,
   Workflow,
-  Wrench,
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -18,6 +17,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useAgentHarness } from "@/hooks/use-agent-harness";
 import { useCodingTool } from "@/hooks/use-coding-tool";
 import { usePersistentState } from "@/hooks/use-persistent-state";
+import {
+  AGENT_RUNS_STORAGE_KEY,
+  normalizeAgentRuns,
+  summarizeAgentRunsByStatus,
+  updateAgentRunStatus,
+} from "@/lib/agent-runs";
 import { getDesktopApi } from "@/lib/desktop";
 import {
   TOKEN_USAGE_EVENTS_STORAGE_KEY,
@@ -29,6 +34,8 @@ import {
 import { cn } from "@/lib/utils";
 import type {
   AgentDefinition,
+  AgentRun,
+  AgentRunStatus,
   TokenUsageEvent,
   WorkflowDefinition,
 } from "@shared/agents";
@@ -72,6 +79,19 @@ function formatEstimatedCost(cost: number) {
 
 function getProjectLabel(projectName: string | null) {
   return projectName ?? "Workspace";
+}
+
+function getRunStatusClassName(status: AgentRunStatus) {
+  if (status === "active") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200";
+  }
+  if (status === "blocked" || status === "failed") {
+    return "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-200";
+  }
+  if (status === "paused") {
+    return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200";
+  }
+  return "border-black/10 bg-white/70 text-muted-foreground dark:border-white/10 dark:bg-white/5";
 }
 
 function uniqueValues(values: Array<string | null>) {
@@ -258,11 +278,89 @@ function WorkflowRow({ workflow }: { workflow: WorkflowDefinition }) {
   );
 }
 
+function AgentRunRow({
+  agents,
+  onStatusChange,
+  run,
+  workflows,
+}: {
+  agents: AgentDefinition[];
+  onStatusChange: (runId: string, status: AgentRunStatus) => void;
+  run: AgentRun;
+  workflows: WorkflowDefinition[];
+}) {
+  const agent = run.agentId
+    ? agents.find((candidate) => candidate.id === run.agentId)
+    : null;
+  const workflow = run.workflowRunId
+    ? workflows.find((candidate) => candidate.id === run.workflowRunId)
+    : null;
+
+  return (
+    <div className="rounded-lg border border-black/10 bg-white/70 p-3 dark:border-white/10 dark:bg-white/5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-sm font-semibold text-foreground">{run.taskTitle}</p>
+            <span
+              className={cn(
+                "rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase",
+                getRunStatusClassName(run.status),
+              )}
+            >
+              {run.status}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {agent?.name ?? "Unassigned"} · {workflow?.name ?? "No workflow"}
+          </p>
+          <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
+            {run.branchName ?? "No branch"} · {run.worktreePath ?? "No worktree path"}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {(["active", "blocked", "paused", "completed"] as AgentRunStatus[]).map(
+            (status) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => onStatusChange(run.id, status)}
+                className={cn(
+                  "rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
+                  run.status === status
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-black/10 bg-white text-muted-foreground hover:text-foreground dark:border-white/10 dark:bg-background",
+                )}
+              >
+                {status}
+              </button>
+            ),
+          )}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
+        <AgentPill>{run.startedAt.slice(0, 10)}</AgentPill>
+        <AgentPill>
+          {run.tokenBudget ? `${run.tokenBudget.toLocaleString()} budget` : "No budget"}
+        </AgentPill>
+        {run.terminalPaneId ? <AgentPill>{run.terminalPaneId}</AgentPill> : null}
+      </div>
+    </div>
+  );
+}
+
 export default function Agents() {
   const desktopApi = getDesktopApi();
   const { toast } = useToast();
   const { openPreferredTool, preferredToolShortLabel } = useCodingTool();
   const { data, error, isFetching, isLoading, refetch } = useAgentHarness();
+  const [agentRuns, setAgentRuns] = usePersistentState<AgentRun[]>(
+    AGENT_RUNS_STORAGE_KEY,
+    [],
+    {
+      deserialize: (value) => normalizeAgentRuns(JSON.parse(value)),
+    },
+  );
   const [tokenUsageEvents] = usePersistentState<TokenUsageEvent[]>(
     TOKEN_USAGE_EVENTS_STORAGE_KEY,
     [],
@@ -272,11 +370,41 @@ export default function Agents() {
   );
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>("all");
+  const normalizedQuery = query.trim().toLowerCase();
 
   const agents = data?.agents ?? [];
   const workflows = data?.workflows ?? [];
   const sources = data?.sources ?? [];
   const sourceErrors = sources.filter((source) => source.errors.length > 0);
+  const runStatusSummary = useMemo(
+    () => summarizeAgentRunsByStatus(agentRuns),
+    [agentRuns],
+  );
+  const visibleAgentRuns = useMemo(
+    () =>
+      agentRuns
+        .filter((run) => {
+          const matchesProject =
+            projectFilter === "all" ||
+            agents.find((agent) => agent.id === run.agentId)?.projectName === projectFilter;
+          const matchesQuery =
+            normalizedQuery.length === 0 ||
+            [
+              run.taskTitle,
+              run.branchName ?? "",
+              run.worktreePath ?? "",
+              run.status,
+              agents.find((agent) => agent.id === run.agentId)?.name ?? "",
+            ]
+              .join(" ")
+              .toLowerCase()
+              .includes(normalizedQuery);
+
+          return matchesProject && matchesQuery;
+        })
+        .slice(0, 8),
+    [agentRuns, agents, normalizedQuery, projectFilter],
+  );
   const tokenUsageSummaries = useMemo(
     () => summarizeTokenUsageByAgent(tokenUsageEvents),
     [tokenUsageEvents],
@@ -299,7 +427,6 @@ export default function Agents() {
     () => uniqueValues(agents.map((agent) => agent.projectName)),
     [agents],
   );
-  const normalizedQuery = query.trim().toLowerCase();
 
   const filteredAgents = useMemo(
     () =>
@@ -365,6 +492,12 @@ export default function Agents() {
     }
   };
 
+  const handleRunStatusChange = (runId: string, status: AgentRunStatus) => {
+    setAgentRuns((currentRuns) =>
+      updateAgentRunStatus(normalizeAgentRuns(currentRuns), runId, status),
+    );
+  };
+
   return (
     <AppLayout>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -395,12 +528,12 @@ export default function Agents() {
           </div>
         </div>
 
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           {[
             { label: "Agents", value: agents.length, icon: Bot },
-            { label: "Sources", value: sources.length, icon: FileText },
+            { label: "Active Runs", value: runStatusSummary.active, icon: Sparkles },
+            { label: "Blocked", value: runStatusSummary.blocked, icon: AlertTriangle },
             { label: "Workflows", value: workflows.length, icon: Workflow },
-            { label: "Usage Events", value: tokenUsageTotal.eventCount, icon: Wrench },
             {
               label: "Tokens Used",
               value: formatTokenCount(tokenUsageTotal.totalTokens),
@@ -506,6 +639,30 @@ export default function Agents() {
             ))}
           </section>
         )}
+
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Workflow className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">Agent Runs</h2>
+          </div>
+          {visibleAgentRuns.length > 0 ? (
+            <div className="space-y-2">
+              {visibleAgentRuns.map((run) => (
+                <AgentRunRow
+                  key={run.id}
+                  agents={agents}
+                  workflows={workflows}
+                  run={run}
+                  onStatusChange={handleRunStatusChange}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-black/10 p-5 text-sm text-muted-foreground dark:border-white/10">
+              No agent runs have been recorded yet. Launch OpenCode from Terminals with an agent selected to populate this history.
+            </div>
+          )}
+        </section>
 
         <section className="space-y-3">
           <div className="flex items-center gap-2">

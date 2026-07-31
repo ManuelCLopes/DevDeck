@@ -5,6 +5,8 @@ import {
   buildAgentRunEnvironment,
   normalizeAgentRuns,
   sortAgentRuns,
+  summarizeAgentRunsByStatus,
+  updateAgentRunStatus,
 } from "./agent-runs";
 import type { AgentDefinition, AgentRun, WorkflowDefinition } from "@shared/agents";
 
@@ -81,6 +83,31 @@ test("sortAgentRuns orders newest first", () => {
     runs.map((candidate) => candidate.id),
     ["new", "old"],
   );
+});
+
+test("updateAgentRunStatus marks terminal states with an end time", () => {
+  const runs = updateAgentRunStatus(
+    [run],
+    "run-1",
+    "completed",
+    "2026-08-01T12:00:00.000Z",
+  );
+
+  assert.equal(runs[0]?.status, "completed");
+  assert.equal(runs[0]?.endedAt, "2026-08-01T12:00:00.000Z");
+});
+
+test("summarizeAgentRunsByStatus counts each run state", () => {
+  const summary = summarizeAgentRunsByStatus([
+    run,
+    { ...run, id: "run-2", status: "blocked" },
+    { ...run, id: "run-3", status: "completed" },
+  ]);
+
+  assert.equal(summary.active, 1);
+  assert.equal(summary.blocked, 1);
+  assert.equal(summary.completed, 1);
+  assert.equal(summary.failed, 0);
 });
 
 test("buildAgentRunEnvironment exports agent and workflow identifiers", () => {

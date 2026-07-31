@@ -72,6 +72,46 @@ export function sortAgentRuns(runs: AgentRun[]) {
   );
 }
 
+export function updateAgentRunStatus(
+  runs: AgentRun[],
+  runId: string,
+  status: AgentRunStatus,
+  endedAt = new Date().toISOString(),
+) {
+  return sortAgentRuns(
+    runs.map((run) =>
+      run.id === runId
+        ? {
+            ...run,
+            endedAt:
+              status === "completed" || status === "failed"
+                ? endedAt
+                : status === "active"
+                  ? null
+                  : run.endedAt,
+            status,
+          }
+        : run,
+    ),
+  );
+}
+
+export function summarizeAgentRunsByStatus(runs: AgentRun[]) {
+  return runs.reduce(
+    (summary, run) => ({
+      ...summary,
+      [run.status]: summary[run.status] + 1,
+    }),
+    {
+      active: 0,
+      blocked: 0,
+      completed: 0,
+      failed: 0,
+      paused: 0,
+    } satisfies Record<AgentRunStatus, number>,
+  );
+}
+
 export function buildAgentRunEnvironment(options: {
   agent: AgentDefinition | null;
   run: AgentRun;
