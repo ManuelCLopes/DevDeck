@@ -84,13 +84,13 @@ When you first open DevDeck:
 2. Optionally choose the repositories you want DevDeck to focus on from GitHub
 3. Choose the local clone folder that contains those repositories
 4. If DevDeck finds multiple repositories, select which ones to monitor
-4. Launch the app into the main dashboard
+5. Launch the app into the main dashboard
 
 From there you can use:
 
 - `Overview` to see repository health, branch counts, and recent workspace signals
 - `Pull Requests` to inspect live GitHub pull requests plus local review signals
-- `Repositories` to browse tracked repositories and inspect their details
+- `Projects` to browse tracked projects, inspect their local Git context, and start agent-aware OpenCode work
 - `Activity Inbox` to review recent local Git activity
 - `Preferences` to revisit onboarding and toggle local behavior settings
 
@@ -186,11 +186,17 @@ Repository secrets expected by that workflow:
 
 If you want to contribute, start here:
 
+- [docs/README.md](docs/README.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)
+- [docs/API.md](docs/API.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - [SECURITY.md](SECURITY.md)
 - [LICENSE](LICENSE)
 - [RELEASING.md](RELEASING.md)
+
+For agents working in the codebase, start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). It explains the Electron/renderer/shared boundaries, the agent harness and telemetry flow, and the files to update when changing cross-process contracts.
 
 ## Type check
 
