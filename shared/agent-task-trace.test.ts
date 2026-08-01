@@ -4,6 +4,7 @@ import {
   DEVDECK_TRACE_DIRECTORY,
   buildAgentRunTracePath,
   buildAgentRunHandoffSteps,
+  buildTaskTraceAppendCommandText,
   buildTaskTraceContractText,
   getTaskTraceEntriesForRun,
   parseTaskTraceImportPayload,
@@ -204,6 +205,39 @@ test("buildTaskTraceContractText includes env var instructions and import JSON",
   assert.match(contract, /DEVDECK_TRACE_PATH/);
   assert.match(contract, new RegExp(DEVDECK_TRACE_DIRECTORY));
   assert.match(contract, /"taskTraceEntries"/);
+});
+
+test("buildTaskTraceAppendCommandText creates a JSONL append command for a trace path", () => {
+  const command = buildTaskTraceAppendCommandText({
+    runId: "run-1",
+    tracePath: "/tmp/alpha's/.devdeck/traces/run-1.jsonl",
+  });
+  const jsonLine = command
+    .split("\n")
+    .find((line) => line.startsWith("{"));
+
+  assert.match(command, /TRACE_PATH='\/tmp\/alpha'\\''s\/\.devdeck\/traces\/run-1\.jsonl'/);
+  assert.match(command, /cat <<'DEVDECK_TRACE_JSONL' >> "\$TRACE_PATH"/);
+  assert.ok(jsonLine);
+  assert.deepEqual(JSON.parse(jsonLine), {
+    agentRunId: "run-1",
+    commandsRun: ["npm test"],
+    errors: [],
+    filesTouched: ["client/src/pages/Agents.tsx"],
+    handoffTargetAgentId: null,
+    nextAction: "Continue implementation or hand off to the next agent.",
+    summary: "Describe what changed and why.",
+    testsRun: ["npm test"],
+  });
+});
+
+test("buildTaskTraceAppendCommandText can rely on DEVDECK_TRACE_PATH", () => {
+  const command = buildTaskTraceAppendCommandText({ runId: "run-1" });
+
+  assert.match(
+    command,
+    /TRACE_PATH="\$\{DEVDECK_TRACE_PATH:\?DEVDECK_TRACE_PATH is not set\}"/,
+  );
 });
 
 test("buildAgentRunTracePath creates a stable trace file path", () => {

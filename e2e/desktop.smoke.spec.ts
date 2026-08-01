@@ -417,6 +417,9 @@ test("agent productivity insights summarize persisted telemetry", async () => {
       page.getByRole("button", { name: "Copy Diagnostics" }),
     ).toBeVisible();
     await expect(
+      page.getByRole("button", { name: "Copy Trace Append Command" }),
+    ).toBeVisible();
+    await expect(
       page.getByRole("button", { name: "Copy Trace Contract" }),
     ).toBeVisible();
     await expect(page.getByText("Handoff Trace")).toBeVisible();

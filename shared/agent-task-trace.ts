@@ -167,6 +167,42 @@ export function buildTaskTraceImportTemplate(runId: string) {
   };
 }
 
+export function buildTaskTraceJsonlEntryTemplate(runId: string) {
+  return {
+    agentRunId: runId,
+    commandsRun: ["npm test"],
+    errors: [],
+    filesTouched: ["client/src/pages/Agents.tsx"],
+    handoffTargetAgentId: null,
+    nextAction: "Continue implementation or hand off to the next agent.",
+    summary: "Describe what changed and why.",
+    testsRun: ["npm test"],
+  };
+}
+
+function quotePosixShellValue(value: string) {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+export function buildTaskTraceAppendCommandText(options: {
+  runId: string;
+  tracePath?: string | null;
+}) {
+  const tracePath = options.tracePath?.trim();
+  const tracePathAssignment = tracePath
+    ? `TRACE_PATH=${quotePosixShellValue(tracePath)}`
+    : `TRACE_PATH="\${${DEVDECK_TRACE_PATH_ENV}:?${DEVDECK_TRACE_PATH_ENV} is not set}"`;
+  const jsonlEntry = JSON.stringify(buildTaskTraceJsonlEntryTemplate(options.runId));
+
+  return [
+    tracePathAssignment,
+    'mkdir -p "$(dirname "$TRACE_PATH")"',
+    "cat <<'DEVDECK_TRACE_JSONL' >> \"$TRACE_PATH\"",
+    jsonlEntry,
+    "DEVDECK_TRACE_JSONL",
+  ].join("\n");
+}
+
 export function buildTaskTraceContractText(options: {
   agent: AgentDefinition | null;
   run: AgentRun;

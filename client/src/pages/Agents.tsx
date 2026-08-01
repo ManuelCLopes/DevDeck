@@ -79,6 +79,7 @@ import {
   DEVDECK_TRACE_DIRECTORY,
   buildAgentRunTracePath,
   buildAgentRunHandoffSteps,
+  buildTaskTraceAppendCommandText,
   buildTaskTraceContractText,
   getTaskTraceEntriesForRun,
   mergeTaskTraceEntries,
@@ -1177,6 +1178,7 @@ function AgentRunDetail({
   handoffSteps,
   onCopyValue,
   onCopyDiagnostics,
+  onCopyTraceAppendCommand,
   onCopyTraceContract,
   onStartHandoff,
   onStatusChange,
@@ -1188,6 +1190,7 @@ function AgentRunDetail({
   agents: AgentDefinition[];
   handoffSteps: AgentRunHandoffStep[];
   onCopyDiagnostics: (runId: string) => void;
+  onCopyTraceAppendCommand: (runId: string) => void;
   onCopyTraceContract: (runId: string) => void;
   onCopyValue: (value: string, title: string) => void;
   onStartHandoff: (run: AgentRun, step: AgentRunHandoffStep) => void;
@@ -1466,6 +1469,16 @@ function AgentRunDetail({
       >
         <Copy className="h-3.5 w-3.5" />
         Copy Diagnostics
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-2 h-8 w-full gap-2 text-xs"
+        onClick={() => onCopyTraceAppendCommand(run.id)}
+      >
+        <Copy className="h-3.5 w-3.5" />
+        Copy Trace Append Command
       </Button>
       <Button
         type="button"
@@ -2015,6 +2028,22 @@ export default function Agents() {
     );
   };
 
+  const handleCopyTraceAppendCommand = async (runId: string) => {
+    const run = agentRuns.find((candidate) => candidate.id === runId) ?? null;
+    if (!run) {
+      return;
+    }
+
+    await handleCopyValue(
+      buildTaskTraceAppendCommandText({
+        runId: run.id,
+        tracePath: run.worktreePath ? buildAgentRunTracePath(run.worktreePath, run.id) : null,
+      }),
+      "Trace append command copied",
+      `${run.taskTitle} trace append command is on the clipboard`,
+    );
+  };
+
   const handleStartHandoff = (run: AgentRun, step: AgentRunHandoffStep) => {
     if (!step.agentId) {
       return;
@@ -2346,6 +2375,7 @@ export default function Agents() {
                 traceEntries={selectedRunTraceEntries}
                 usage={selectedRunUsage}
                 onCopyDiagnostics={handleCopyRunDiagnostics}
+                onCopyTraceAppendCommand={handleCopyTraceAppendCommand}
                 onCopyTraceContract={handleCopyTraceContract}
                 onCopyValue={handleCopyValue}
                 onStartHandoff={handleStartHandoff}
