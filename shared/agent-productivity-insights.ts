@@ -120,6 +120,18 @@ export interface AgentTelemetryGap {
   workflowName: string;
 }
 
+export interface AgentReworkSignal {
+  agentId: string | null;
+  agentName: string;
+  failedTraceCount: number;
+  latestTraceAt: string | null;
+  repeatedFileCount: number;
+  repeatedTestCount: number;
+  runId: string;
+  taskTitle: string;
+  traceCount: number;
+}
+
 export interface AgentProductivityInsights {
   agentSummaries: AgentProductivityAgentSummary[];
   budgetWarnings: AgentProductivityRunInsight[];
@@ -127,6 +139,7 @@ export interface AgentProductivityInsights {
   handoffRoles: AgentHandoffRoleSummary[];
   modelSummaries: AgentProductivityModelSummary[];
   projectSummaries: AgentProductivityProjectSummary[];
+  reworkSignals: AgentReworkSignal[];
   runInsights: AgentProductivityRunInsight[];
   telemetryGaps: AgentTelemetryGap[];
   totals: AgentProductivityTotals;
@@ -240,6 +253,15 @@ function getAverage(values: number[]) {
   }
 
   return Math.round(values.reduce((total, value) => total + value, 0) / values.length);
+}
+
+function countRepeatedValues(values: string[]) {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+
+  return Array.from(counts.values()).filter((count) => count > 1).length;
 }
 
 function getRunDurationMs(run: AgentRun, nowMs: number) {
@@ -433,6 +455,7 @@ export function buildAgentProductivityInsights(
   const agents = input.agents;
   const workflows = input.workflows;
   const agentRuns = normalizeAgentRuns(input.agentRuns);
+  const taskTraceEntries = normalizeTaskTraceEntries(input.taskTraceEntries ?? []);
   const tokenUsageEvents = normalizeTokenUsageEvents(input.tokenUsageEvents);
   const nowMs = input.now ? new Date(input.now).getTime() : Date.now();
   const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
@@ -459,6 +482,12 @@ export function buildAgentProductivityInsights(
   const runUsageById = new Map(
     agentRuns.map((run) => [run.id, summarizeRunUsage(tokenUsageEvents, run)]),
   );
+  const taskTraceEntriesByRunId = new Map<string, TaskTraceEntry[]>();
+  for (const entry of taskTraceEntries) {
+    const runEntries = taskTraceEntriesByRunId.get(entry.agentRunId) ?? [];
+    runEntries.push(entry);
+    taskTraceEntriesByRunId.set(entry.agentRunId, runEntries);
+  }
   const runInsights: AgentProductivityRunInsight[] = agentRuns.map((run) => {
     const agent = run.agentId ? agentsById.get(run.agentId) : undefined;
     const workflow = run.workflowRunId
@@ -516,6 +545,49 @@ export function buildAgentProductivityInsights(
   for (const event of tokenUsageEvents) {
     addEventToRollup(totals, event);
   }
+
+  const reworkSignals = runInsights
+    .map((runInsight): AgentReworkSignal | null => {
+      const traces = taskTraceEntriesByRunId.get(runInsight.run.id) ?? [];
+      const failedTraceCount = traces.filter((trace) => trace.errors.length > 0).length;
+      const repeatedFileCount = countRepeatedValues(
+        traces.flatMap((trace) => trace.filesTouched),
+      );
+      const repeatedTestCount = countRepeatedValues(
+        traces.flatMap((trace) => trace.testsRun),
+      );
+      if (
+        failedTraceCount === 0 &&
+        repeatedFileCount === 0 &&
+        repeatedTestCount === 0
+      ) {
+        return null;
+      }
+
+      return {
+        agentId: runInsight.agentId,
+        agentName: runInsight.agentName,
+        failedTraceCount,
+        latestTraceAt:
+          traces
+            .map((trace) => trace.createdAt)
+            .sort((left, right) => getTime(right) - getTime(left))[0] ?? null,
+        repeatedFileCount,
+        repeatedTestCount,
+        runId: runInsight.run.id,
+        taskTitle: runInsight.run.taskTitle,
+        traceCount: traces.length,
+      };
+    })
+    .filter((signal): signal is AgentReworkSignal => Boolean(signal))
+    .sort(
+      (left, right) =>
+        right.failedTraceCount - left.failedTraceCount ||
+        right.repeatedFileCount - left.repeatedFileCount ||
+        right.repeatedTestCount - left.repeatedTestCount ||
+        getTime(right.latestTraceAt) - getTime(left.latestTraceAt),
+    )
+    .slice(0, 8);
 
   for (const runInsight of runInsights) {
     statusCounts[runInsight.run.status] += 1;
@@ -833,6 +905,7 @@ export function buildAgentProductivityInsights(
         right.totalTokens - left.totalTokens ||
         left.projectName.localeCompare(right.projectName),
     ),
+    reworkSignals,
     runInsights,
     telemetryGaps: telemetryGaps
       .sort((left, right) => getTime(right.createdAt) - getTime(left.createdAt))

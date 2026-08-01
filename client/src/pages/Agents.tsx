@@ -71,6 +71,11 @@ import {
   type AgentProductivityRunInsight,
 } from "@/lib/agent-productivity-insights";
 import {
+  buildAgentHarnessQualityReport,
+  type AgentHarnessQualityIssue,
+  type AgentHarnessQualityReport,
+} from "@/lib/agent-harness-quality";
+import {
   DEVDECK_TRACE_DIRECTORY,
   buildAgentRunTracePath,
   buildAgentRunHandoffSteps,
@@ -238,6 +243,39 @@ function getHandoffStepTone(step: AgentRunHandoffStep) {
   return "neutral";
 }
 
+function getQualityIssueTone(issue: AgentHarnessQualityIssue) {
+  if (issue.severity === "critical") {
+    return "red";
+  }
+  if (issue.severity === "warning") {
+    return "amber";
+  }
+
+  return "blue";
+}
+
+function buildAgentBriefText(agent: AgentDefinition) {
+  return [
+    `Agent: ${agent.name}`,
+    `ID: ${agent.id}`,
+    `Project: ${getProjectLabel(agent.projectName)}`,
+    agent.description ? `Description: ${agent.description}` : null,
+    agent.responsibilities.length
+      ? `Responsibilities: ${agent.responsibilities.join("; ")}`
+      : null,
+    agent.boundaries.length ? `Boundaries: ${agent.boundaries.join("; ")}` : null,
+    agent.defaultTools.length ? `Tools: ${agent.defaultTools.join(", ")}` : null,
+    agent.defaultSkills.length ? `Skills: ${agent.defaultSkills.join(", ")}` : null,
+    agent.handoffTargets.length
+      ? `Handoff Targets: ${agent.handoffTargets.join(", ")}`
+      : null,
+    agent.tokenBudget ? `Token Budget: ${agent.tokenBudget}` : null,
+    `Source: ${agent.sourcePath}`,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
 function getProjectLabel(projectName: string | null) {
   return projectName ?? "Workspace";
 }
@@ -320,6 +358,83 @@ function EmptyInsight({ children }: { children: ReactNode }) {
   );
 }
 
+function HarnessQualitySection({
+  report,
+}: {
+  report: AgentHarnessQualityReport;
+}) {
+  const topIssues = report.issues.slice(0, 8);
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="h-4 w-4 text-primary" />
+        <h2 className="text-sm font-semibold text-foreground">Harness Quality</h2>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <InsightMetric
+          icon={Gauge}
+          label="Score"
+          value={report.score.toLocaleString()}
+          detail={`${report.issues.length} total issues`}
+        />
+        <InsightMetric
+          icon={AlertTriangle}
+          label="Critical"
+          value={report.criticalCount.toLocaleString()}
+          detail={`${report.warningCount} warnings`}
+        />
+        <InsightMetric
+          icon={Bot}
+          label="Agent Coverage"
+          value={`${report.agentCoverage.withResponsibilities}/${report.agentCoverage.totalAgents}`}
+          detail={`${report.agentCoverage.withToolsOrSkills} with tools or skills`}
+        />
+        <InsightMetric
+          icon={Workflow}
+          label="Verification"
+          value={formatPercent(report.workflowCoverage.verificationCoverageRate)}
+          detail={`${report.workflowCoverage.stepsWithVerification}/${report.workflowCoverage.totalSteps} steps`}
+        />
+      </div>
+
+      {topIssues.length > 0 ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          {topIssues.map((issue) => (
+            <div
+              key={`${issue.severity}:${issue.category}:${issue.entityLabel}:${issue.message}`}
+              className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-foreground">
+                    {issue.entityLabel}
+                  </p>
+                  <p className="mt-1 leading-5 text-muted-foreground">
+                    {issue.message}
+                  </p>
+                </div>
+                <AgentPill tone={getQualityIssueTone(issue)}>
+                  {issue.severity}
+                </AgentPill>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                <AgentPill>{issue.category}</AgentPill>
+                {issue.sourcePath ? (
+                  <AgentPill>{formatSourceName(issue.sourcePath)}</AgentPill>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyInsight>No harness quality issues detected.</EmptyInsight>
+      )}
+    </section>
+  );
+}
+
 function ProductivityInsightsSection({
   handoffHealth,
   insights,
@@ -331,6 +446,16 @@ function ProductivityInsightsSection({
   const topModels = insights.modelSummaries.slice(0, 5);
   const topProjects = insights.projectSummaries.slice(0, 5);
   const topHandoffRoles = insights.handoffRoles.slice(0, 5);
+  const topAgentCycleTimes = insights.agentSummaries
+    .filter((summary) => summary.runCount > 0)
+    .sort(
+      (left, right) =>
+        (right.averageDurationMs ?? 0) - (left.averageDurationMs ?? 0) ||
+        right.runCount - left.runCount ||
+        left.agentName.localeCompare(right.agentName),
+    )
+    .slice(0, 5);
+  const topReworkSignals = insights.reworkSignals.slice(0, 5);
 
   return (
     <section className="space-y-4">
@@ -448,6 +573,78 @@ function ProductivityInsightsSection({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Timer className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold text-foreground">Agent Cycle Time</h3>
+            </div>
+            {topAgentCycleTimes.length > 0 ? (
+              <div className="space-y-2">
+                {topAgentCycleTimes.map((agent) => (
+                  <div
+                    key={agent.agentId ?? "unassigned"}
+                    className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate font-semibold text-foreground">
+                        {agent.agentName}
+                      </p>
+                      <AgentPill>{formatDuration(agent.averageDurationMs)}</AgentPill>
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {agent.runCount} runs · {formatPercent(agent.completionRate)} completion
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyInsight>No agent cycle time yet.</EmptyInsight>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold text-foreground">Rework Signals</h3>
+            </div>
+            {topReworkSignals.length > 0 ? (
+              <div className="space-y-2">
+                {topReworkSignals.map((signal) => (
+                  <div
+                    key={signal.runId}
+                    className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
+                  >
+                    <p className="truncate font-semibold text-foreground">
+                      {signal.taskTitle}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {signal.failedTraceCount > 0 ? (
+                        <AgentPill tone="red">
+                          {`${signal.failedTraceCount} failed traces`}
+                        </AgentPill>
+                      ) : null}
+                      {signal.repeatedFileCount > 0 ? (
+                        <AgentPill tone="amber">
+                          {`${signal.repeatedFileCount} repeated files`}
+                        </AgentPill>
+                      ) : null}
+                      {signal.repeatedTestCount > 0 ? (
+                        <AgentPill tone="amber">
+                          {`${signal.repeatedTestCount} repeated tests`}
+                        </AgentPill>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {signal.agentName} · {signal.traceCount} traces
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyInsight>No rework signals detected.</EmptyInsight>
+            )}
+          </div>
+
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-primary" />
@@ -696,11 +893,13 @@ function ProductivityInsightsSection({
 
 function AgentCard({
   agent,
+  onCopyBrief,
   onOpenSource,
   onRevealSource,
   tokenUsage,
 }: {
   agent: AgentDefinition;
+  onCopyBrief: (agent: AgentDefinition) => void;
   onOpenSource: (sourcePath: string) => void;
   onRevealSource: (sourcePath: string) => void;
   tokenUsage: TokenUsageSummary | null;
@@ -725,6 +924,16 @@ function AgentCard({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => onCopyBrief(agent)}
+            title="Copy agent brief"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
           <Button
             type="button"
             variant="ghost"
@@ -1380,6 +1589,15 @@ export default function Agents() {
       }),
     [agents, agentRuns, taskTraceEntries, tokenUsageEvents, workflows],
   );
+  const harnessQualityReport = useMemo(
+    () =>
+      buildAgentHarnessQualityReport({
+        agents,
+        sources,
+        workflows,
+      }),
+    [agents, sources, workflows],
+  );
   const handoffHealth = useMemo(
     () =>
       summarizeWorkflowHandoffHealth({
@@ -1583,6 +1801,14 @@ export default function Agents() {
 
   const handleCopySourcePath = async (sourcePath: string) => {
     await handleCopyValue(sourcePath, "Source path copied");
+  };
+
+  const handleCopyAgentBrief = async (agent: AgentDefinition) => {
+    await handleCopyValue(
+      buildAgentBriefText(agent),
+      "Agent brief copied",
+      `${agent.name} brief is on the clipboard`,
+    );
   };
 
   const buildTelemetryExportPayload = async () => {
@@ -2037,6 +2263,8 @@ export default function Agents() {
           </section>
         ) : null}
 
+        <HarnessQualitySection report={harnessQualityReport} />
+
         <ProductivityInsightsSection
           handoffHealth={handoffHealth}
           insights={productivityInsights}
@@ -2060,6 +2288,7 @@ export default function Agents() {
               <AgentCard
                 key={`${agent.sourcePath}:${agent.id}`}
                 agent={agent}
+                onCopyBrief={handleCopyAgentBrief}
                 onOpenSource={handleOpenSource}
                 onRevealSource={handleRevealSource}
                 tokenUsage={tokenUsageByAgent.get(agent.id) ?? null}

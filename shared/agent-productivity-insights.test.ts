@@ -8,6 +8,7 @@ import {
 import type {
   AgentDefinition,
   AgentRun,
+  TaskTraceEntry,
   TokenUsageEvent,
   WorkflowDefinition,
 } from "./agents";
@@ -135,11 +136,33 @@ const reviewerUsage = {
   toolCallTokens: 0,
 } satisfies TokenUsageEvent;
 
+const failedTrace = {
+  agentRunId: "run-2",
+  commandsRun: ["npm test"],
+  createdAt: "2026-08-01T10:40:00.000Z",
+  errors: ["Tests failed"],
+  filesTouched: ["client/src/pages/Agents.tsx"],
+  handoffTargetAgentId: null,
+  id: "trace-1",
+  nextAction: "Fix tests",
+  summary: "Tests failed",
+  testsRun: ["npm test"],
+} satisfies TaskTraceEntry;
+
+const retryTrace = {
+  ...failedTrace,
+  createdAt: "2026-08-01T10:45:00.000Z",
+  errors: [],
+  id: "trace-2",
+  summary: "Retried tests",
+} satisfies TaskTraceEntry;
+
 test("buildAgentProductivityInsights rolls up runs, usage, budgets, gaps, and handoff roles", () => {
   const insights = buildAgentProductivityInsights({
     agents: [builder, reviewer],
     agentRuns: [completedRun, failedRun],
     now: "2026-08-01T12:00:00.000Z",
+    taskTraceEntries: [failedTrace, retryTrace],
     tokenUsageEvents: [
       builderUsage,
       reviewerUsage,
@@ -182,6 +205,10 @@ test("buildAgentProductivityInsights rolls up runs, usage, budgets, gaps, and ha
   assert.equal(insights.expensiveRuns[0]?.run.id, "run-2");
   assert.equal(insights.handoffRoles[0]?.agentName, "Builder Agent");
   assert.equal(insights.handoffRoles[0]?.firstRunCount, 2);
+  assert.equal(insights.reworkSignals[0]?.runId, "run-2");
+  assert.equal(insights.reworkSignals[0]?.failedTraceCount, 1);
+  assert.equal(insights.reworkSignals[0]?.repeatedFileCount, 1);
+  assert.equal(insights.reworkSignals[0]?.repeatedTestCount, 1);
   assert.ok(
     insights.telemetryGaps.some((gap) =>
       gap.issueLabels.includes("Unassigned token event"),

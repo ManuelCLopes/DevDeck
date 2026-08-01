@@ -304,6 +304,9 @@ test("agent registry imports harness definitions and tracking surfaces", async (
       page.getByRole("heading", { name: "Productivity Insights", exact: true }),
     ).toBeVisible();
     await expect(
+      page.getByRole("heading", { name: "Harness Quality", exact: true }),
+    ).toBeVisible();
+    await expect(
       page.getByRole("heading", { name: "Token Usage by Agent", exact: true }),
     ).toBeVisible();
     await expect(
@@ -400,6 +403,8 @@ test("agent productivity insights summarize persisted telemetry", async () => {
     await expect(insights).toContainText("Feature Build");
     await expect(insights).toContainText("openai / gpt-5-codex");
     await expect(insights).toContainText("Budget & Linking Attention");
+    await expect(insights).toContainText("Agent Cycle Time");
+    await expect(insights).toContainText("Rework Signals");
     await expect(insights).toContainText("Handoff Health");
     await expect(insights).toContainText("1 traces");
     await expect(insights).toContainText("Errors");
