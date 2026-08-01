@@ -336,9 +336,23 @@ test("terminal launcher exposes agent-aware OpenCode setup before launch", async
       `/terminals?launch=opencode&project=${encodeURIComponent(alphaProjectId!)}`,
     );
 
-    await expect(
-      page.locator("main").getByRole("heading", { name: "alpha", exact: true }),
-    ).toBeVisible();
+    try {
+      await expect(
+        page.locator("main").getByRole("heading", { name: "alpha", exact: true }),
+      ).toBeVisible();
+    } catch (error) {
+      const diagnostics = await page.evaluate(() => ({
+        bodyText: document.body.innerText.slice(0, 2400),
+        hash: window.location.hash,
+        headings: Array.from(document.querySelectorAll("h1,h2,h3"))
+          .map((heading) => heading.textContent?.trim())
+          .filter(Boolean),
+        href: window.location.href,
+        search: window.location.search,
+      }));
+      console.log("terminal-launch-smoke-diagnostics", JSON.stringify(diagnostics, null, 2));
+      throw error;
+    }
 
     await expect(page.getByText("Task Title", { exact: true })).toBeVisible();
     await expect(page.getByText("Workflow", { exact: true })).toBeVisible();
