@@ -210,7 +210,7 @@ export default function GitGraphCanvas({ repositoryPath }: GitGraphCanvasProps) 
       <div className="flex items-center justify-between px-4 py-3 border-b border-black/5 dark:border-white/5 bg-neutral-100/40 dark:bg-neutral-900/40 shrink-0">
         <div className="flex items-center gap-2">
           <GitBranch className="h-4 w-4 text-primary" />
-          <span className="text-xs font-bold text-foreground">Interactive Repository Commit Graph</span>
+          <span className="text-xs font-bold text-foreground">Interactive Project Commit Graph</span>
           <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
             Live local history
           </span>

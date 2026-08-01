@@ -205,7 +205,7 @@ export default function Activity() {
                 Your Activity
               </h2>
               <p className="text-sm text-muted-foreground">
-                Personal GitHub activity for the selected period. Local repository events stay available in the feed below.
+                Personal GitHub activity for the selected period. Local project events stay available in the feed below.
               </p>
             </div>
             <div className="flex items-center">
@@ -402,7 +402,7 @@ export default function Activity() {
               Local Activity Feed
             </h2>
             <p className="text-xs text-muted-foreground">
-              Recent local commits from the repositories currently monitored in DevDeck.
+              Recent local commits from the projects currently monitored in DevDeck.
             </p>
           </div>
         </div>

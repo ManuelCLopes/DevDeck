@@ -303,7 +303,7 @@ export default function AddProjectsDialog({
     }
 
     if (discoveredRepositoryCount > 1 && selectedProjectIds.length === 0) {
-      setSelectionError("Choose at least one repository to add.");
+      setSelectionError("Choose at least one project to add.");
       return;
     }
 
@@ -348,9 +348,9 @@ export default function AddProjectsDialog({
     >
       <DialogContent className="no-drag max-w-2xl p-0 overflow-hidden bg-white/95 backdrop-blur-2xl border-black/10">
         <DialogHeader className="px-6 pt-6 pb-0 text-left">
-          <DialogTitle className="text-xl">Add Repositories</DialogTitle>
+          <DialogTitle className="text-xl">Add Projects</DialogTitle>
           <DialogDescription>
-            Import more repositories into your current DevDeck workspace without leaving the page.
+            Add more local project folders to your current DevDeck workspace without leaving the page.
           </DialogDescription>
         </DialogHeader>
 
@@ -362,7 +362,7 @@ export default function AddProjectsDialog({
             </div>
 
             <p className="text-xs text-muted-foreground mb-4">
-              DevDeck scans the selected folder locally and lets you append the repositories you want to track.
+              DevDeck scans the selected folder locally and lets you append the projects you want to track.
             </p>
 
             <button
@@ -409,11 +409,11 @@ export default function AddProjectsDialog({
                     id="add-projects-collection"
                     value={collectionName}
                     onChange={(event) => setCollectionName(event.target.value)}
-                    placeholder="Personal Repositories"
+                    placeholder="Personal Projects"
                     className="bg-white"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Use collections to group related repositories together in the sidebar and settings.
+                    Use collections to group related projects together in the sidebar and settings.
                   </p>
                 </div>
               </div>
@@ -427,10 +427,10 @@ export default function AddProjectsDialog({
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Choose Repositories
+                        Choose Projects
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        DevDeck found multiple repositories inside {selectedDir}. Choose the ones you want to add.
+                        DevDeck found multiple Git projects inside {selectedDir}. Choose the ones you want to add.
                       </p>
                     </div>
                     <div className="flex items-center gap-2 text-[11px]">
@@ -483,7 +483,7 @@ export default function AddProjectsDialog({
                             <p className="text-xs text-muted-foreground mt-1">
                               {candidate.isRoot
                                 ? "This folder is itself a Git repository."
-                                : candidate.relativePath ?? "Repository discovered inside the selected workspace."}
+                                : candidate.relativePath ?? "Project discovered inside the selected workspace."}
                             </p>
                           </div>
                         </label>
@@ -494,19 +494,19 @@ export default function AddProjectsDialog({
               ) : discoveredRepositoryCount === 1 && selectedProjects[0] ? (
                 <div className="rounded-lg border border-primary/20 bg-primary/[0.04] px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Repository Detected
+                    Git Project Detected
                   </p>
                   <p className="text-sm text-foreground mt-1">
-                    DevDeck found one repository and will add <strong>{selectedProjects[0].name}</strong>.
+                    DevDeck found one Git project and will add <strong>{selectedProjects[0].name}</strong>.
                   </p>
                 </div>
               ) : (
                 <div className="rounded-lg border border-border/60 bg-white px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    No Git Repository Found
+                    No Git Metadata Found
                   </p>
                   <p className="text-sm text-foreground mt-1">
-                    DevDeck did not detect a Git repository inside this folder yet, so it will add the selected workspace directly.
+                    DevDeck did not detect Git metadata inside this folder yet, so it will add the selected workspace directly.
                   </p>
                 </div>
               )}
@@ -519,13 +519,13 @@ export default function AddProjectsDialog({
                   <div>
                     <p className="text-sm font-medium text-foreground">
                       {selectedProjects.length > 0
-                        ? `DevDeck will add ${selectedProjects.length} ${selectedProjects.length === 1 ? "repository" : "repositories"}`
+                        ? `DevDeck will add ${selectedProjects.length} ${selectedProjects.length === 1 ? "project" : "projects"}`
                         : "DevDeck is ready to add your selection"}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {selectedRepositoryCount !== null
                         ? `We detected ${selectedRepositoryCount} Git ${selectedRepositoryCount === 1 ? "repository" : "repositories"} across your selection.`
-                        : "Choose the repositories you want to append to the current workspace."}
+                        : "Choose the projects you want to append to the current workspace."}
                     </p>
                   </div>
                 </div>
@@ -554,7 +554,7 @@ export default function AddProjectsDialog({
             className="px-3 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors inline-flex items-center gap-2"
           >
             <HardDrive className="w-4 h-4" />
-            Add Repositories
+            Add Projects
           </button>
         </DialogFooter>
       </DialogContent>

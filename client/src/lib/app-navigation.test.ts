@@ -19,7 +19,7 @@ test("buildDesktopNavigationUrl clears stale search when target has no query", (
 
 test("buildDesktopNavigationUrl preserves the target query for project routes", () => {
   assert.equal(
-    buildDesktopNavigationUrl("https://example.com/#/reviews", "/?project=alpha"),
-    "https://example.com/?project=alpha#/",
+    buildDesktopNavigationUrl("https://example.com/#/reviews", "/projects?project=alpha"),
+    "https://example.com/?project=alpha#/projects",
   );
 });

@@ -93,7 +93,7 @@ export function recommendAgentForLaunch(
   if (agents.length === 0) {
     return {
       agent: null,
-      reason: "No harness agents are available for this repository.",
+      reason: "No harness agents are available for this project.",
     };
   }
 
@@ -116,7 +116,7 @@ export function recommendAgentForLaunch(
   if (!recommendedAgent) {
     return {
       agent: null,
-      reason: "No harness agents are available for this repository.",
+      reason: "No harness agents are available for this project.",
     };
   }
 

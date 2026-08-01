@@ -11,7 +11,7 @@ import { navigateInApp } from "@/lib/app-navigation";
 import { getDesktopApi } from "@/lib/desktop";
 import { useCodingTool } from "@/hooks/use-coding-tool";
 import {
-  buildTerminalsPath,
+  buildCreateSessionPath,
 } from "@/lib/dev-sessions";
 import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
 import {
@@ -32,6 +32,7 @@ import {
   Users,
   Link2Off,
   MessageSquare,
+  Sparkles,
   X,
 } from "lucide-react";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -137,6 +138,10 @@ export default function Projects() {
     await desktopApi?.showItemInFinder(project.localPath);
   };
 
+  const startOpenCodeWorkspace = (project: WorkspaceProject) => {
+    navigateInApp(buildCreateSessionPath(project.id), setLocation);
+  };
+
   const openRemote = async (project: WorkspaceProject) => {
     if (!project.remoteUrl) {
       return;
@@ -168,8 +173,8 @@ export default function Projects() {
         <div className="mx-auto flex h-full w-full min-w-0 max-w-[1200px] flex-col animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Repositories</h1>
-            <p className="text-muted-foreground text-sm">Browse the repositories DevDeck tracks, with linked local clone context when available.</p>
+            <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">Projects</h1>
+            <p className="text-muted-foreground text-sm">Choose a project, inspect its local Git context, and start agent-aware OpenCode work from one place.</p>
           </div>
 
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
@@ -177,7 +182,7 @@ export default function Projects() {
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Filter repositories..."
+                placeholder="Filter projects..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 className="w-full h-8 pl-8 pr-3 rounded-md bg-white/60 backdrop-blur-sm border border-border/60 shadow-sm focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none text-xs transition-all"
@@ -202,7 +207,7 @@ export default function Projects() {
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    Monitored List
+                    Projects
                   </button>
                   <button
                     onClick={() => setActiveProjectTab("graph")}
@@ -233,7 +238,7 @@ export default function Projects() {
                 <div className="flex-1 overflow-auto">
                   <div className="min-w-[720px]">
                     <div className="grid grid-cols-12 gap-4 border-b border-border/40 bg-secondary/30 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-md">
-                      <div className="col-span-5">Repository</div>
+                      <div className="col-span-5">Project</div>
                       <div className="col-span-2">Language</div>
                       <div className="col-span-2">Attention</div>
                       <div className="col-span-3 text-right">Last Updated</div>
@@ -279,7 +284,7 @@ export default function Projects() {
                       ))}
                       {filteredProjects.length === 0 && (
                         <div className="p-8 text-center text-muted-foreground text-sm">
-                          {isLoading ? "Scanning your workspace..." : `No repositories found matching "${searchQuery}"`}
+                          {isLoading ? "Scanning your workspace..." : `No projects found matching "${searchQuery}"`}
                         </div>
                       )}
                     </div>
@@ -371,7 +376,7 @@ export default function Projects() {
 
               <div className="flex-1 overflow-y-auto p-5 space-y-6">
                 <div>
-                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Repository Info</h3>
+                  <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Project Context</h3>
                   <div className="space-y-2.5">
                     <div className="flex items-start justify-between text-[12px] gap-3">
                       <span className="text-muted-foreground flex items-center gap-2"><MessageSquare className="w-3.5 h-3.5" /> Pull Requests</span>
@@ -452,7 +457,7 @@ export default function Projects() {
                     })}
                     {selectedProjectPullRequests.length === 0 && (
                       <div className="rounded-lg border border-border/60 border-dashed p-3 text-xs text-muted-foreground">
-                        No open pull requests for this repository.
+                        No open pull requests for this project.
                       </div>
                     )}
                   </div>
@@ -472,6 +477,14 @@ export default function Projects() {
                   <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</h3>
                   <div className="space-y-2">
 
+                    <button
+                      type="button"
+                      onClick={() => startOpenCodeWorkspace(selectedProject)}
+                      className="flex w-full items-center gap-2 rounded-md bg-primary px-3 py-2 text-left text-[12px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Start with OpenCode
+                    </button>
                     <button
                       type="button"
                       onClick={() => void openInTerminal(selectedProject)}

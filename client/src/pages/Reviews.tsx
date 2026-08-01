@@ -382,7 +382,7 @@ export default function Reviews() {
   ];
 
   const emptyPullRequestMessageByFilter: Record<PullRequestFocus, string> = {
-    all: "No open pull requests were found for the connected repositories.",
+    all: "No open pull requests were found for the connected projects.",
     my_queue: "Your review queue is empty.",
     checks_failing: "No pull requests currently have failing checks.",
     checks_passing: "No pull requests currently have passing checks.",
@@ -408,7 +408,7 @@ export default function Reviews() {
             </h1>
             <p className="text-muted-foreground text-sm">
               {snapshot?.githubStatus.message ??
-                "Open GitHub pull requests from your connected repositories."}
+                "Open GitHub pull requests from your connected projects."}
             </p>
           </div>
         </div>
@@ -805,7 +805,7 @@ export default function Reviews() {
                         : githubStatus?.state === "connected"
                           ? githubStatus.connectedRepositoryCount > 0
                             ? selectedRepoFilters.length > 0
-                              ? "No pull requests match the selected repository filters."
+                              ? "No pull requests match the selected project filters."
                               : emptyPullRequestMessageByFilter[focusFilter]
                             : "No GitHub remotes were detected in the current workspace."
                           : githubStatus?.state === "unsupported"

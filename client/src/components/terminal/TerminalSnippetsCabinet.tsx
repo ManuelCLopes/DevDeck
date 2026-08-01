@@ -66,7 +66,7 @@ const DEFAULT_SNIPPETS: Snippet[] = [
     label: "Pull from Default Branch",
     command: "git pull origin {defaultBranch}",
     category: "git",
-    description: "Pulls updates from remote repository's default branch.",
+    description: "Pulls updates from the project's remote default branch.",
   },
   {
     id: "git-push",

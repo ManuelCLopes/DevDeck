@@ -37,6 +37,16 @@ function AppLoadingScreen() {
   );
 }
 
+function LegacyRepositoriesRedirect() {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    navigateInApp("/projects", setLocation);
+  }, [setLocation]);
+
+  return null;
+}
+
 function AppRouter() {
   const [location, setLocation] = useLocation();
   const [isInitializing, setIsInitializing] = useState(true);
@@ -77,6 +87,7 @@ function AppRouter() {
         <Route path="/">{() => <Dashboard />}</Route>
         <Route path="/reviews">{() => <Reviews />}</Route>
         <Route path="/team">{() => <Dashboard />}</Route>
+        <Route path="/repositories">{() => <LegacyRepositoriesRedirect />}</Route>
         <Route path="/projects">{() => <Projects />}</Route>
         <Route path="/agents">{() => <Agents />}</Route>
         <Route path="/terminals">{() => <Terminals />}</Route>

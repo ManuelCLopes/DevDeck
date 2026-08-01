@@ -56,6 +56,7 @@ import {
 } from "@/lib/agent-runs";
 import { getDesktopApi } from "@/lib/desktop";
 import { navigateInApp } from "@/lib/app-navigation";
+import { buildCreateSessionPath } from "@/lib/dev-sessions";
 import {
   buildTokenUsageEventsFromOpenCodeRecords,
   getTokenUsageSummaryTotal,
@@ -362,6 +363,42 @@ function EmptyInsight({ children }: { children: ReactNode }) {
   return (
     <div className="rounded-lg border border-dashed border-black/10 p-4 text-xs text-muted-foreground dark:border-white/10">
       {children}
+    </div>
+  );
+}
+
+function AutomationStatusCard({
+  detail,
+  icon: Icon,
+  label,
+  tone,
+  value,
+}: {
+  detail: string;
+  icon: LucideIcon;
+  label: string;
+  tone: "amber" | "blue" | "green" | "red";
+  value: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border bg-white/70 p-3 text-xs dark:bg-white/5",
+        tone === "green" &&
+          "border-emerald-200/80 dark:border-emerald-900/50",
+        tone === "amber" &&
+          "border-amber-200/80 dark:border-amber-900/50",
+        tone === "red" &&
+          "border-rose-200/80 dark:border-rose-900/50",
+        tone === "blue" && "border-sky-200/80 dark:border-sky-900/50",
+      )}
+    >
+      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase text-muted-foreground">
+        <Icon className="h-3.5 w-3.5 text-primary" />
+        {label}
+      </div>
+      <p className="mt-2 font-semibold text-foreground">{value}</p>
+      <p className="mt-1 line-clamp-2 leading-5 text-muted-foreground">{detail}</p>
     </div>
   );
 }
@@ -1715,7 +1752,7 @@ function AgentRunDetail({
         </summary>
         <div className="mt-2 space-y-2">
           <p className="text-[11px] leading-5 text-muted-foreground">
-            DevDeck-launched agents receive trace environment variables automatically.
+            DevDeck-launched agents capture traces automatically. Use these only to recover or inspect a run manually.
           </p>
           <Button
             type="button"
@@ -1747,7 +1784,11 @@ export default function Agents() {
   const desktopApi = getDesktopApi();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { openPreferredTool, preferredToolShortLabel } = useCodingTool();
+  const {
+    availability: codingToolAvailability,
+    openPreferredTool,
+    preferredToolShortLabel,
+  } = useCodingTool();
   const workspaceSelection = useWorkspaceSelection();
   const { data, error, isFetching, isLoading, refetch } = useAgentHarness();
   const [agentRuns, setAgentRuns, { error: agentRunStorageError }] =
@@ -1871,6 +1912,88 @@ export default function Agents() {
   const projectOptions = useMemo(
     () => uniqueValues(agents.map((agent) => agent.projectName)),
     [agents],
+  );
+  const automationStatusCards = useMemo(
+    () => [
+      {
+        detail:
+          workflows.length > 0
+            ? `${workflows.length} workflows discovered from local harness files.`
+            : "Add workflows to make agent handoffs more predictable.",
+        icon: Bot,
+        label: "Harness",
+        tone: agents.length > 0 ? ("green" as const) : ("amber" as const),
+        value:
+          agents.length > 0
+            ? `${agents.length} ${agents.length === 1 ? "agent" : "agents"}`
+            : "No agents",
+      },
+      {
+        detail: codingToolAvailability.opencode.available
+          ? "Project launches create the worktree, agent run, trace capture, and token budget automatically."
+          : codingToolAvailability.opencode.reason ??
+            "Install OpenCode to enable automatic project launches.",
+        icon: Sparkles,
+        label: "OpenCode Launch",
+        tone: codingToolAvailability.opencode.available
+          ? ("green" as const)
+          : ("amber" as const),
+        value: codingToolAvailability.opencode.available ? "Ready" : "CLI offline",
+      },
+      {
+        detail: usageIngestionError
+          ? usageIngestionError
+          : usageSyncedAt
+            ? `Last usage sync ${new Date(usageSyncedAt).toLocaleTimeString()}.`
+            : "OpenCode token records will be linked by project, run, and agent when available.",
+        icon: Gauge,
+        label: "Usage Sync",
+        tone: usageIngestionError
+          ? ("red" as const)
+          : usageSyncedAt
+            ? ("green" as const)
+            : ("blue" as const),
+        value: usageIngestionError
+          ? "Needs attention"
+          : usageSyncedAt
+            ? "Synced"
+            : "Listening",
+      },
+      {
+        detail: traceIngestionError
+          ? traceIngestionError
+          : traceIngestionSyncedAt
+            ? `${traceIngestionSummary?.newEntryCount ?? 0} new entries, ${
+                traceIngestionSummary?.rejectedCount ?? 0
+              } rejected.`
+            : `Watching ${DEVDECK_TRACE_DIRECTORY} for DevDeck-launched runs.`,
+        icon: ClipboardList,
+        label: "Trace Capture",
+        tone: traceIngestionError
+          ? ("red" as const)
+          : traceIngestionSyncedAt
+            ? ("green" as const)
+            : ("blue" as const),
+        value: traceIngestionError
+          ? "Needs attention"
+          : traceIngestionSyncedAt
+            ? `${traceIngestionSummary?.filesScanned ?? 0} files`
+            : "Automatic",
+      },
+    ],
+    [
+      agents.length,
+      codingToolAvailability.opencode.available,
+      codingToolAvailability.opencode.reason,
+      traceIngestionError,
+      traceIngestionSummary?.filesScanned,
+      traceIngestionSummary?.newEntryCount,
+      traceIngestionSummary?.rejectedCount,
+      traceIngestionSyncedAt,
+      usageIngestionError,
+      usageSyncedAt,
+      workflows.length,
+    ],
   );
 
   const filteredAgents = useMemo(
@@ -2428,6 +2551,27 @@ export default function Agents() {
           ))}
         </section>
 
+        <section className="grid gap-3 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto] lg:items-stretch">
+          {automationStatusCards.map((card) => (
+            <AutomationStatusCard
+              key={card.label}
+              detail={card.detail}
+              icon={card.icon}
+              label={card.label}
+              tone={card.tone}
+              value={card.value}
+            />
+          ))}
+          <Button
+            type="button"
+            className="h-full min-h-20 gap-2 px-4 text-xs lg:w-36"
+            onClick={() => navigateInApp(buildCreateSessionPath(), setLocation)}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Start OpenCode
+          </Button>
+        </section>
+
         <section className="flex flex-col gap-3 rounded-lg border border-black/10 bg-white/60 p-3 dark:border-white/10 dark:bg-white/5 lg:flex-row lg:items-center">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -2500,7 +2644,7 @@ export default function Agents() {
             <Bot className="mx-auto h-8 w-8 text-muted-foreground" />
             <h2 className="mt-3 text-sm font-semibold text-foreground">No agents found</h2>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              DevDeck scans for `AGENTS.md`, `agents.json`, `.opencode/*`, and `.codex/*` harness files in connected repositories.
+              DevDeck scans for `AGENTS.md`, `agents.json`, `.opencode/*`, and `.codex/*` harness files in connected projects.
             </p>
           </div>
         ) : (

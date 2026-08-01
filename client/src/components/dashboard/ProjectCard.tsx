@@ -17,7 +17,7 @@ interface ProjectCardProps {
 
 export default function ProjectCard({ project }: ProjectCardProps) {
   const [, setLocation] = useLocation();
-  const projectHref = `/?project=${encodeURIComponent(project.id)}`;
+  const projectHref = `/projects?project=${encodeURIComponent(project.id)}`;
   const ciStatusMeta = getCiStatusMeta(project.ciStatus);
   const attentionMeta = getProjectAttentionMeta(project);
 

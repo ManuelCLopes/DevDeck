@@ -125,7 +125,7 @@ export default function Dashboard() {
         ? visibleProjects
         : visibleProjects.filter((project) => project.team === filterTeam);
 
-  const reposWithoutRemoteCount = visibleProjects.filter(
+  const projectsWithoutRemoteCount = visibleProjects.filter(
     (project) => !project.remoteUrl,
   ).length;
   const focusedProjectActivities = focusedProject
@@ -295,13 +295,13 @@ export default function Dashboard() {
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight mb-1 text-foreground">
-              {focusedProject ? `${focusedProject.name} Overview` : "Repository Overview"}
+              {focusedProject ? `${focusedProject.name} Overview` : "Workspace Overview"}
             </h1>
             <p className="text-muted-foreground text-sm flex items-center gap-1.5">
               <HardDrive className="w-3.5 h-3.5" />
               {focusedProject
                 ? focusedProject.localPath
-                : `DevDeck is monitoring ${workspaceLabel}${projects.length > 0 ? ` · ${projects.length} repositories` : ""}`}
+                : `DevDeck is monitoring ${workspaceLabel}${projects.length > 0 ? ` · ${projects.length} projects` : ""}`}
             </p>
           </div>
 
@@ -310,7 +310,7 @@ export default function Dashboard() {
               <Link href="/">
                 <a className="h-8 px-3 rounded-md text-xs font-medium bg-white/80 backdrop-blur-md border border-border/60 hover:bg-black/5 shadow-sm transition-colors whitespace-nowrap inline-flex items-center gap-1.5">
                   <ChevronLeft className="w-3.5 h-3.5" />
-                  All Repositories
+                  All Projects
                 </a>
               </Link>
             )}
@@ -321,7 +321,7 @@ export default function Dashboard() {
           <>
             <section>
               <div className="flex items-center gap-2 mb-4">
-                <h2 className="text-sm font-semibold tracking-tight">Repository Snapshot</h2>
+                <h2 className="text-sm font-semibold tracking-tight">Project Snapshot</h2>
                 <span className="bg-secondary text-secondary-foreground text-[10px] px-1.5 py-0.5 rounded-full font-medium border border-border">
                   live local data
                 </span>
@@ -393,7 +393,7 @@ export default function Dashboard() {
                 <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm space-y-4">
                   <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     <Clock3 className="w-3.5 h-3.5 text-primary" />
-                    Repository Wiring
+                    Git Context
                   </div>
                   <div className="space-y-3 text-sm">
                     <div className="flex items-start justify-between gap-4">
@@ -494,7 +494,7 @@ export default function Dashboard() {
                     })}
                     {focusedProjectActivities.length === 0 && (
                       <div className="rounded-lg border border-border/60 border-dashed p-4 text-sm text-muted-foreground">
-                        No recent local activity was detected for this repository.
+                        No recent local activity was detected for this project.
                       </div>
                     )}
                   </div>
@@ -593,7 +593,7 @@ export default function Dashboard() {
                     })}
                     {focusedProjectPullRequests.length === 0 && (
                       <div className="rounded-lg border border-border/60 border-dashed p-4 text-sm text-muted-foreground">
-                        No open GitHub pull requests were found for this repository.
+                        No open GitHub pull requests were found for this project.
                       </div>
                     )}
                   </div>
@@ -614,15 +614,15 @@ export default function Dashboard() {
               <div className="relative overflow-hidden rounded-xl border border-border/50 bg-white/60 p-4 shadow-sm backdrop-blur-md">
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Monitored Repos
+                    Projects
                   </h3>
                   <span className="rounded-full border border-border/60 bg-secondary/50 px-2.5 py-1 text-sm font-semibold tabular-nums text-foreground/85">
                     {formatCount(visibleProjects.length)}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {reposWithoutRemoteCount > 0
-                    ? `${reposWithoutRemoteCount} without remote`
+                  {projectsWithoutRemoteCount > 0
+                    ? `${projectsWithoutRemoteCount} without remote`
                     : "all with origin remote"}
                 </p>
                 <div className="absolute -right-4 -bottom-4 opacity-5">
@@ -812,8 +812,8 @@ export default function Dashboard() {
                   {overviewRepoFilteredPullRequests.length === 0 && (
                     <div className="rounded-lg border border-border/60 border-dashed p-4 text-sm text-muted-foreground">
                       {selectedOverviewRepoFilters.length > 0
-                        ? "No pull requests match the selected repository filters."
-                        : "No open GitHub pull requests were found for the monitored repositories."}
+                        ? "No pull requests match the selected project filters."
+                        : "No open GitHub pull requests were found for the monitored projects."}
                     </div>
                   )}
                 </div>
@@ -897,7 +897,7 @@ export default function Dashboard() {
                   })}
                   {authoredPullRequests.length === 0 && (
                     <div className="rounded-lg border border-dashed border-border/60 p-4 text-sm text-muted-foreground">
-                      No pull requests assigned to you were found in the monitored repositories.
+                      No pull requests assigned to you were found in the monitored projects.
                     </div>
                   )}
                 </div>
@@ -914,7 +914,7 @@ export default function Dashboard() {
             <section>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold tracking-tight">Active Repositories</h2>
+                  <h2 className="text-sm font-semibold tracking-tight">Active Projects</h2>
                   <span className="bg-secondary text-secondary-foreground text-[10px] px-1.5 py-0.5 rounded-full font-medium border border-border">
                     {filteredProjects.length}
                   </span>
@@ -926,7 +926,7 @@ export default function Dashboard() {
                       type="button"
                       onClick={() => setViewMode("grid")}
                       className={`p-1.5 rounded-[4px] transition-all shadow-sm ${viewMode === "grid" ? "bg-white/80 backdrop-blur-md text-foreground border border-black/5" : "text-muted-foreground hover:text-foreground bg-transparent border-transparent"}`}
-                      aria-label="Show repositories as cards"
+                      aria-label="Show projects as cards"
                       title="Grid view"
                     >
                       <LayoutGrid className="w-4 h-4" />
@@ -935,7 +935,7 @@ export default function Dashboard() {
                       type="button"
                       onClick={() => setViewMode("list")}
                       className={`p-1.5 rounded-[4px] transition-all shadow-sm ${viewMode === "list" ? "bg-white/80 backdrop-blur-md text-foreground border border-black/5" : "text-muted-foreground hover:text-foreground bg-transparent border-transparent"}`}
-                      aria-label="Show repositories as rows"
+                      aria-label="Show projects as rows"
                       title="List view"
                     >
                       <List className="w-4 h-4" />
@@ -973,7 +973,7 @@ export default function Dashboard() {
                   <div className="overflow-x-auto">
                     <div className="min-w-[820px]">
                       <div className="hidden md:grid grid-cols-12 gap-4 py-2.5 border-b border-border/40 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                        <div className="col-span-4 lg:col-span-3 ml-5">Repository</div>
+                        <div className="col-span-4 lg:col-span-3 ml-5">Project</div>
                         <div className="col-span-3 lg:col-span-2">Branches</div>
                         <div className="col-span-2 lg:col-span-2">Contributors</div>
                         <div className="hidden lg:block col-span-3">Remote</div>
@@ -994,15 +994,15 @@ export default function Dashboard() {
                 onPageChange={activeProjectsPagination.setCurrentPage}
                 pageSize={activeProjectsPagination.pageSize}
                 totalItems={activeProjectsPagination.totalItems}
-                label="repositories"
+                label="projects"
               />
 
               {filteredProjects.length === 0 && !isLoading && (
                 <div className="text-center py-12 bg-white border border-border/50 border-dashed rounded-xl mt-4">
                   <p className="text-muted-foreground text-sm">
                     {projects.length === 0
-                      ? "No repositories have been indexed yet. Pick a workspace in onboarding or settings."
-                      : `No repositories found for ${filterTeam}.`}
+                      ? "No projects have been indexed yet. Pick a workspace in onboarding or settings."
+                      : `No projects found for ${filterTeam}.`}
                   </p>
                 </div>
               )}

@@ -241,13 +241,13 @@ export default function Onboarding() {
       linkedProjectCandidates.length === 0
     ) {
       setSelectionError(
-        "None of the selected GitHub repositories were found in this local folder yet.",
+        "None of the selected GitHub projects were found in this local folder yet.",
       );
       return;
     }
 
     if (linkedProjectCandidates.length > 1 && selectedProjectIds.length === 0) {
-      setSelectionError("Choose at least one repository to monitor.");
+      setSelectionError("Choose at least one project to monitor.");
       return;
     }
 
@@ -421,7 +421,7 @@ export default function Onboarding() {
         }
 
         setGitHubRepositoryError(
-          "DevDeck could not load your GitHub repositories right now.",
+          "DevDeck could not load your GitHub projects right now.",
         );
       })
       .finally(() => {
@@ -533,7 +533,7 @@ export default function Onboarding() {
                 <h1 className="text-2xl font-bold text-foreground mb-3">Welcome to DevDeck</h1>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   DevDeck is the desktop-first cockpit for software engineers. <br/>
-                  Gain high-signal visibility into your repositories, manage code reviews efficiently, and connect GitHub context with your local clones.
+                  Gain high-signal visibility into your projects, manage code reviews efficiently, and connect GitHub context with your local clones.
                 </p>
               </div>
             </div>
@@ -549,8 +549,8 @@ export default function Onboarding() {
                     <LayoutGrid className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-sm mb-1">Repository Overview</h3>
-                    <p className="text-xs text-muted-foreground">A clear overview of the repositories you care about most, with GitHub signals and local context in one place.</p>
+                    <h3 className="font-semibold text-sm mb-1">Project Overview</h3>
+                    <p className="text-xs text-muted-foreground">A clear overview of the projects you care about most, with GitHub signals and local context in one place.</p>
                   </div>
                 </div>
 
@@ -570,7 +570,7 @@ export default function Onboarding() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-sm mb-1">Linked Local Context</h3>
-                    <p className="text-xs text-muted-foreground">Connect the repositories you follow on GitHub to their local clones, so DevDeck can surface branch and commit context too.</p>
+                    <p className="text-xs text-muted-foreground">Connect the projects you follow on GitHub to their local clones, so DevDeck can surface branch and commit context too.</p>
                   </div>
                 </div>
               </div>
@@ -583,9 +583,9 @@ export default function Onboarding() {
                 <div className="w-16 h-16 bg-secondary rounded-full mx-auto flex items-center justify-center mb-6">
                   <Github className="w-8 h-8 text-foreground/70" />
                 </div>
-                <h2 className="text-xl font-bold text-foreground mb-3">Choose Repositories</h2>
+                <h2 className="text-xl font-bold text-foreground mb-3">Choose Projects</h2>
                 <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-                  Start from GitHub if you want. Pick the repositories you want DevDeck to follow more closely, then link their local clones in the next step.
+                  Start from GitHub if you want. Pick the projects you want DevDeck to follow more closely, then link their local clones in the next step.
                 </p>
               </div>
 
@@ -625,7 +625,7 @@ export default function Onboarding() {
 
                 {isLoadingGitHubRepositories ? (
                   <div className="rounded-lg border border-border/60 bg-white px-4 py-6 text-sm text-muted-foreground text-center">
-                    Loading repositories from GitHub...
+                    Loading GitHub projects...
                   </div>
                 ) : githubRepositoryError ? (
                   <div className="rounded-lg border border-chart-3/20 bg-chart-3/5 px-4 py-3 text-sm text-chart-3">
@@ -633,7 +633,7 @@ export default function Onboarding() {
                   </div>
                 ) : githubRepositories.length === 0 ? (
                   <div className="rounded-lg border border-border/60 bg-white px-4 py-4 text-sm text-muted-foreground">
-                    GitHub is not connected yet, or DevDeck could not find repositories for your account. You can continue with local clones now and connect GitHub later in Preferences.
+                    GitHub is not connected yet, or DevDeck could not find projects for your account. You can continue with local clones now and connect GitHub later in Preferences.
                   </div>
                 ) : (
                   <>
@@ -643,7 +643,7 @@ export default function Onboarding() {
                         type="text"
                         value={githubRepositoryQuery}
                         onChange={(event) => setGitHubRepositoryQuery(event.target.value)}
-                        placeholder="Filter GitHub repositories..."
+                        placeholder="Filter GitHub projects..."
                         className="w-full h-9 rounded-md border border-border/60 bg-white pl-8 pr-3 text-sm outline-none transition-all focus:border-primary/40 focus:ring-1 focus:ring-primary/30"
                       />
                     </div>
@@ -687,7 +687,7 @@ export default function Onboarding() {
 
                       {filteredGitHubRepositories.length === 0 ? (
                         <div className="rounded-lg border border-border/60 bg-white px-4 py-4 text-sm text-muted-foreground">
-                          No GitHub repositories matched your search.
+                          No GitHub projects matched your search.
                         </div>
                       ) : null}
                     </div>
@@ -707,8 +707,8 @@ export default function Onboarding() {
               </h2>
               <p className="text-sm text-muted-foreground mb-8">
                 {selectedGitHubRepositories.length > 0
-                  ? "Choose the root folder where those repositories are cloned locally. DevDeck will match them against GitHub and keep the deeper local context linked."
-                  : "Choose the root folder where your repositories live. DevDeck will scan it locally and use that as the execution context for the repositories you track."}
+                  ? "Choose the root folder where those projects are cloned locally. DevDeck will match them against GitHub and keep the deeper local context linked."
+                  : "Choose the root folder where your projects live. DevDeck will scan it locally and use that as the execution context for the projects you track."}
               </p>
               
               <div className="bg-secondary/20 border border-border/60 rounded-xl p-6 mb-6">
@@ -754,7 +754,7 @@ export default function Onboarding() {
                         Selected on GitHub
                       </p>
                       <p className="text-sm text-foreground mt-1">
-                        {selectedGitHubRepositories.length} {selectedGitHubRepositories.length === 1 ? "repository" : "repositories"} selected for deeper local analysis.
+                        {selectedGitHubRepositories.length} {selectedGitHubRepositories.length === 1 ? "project" : "projects"} selected for deeper local analysis.
                       </p>
                     </div>
 
@@ -763,10 +763,10 @@ export default function Onboarding() {
                         <div className="flex items-center justify-between gap-3 mb-3">
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                              Linked Local Repositories
+                              Linked Local Projects
                             </p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              DevDeck matched these selected repositories to local clones inside {selectedDir}.
+                              DevDeck matched these selected projects to local clones inside {selectedDir}.
                             </p>
                           </div>
                           {requiresRepositorySelection ? (
@@ -835,7 +835,7 @@ export default function Onboarding() {
                           No Local Match Yet
                         </p>
                         <p className="text-sm text-chart-3 mt-1">
-                          DevDeck did not find any of the selected GitHub repositories inside this folder. Choose a different local clone root or go back and continue without GitHub selection.
+                          DevDeck did not find any of the selected GitHub projects inside this folder. Choose a different local clone root or go back and continue without GitHub selection.
                         </p>
                       </div>
                     )}
@@ -846,7 +846,7 @@ export default function Onboarding() {
                           Not Linked Yet
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          These selected repositories are not cloned inside this folder yet.
+                          These selected projects are not cloned inside this folder yet.
                         </p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {unmatchedGitHubRepositories.map((repository) => (
@@ -868,10 +868,10 @@ export default function Onboarding() {
                         <div className="flex items-center justify-between gap-3 mb-3">
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                              Choose Repositories
+                              Choose Projects
                             </p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              DevDeck found multiple repositories inside {selectedDir}. Choose the ones you want to monitor.
+                              DevDeck found multiple Git projects inside {selectedDir}. Choose the ones you want to monitor.
                             </p>
                           </div>
                           <div className="flex items-center gap-2 text-[11px]">
@@ -926,7 +926,7 @@ export default function Onboarding() {
                                   <p className="text-xs text-muted-foreground mt-1">
                                     {candidate.isRoot
                                       ? "This folder is itself a Git repository."
-                                      : "Repository discovered inside the selected folder."}
+                                      : "Project discovered inside the selected folder."}
                                   </p>
                                 </div>
                               </label>
@@ -937,19 +937,19 @@ export default function Onboarding() {
                     ) : discoveredRepositoryCount === 1 && selectedProjects[0] ? (
                       <div className="rounded-lg border border-primary/20 bg-primary/[0.04] px-4 py-3">
                         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Repository Detected
+                          Git Project Detected
                         </p>
                         <p className="text-sm text-foreground mt-1">
-                          DevDeck found one repository and will monitor <strong>{getCandidateLabel(selectedProjects[0])}</strong>.
+                          DevDeck found one Git project and will monitor <strong>{getCandidateLabel(selectedProjects[0])}</strong>.
                         </p>
                       </div>
                     ) : (
                       <div className="rounded-lg border border-border/60 bg-white px-4 py-3">
                         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          No Git Repository Found
+                          No Git Metadata Found
                         </p>
                         <p className="text-sm text-foreground mt-1">
-                          DevDeck did not detect a Git repository inside this folder yet, so it will monitor the selected folder directly.
+                          DevDeck did not detect Git metadata inside this folder yet, so it will monitor the selected folder directly.
                         </p>
                       </div>
                     )}
@@ -972,18 +972,18 @@ export default function Onboarding() {
               <p className="text-sm text-muted-foreground mb-8">
                 {selectedGitHubRepositories.length > 0 && selectedProjects.length > 0 ? (
                   <>
-                    DevDeck linked {selectedProjects.length} {selectedProjects.length === 1 ? "repository" : "repositories"} from GitHub to local clones inside <strong>{selectedDir}</strong>.
+                    DevDeck linked {selectedProjects.length} {selectedProjects.length === 1 ? "project" : "projects"} from GitHub to local clones inside <strong>{selectedDir}</strong>.
                     {unmatchedGitHubRepositories.length > 0 ? (
                       <>
-                        {" "}There {unmatchedGitHubRepositories.length === 1 ? "is" : "are"} still {unmatchedGitHubRepositories.length} selected {unmatchedGitHubRepositories.length === 1 ? "repository" : "repositories"} without a local clone in that folder.
+                        {" "}There {unmatchedGitHubRepositories.length === 1 ? "is" : "are"} still {unmatchedGitHubRepositories.length} selected {unmatchedGitHubRepositories.length === 1 ? "project" : "projects"} without a local clone in that folder.
                       </>
                     ) : null}
                     <br/>
-                    You can adjust linked repositories later from Preferences.
+                    You can adjust linked projects later from Preferences.
                   </>
                 ) : linkedProjectCandidates.length > 1 ? (
                   <>
-                    DevDeck will monitor {selectedProjects.length} {selectedProjects.length === 1 ? "repository" : "repositories"} inside <strong>{selectedDir}</strong>.
+                    DevDeck will monitor {selectedProjects.length} {selectedProjects.length === 1 ? "project" : "projects"} inside <strong>{selectedDir}</strong>.
                     {selectedRepositoryCount !== null && (
                       <>
                         {" "}We detected {selectedRepositoryCount} Git {selectedRepositoryCount === 1 ? "repository" : "repositories"} across your selection.
@@ -994,7 +994,7 @@ export default function Onboarding() {
                   </>
                 ) : discoveredRepositoryCount === 1 && selectedProjects[0] ? (
                   <>
-                    DevDeck found 1 Git repository in <strong>{selectedDir}</strong>: <strong>{getCandidateLabel(selectedProjects[0])}</strong>. <br/>
+                    DevDeck found 1 Git project in <strong>{selectedDir}</strong>: <strong>{getCandidateLabel(selectedProjects[0])}</strong>. <br/>
                     We&apos;ll continue monitoring it locally in the background.
                   </>
                 ) : (

@@ -126,7 +126,7 @@ export default function MergeConflictCanvas({ repositoryPath, onResolved }: Merg
     return (
       <div className="flex h-64 items-center justify-center text-xs text-muted-foreground">
         <RefreshCwSpinner />
-        Auditing local repository merge status...
+        Auditing local project merge status...
       </div>
     );
   }
@@ -138,7 +138,7 @@ export default function MergeConflictCanvas({ repositoryPath, onResolved }: Merg
         <div className="space-y-1">
           <p className="text-xs font-bold text-foreground">Clean Git Status</p>
           <p className="text-[11px] text-muted-foreground max-w-[280px]">
-            No merge conflicts detected in this repository. All active files are safely integrated.
+            No merge conflicts detected in this project. All active files are safely integrated.
           </p>
         </div>
       </div>

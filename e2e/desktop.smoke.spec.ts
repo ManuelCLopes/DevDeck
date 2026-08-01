@@ -198,7 +198,15 @@ test("desktop app loads overview for a prepared local workspace", async () => {
     ).toBeVisible();
     await expect(page.locator("aside")).toContainText("alpha");
     await expect(page.locator("aside")).toContainText("beta");
-    await expect(page.getByText(/Monitored Repos|Branch Context/)).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Active Projects", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Projects", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
+    await page.locator("main").getByText("alpha", { exact: true }).first().click();
+    await expect(
+      page.getByRole("button", { name: "Start with OpenCode", exact: true }),
+    ).toBeVisible();
   } finally {
     await electronApp.close();
     rmSync(workspace.tempDir, { force: true, recursive: true });
@@ -232,7 +240,7 @@ test("preferences supports hide and restore curation", async () => {
 
     await page.getByRole("button", { name: "Hide alpha", exact: true }).click();
     await expect(
-      page.getByText("Hidden Repositories", { exact: true }),
+      page.getByText("Hidden Projects", { exact: true }),
     ).toBeVisible();
     await expect(page.locator("aside")).not.toContainText("alpha");
 
@@ -390,6 +398,10 @@ test("agent productivity insights summarize persisted telemetry", async () => {
     }, alphaPath);
 
     await page.getByRole("button", { name: "Agents", exact: true }).click();
+    await expect(page.getByText("OpenCode Launch", { exact: true })).toBeVisible();
+    await expect(page.getByText("Usage Sync", { exact: true })).toBeVisible();
+    await expect(page.getByText("Trace Capture", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Start OpenCode", exact: true })).toBeVisible();
 
     const insights = page.locator("section").filter({
       has: page.getByRole("heading", {
@@ -430,7 +442,7 @@ test("agent productivity insights summarize persisted telemetry", async () => {
     ).toBeVisible();
     await expect(page.getByText("Advanced Trace Fallback")).toBeVisible();
     await page.getByText("Advanced Trace Fallback").click();
-    await expect(page.getByText(/trace environment variables automatically/)).toBeVisible();
+    await expect(page.getByText(/capture traces automatically/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy Trace Append Command" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy Trace Contract" })).toBeVisible();
     await expect(page.getByText("Handoff Trace")).toBeVisible();

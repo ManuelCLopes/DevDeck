@@ -11,7 +11,7 @@ interface ProjectRowProps {
 
 export default function ProjectRow({ project }: ProjectRowProps) {
   const [, setLocation] = useLocation();
-  const projectHref = `/?project=${encodeURIComponent(project.id)}`;
+  const projectHref = `/projects?project=${encodeURIComponent(project.id)}`;
   const ciStatusMeta = getCiStatusMeta(project.ciStatus);
   const attentionMeta = getProjectAttentionMeta(project);
 

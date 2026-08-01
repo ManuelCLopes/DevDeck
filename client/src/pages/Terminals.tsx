@@ -741,8 +741,9 @@ export default function Terminals() {
 
   const ptyAvailabilityPending = ptyAvailability === null;
   const ptyBlocked = Boolean(ptyAvailability && !ptyAvailability.available);
-  const shouldShowRepositoryLauncher =
-    selectedSession === null && Boolean(selectedRepoForLaunch);
+  const shouldForceOpenCodeLauncher =
+    selectedSession === null &&
+    (Boolean(selectedRepoForLaunch) || requestedLaunch === "opencode");
   const sanitizedPanes = useMemo(() => {
     if (ptyAvailabilityPending || codingToolLoading) {
       return normalizeTerminalPanes(panes).length > 0 ? normalizeTerminalPanes(panes) : initialPanes;
@@ -775,6 +776,8 @@ export default function Terminals() {
     },
     [sanitizedPanes],
   );
+  const shouldShowOpenCodeLauncher =
+    shouldForceOpenCodeLauncher || (selectedSession === null && sanitizedPanes.length === 0);
   const openCodeFallbackWarningKey =
     selectedSession &&
     requestedLaunch === "opencode" &&
@@ -1019,13 +1022,13 @@ export default function Terminals() {
         </header>
         ) : null}
 
-        {ptyAvailabilityPending && !shouldShowRepositoryLauncher ? (
+        {ptyAvailabilityPending && !shouldForceOpenCodeLauncher ? (
           <div className="flex flex-1 items-center justify-center">
             <div className="rounded-lg border border-border/60 bg-white/75 px-4 py-3 text-[12px] text-muted-foreground shadow-sm">
               Checking embedded terminal support…
             </div>
           </div>
-        ) : ptyBlocked && !shouldShowRepositoryLauncher ? (
+        ) : ptyBlocked && !shouldForceOpenCodeLauncher ? (
           <div className="flex flex-1 items-center justify-center">
             <div className="max-w-md space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-[12px] text-amber-900">
               <div className="flex items-center gap-2 font-semibold">
@@ -1091,7 +1094,7 @@ export default function Terminals() {
                             <span>OpenCode CLI Offline</span>
                           </div>
                           <p className="leading-relaxed text-muted-foreground">
-                            To enable session automation, repository worktrees, and full diagnostic tracing, make sure the OpenCode CLI is installed and running.
+                            To enable session automation, project worktrees, and full diagnostic tracing, make sure the OpenCode CLI is installed and running.
                           </p>
                           
                           <div className="space-y-1.5">
@@ -1350,8 +1353,7 @@ export default function Terminals() {
               )}
             >
               {isFocusMode &&
-              selectedSession === null &&
-              (selectedRepoForLaunch || sanitizedPanes.length === 0) ? (
+              shouldShowOpenCodeLauncher ? (
                 <div className="pointer-events-none absolute right-3 top-3 z-[100] sm:right-4 sm:top-4 lg:right-5 lg:top-5">
                   <Button
                     type="button"
@@ -1368,8 +1370,7 @@ export default function Terminals() {
               ) : null}
 
               {/* Launcher empty state vs active terminal workspace */}
-              {selectedSession === null &&
-              (selectedRepoForLaunch || sanitizedPanes.length === 0) ? (
+              {shouldShowOpenCodeLauncher ? (
                 <div className="flex-1 flex flex-col p-6 rounded-xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-[#1b1b1c]/60 backdrop-blur-md overflow-y-auto">
                   {selectedRepoForLaunch ? (
                     <div className="max-w-xl mx-auto w-full border border-black/10 dark:border-white/10 rounded-xl bg-white/80 dark:bg-[#202022]/80 p-6 shadow-md space-y-5 animate-in fade-in zoom-in-95 duration-200 mt-10">
@@ -1438,6 +1439,12 @@ export default function Terminals() {
                       </div>
 
                       <div className="space-y-4 border-t border-black/10 dark:border-white/10 pt-4">
+                        <div className="rounded-lg border border-primary/15 bg-primary/[0.04] p-3 text-[11px] leading-5 text-muted-foreground">
+                          <span className="font-semibold text-foreground">Automatic tracking:</span>{" "}
+                          DevDeck will create the agent run, attach the OpenCode workspace,
+                          turn on trace capture, and roll token usage into the Agents page.
+                        </div>
+
                         <div className="space-y-2">
                           <Label className="text-[11px] text-muted-foreground block font-medium">
                             Task Title
@@ -1606,13 +1613,13 @@ export default function Terminals() {
                         </div>
                         <h2 className="text-base font-semibold">Quick Launch OpenCode Workspace</h2>
                         <p className="text-[12px] text-muted-foreground max-w-lg mx-auto leading-relaxed">
-                          Check out a new worktree branch and start a pre-scoped terminal session instantly inside any of your connected repositories.
+                          Choose a project and DevDeck will create the worktree, start OpenCode, link the agent run, and capture usage automatically.
                         </p>
                       </div>
 
                       {trackedProjects.length === 0 ? (
                         <div className="py-12 text-center text-muted-foreground text-[12px] bg-white/40 dark:bg-white/5 rounded-xl border border-dashed">
-                          No connected repositories in workspace snapshot. Add folders in Settings to monitor repositories.
+                          No connected projects in the workspace snapshot. Add folders in Settings to monitor projects.
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
