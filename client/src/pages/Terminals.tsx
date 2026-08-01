@@ -636,6 +636,8 @@ export default function Terminals() {
 
   const ptyAvailabilityPending = ptyAvailability === null;
   const ptyBlocked = Boolean(ptyAvailability && !ptyAvailability.available);
+  const shouldShowRepositoryLauncher =
+    selectedSession === null && Boolean(selectedRepoForLaunch);
   const sanitizedPanes = useMemo(() => {
     if (ptyAvailabilityPending || codingToolLoading) {
       return normalizeTerminalPanes(panes).length > 0 ? normalizeTerminalPanes(panes) : initialPanes;
@@ -912,13 +914,13 @@ export default function Terminals() {
         </header>
         ) : null}
 
-        {ptyAvailabilityPending ? (
+        {ptyAvailabilityPending && !shouldShowRepositoryLauncher ? (
           <div className="flex flex-1 items-center justify-center">
             <div className="rounded-lg border border-border/60 bg-white/75 px-4 py-3 text-[12px] text-muted-foreground shadow-sm">
               Checking embedded terminal support…
             </div>
           </div>
-        ) : ptyBlocked ? (
+        ) : ptyBlocked && !shouldShowRepositoryLauncher ? (
           <div className="flex flex-1 items-center justify-center">
             <div className="max-w-md space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-[12px] text-amber-900">
               <div className="flex items-center gap-2 font-semibold">
