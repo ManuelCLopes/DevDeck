@@ -70,6 +70,7 @@ test("@native embedded terminal support can report availability", async () => {
       DEVDECK_GITHUB_CLIENT_ID: "",
       DEVDECK_GITHUB_STORAGE: "file",
       DEVDECK_GITHUB_TOKEN_PATH: join(userHome, "github-token.json"),
+      DEVDECK_USER_DATA_PATH: join(userHome, "devdeck-data"),
       HOME: userHome,
     },
   });
@@ -87,6 +88,43 @@ test("@native embedded terminal support can report availability", async () => {
         available: expect.any(Boolean),
         homeDir: expect.any(String),
         platform: expect.any(String),
+      }),
+    );
+
+    const savedTelemetry = await page.evaluate(async () => {
+      const desktopApi = (window as any).devdeck;
+      return desktopApi.saveAgentRuns([
+        {
+          agentId: "builder",
+          branchName: "feature/native-telemetry",
+          endedAt: null,
+          id: "native-run",
+          opencodeSessionId: null,
+          projectId: "alpha",
+          startedAt: "2026-08-01T10:00:00.000Z",
+          status: "active",
+          taskTitle: "Native telemetry bridge",
+          terminalPaneId: "pane-native",
+          tokenBudget: 120000,
+          workflowRunId: null,
+          worktreePath: "/tmp/native-telemetry",
+        },
+      ]);
+    });
+    expect(savedTelemetry.agentRuns[0]).toEqual(
+      expect.objectContaining({
+        id: "native-run",
+        taskTitle: "Native telemetry bridge",
+      }),
+    );
+
+    const reloadedTelemetry = await page.evaluate(async () => {
+      const desktopApi = (window as any).devdeck;
+      return desktopApi.getAgentTelemetry();
+    });
+    expect(reloadedTelemetry.agentRuns[0]).toEqual(
+      expect.objectContaining({
+        id: "native-run",
       }),
     );
   } finally {

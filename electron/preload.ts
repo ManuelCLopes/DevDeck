@@ -8,7 +8,11 @@ import type {
 import type {
   AgentHarnessDiscoveryRequest,
   AgentHarnessDiscoveryResult,
+  AgentRun,
+  TaskTraceEntry,
+  TokenUsageEvent,
 } from "../shared/agents";
+import type { AgentTelemetrySnapshot } from "../shared/agent-telemetry";
 import type {
   CreateGitWorktreeSessionResult,
   DevSessionOperationalSnapshot,
@@ -134,6 +138,22 @@ const devdeck = {
     payload: AgentHarnessDiscoveryRequest,
   ): Promise<AgentHarnessDiscoveryResult> {
     return ipcRenderer.invoke("devdeck:discover-agent-harness", payload);
+  },
+  getAgentTelemetry(): Promise<AgentTelemetrySnapshot> {
+    return ipcRenderer.invoke("devdeck:get-agent-telemetry");
+  },
+  saveAgentRuns(agentRuns: AgentRun[]): Promise<AgentTelemetrySnapshot> {
+    return ipcRenderer.invoke("devdeck:save-agent-runs", agentRuns);
+  },
+  saveTaskTraceEntries(
+    taskTraceEntries: TaskTraceEntry[],
+  ): Promise<AgentTelemetrySnapshot> {
+    return ipcRenderer.invoke("devdeck:save-task-trace-entries", taskTraceEntries);
+  },
+  saveTokenUsageEvents(
+    tokenUsageEvents: TokenUsageEvent[],
+  ): Promise<AgentTelemetrySnapshot> {
+    return ipcRenderer.invoke("devdeck:save-token-usage-events", tokenUsageEvents);
   },
   openInTerminal(targetPath: string): Promise<void> {
     return ipcRenderer.invoke("devdeck:open-in-terminal", targetPath);

@@ -68,6 +68,12 @@ import {
 } from "./opencode-sessions";
 import { listOpenCodeUsageRecords } from "./opencode-usage";
 import { discoverAgentHarness } from "./agent-harness";
+import {
+  readAgentTelemetryStore,
+  saveAgentRuns,
+  saveTaskTraceEntries,
+  saveTokenUsageEvents,
+} from "./agent-telemetry-store";
 import { registerPtyIpc } from "./pty";
 import { generateAICompletion, getPullRequestDiff } from "./ai-service";
 import { initializeMenubar, destroyMenubarTray, updateMenubarTray } from "./menubar";
@@ -606,6 +612,28 @@ ipcMain.handle(
     payload: AgentHarnessDiscoveryRequest,
   ): Promise<AgentHarnessDiscoveryResult> => {
     return discoverAgentHarness(payload);
+  },
+);
+
+ipcMain.handle("devdeck:get-agent-telemetry", async () => {
+  return readAgentTelemetryStore();
+});
+
+ipcMain.handle("devdeck:save-agent-runs", async (_event, agentRuns: unknown) => {
+  return saveAgentRuns(agentRuns);
+});
+
+ipcMain.handle(
+  "devdeck:save-task-trace-entries",
+  async (_event, taskTraceEntries: unknown) => {
+    return saveTaskTraceEntries(taskTraceEntries);
+  },
+);
+
+ipcMain.handle(
+  "devdeck:save-token-usage-events",
+  async (_event, tokenUsageEvents: unknown) => {
+    return saveTokenUsageEvents(tokenUsageEvents);
   },
 );
 

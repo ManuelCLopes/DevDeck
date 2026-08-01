@@ -7,7 +7,11 @@ import type {
 import type {
   AgentHarnessDiscoveryRequest,
   AgentHarnessDiscoveryResult,
+  AgentRun,
+  TaskTraceEntry,
+  TokenUsageEvent,
 } from "@shared/agents";
+import type { AgentTelemetrySnapshot } from "@shared/agent-telemetry";
 import type {
   CreateGitWorktreeSessionResult,
   DevSessionOperationalSnapshot,
@@ -54,6 +58,14 @@ interface DevDeckDesktopApi {
   discoverAgentHarness(
     payload: AgentHarnessDiscoveryRequest,
   ): Promise<AgentHarnessDiscoveryResult>;
+  getAgentTelemetry(): Promise<AgentTelemetrySnapshot>;
+  saveAgentRuns(agentRuns: AgentRun[]): Promise<AgentTelemetrySnapshot>;
+  saveTaskTraceEntries(
+    taskTraceEntries: TaskTraceEntry[],
+  ): Promise<AgentTelemetrySnapshot>;
+  saveTokenUsageEvents(
+    tokenUsageEvents: TokenUsageEvent[],
+  ): Promise<AgentTelemetrySnapshot>;
   createGitWorktreeSession(payload: {
     baseRef: string;
     branchName: string;

@@ -64,6 +64,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useCodingTool } from "@/hooks/use-coding-tool";
 import { useAgentHarness } from "@/hooks/use-agent-harness";
+import { useAgentRunsState } from "@/hooks/use-agent-telemetry";
 import { useOpenCodeSessions } from "@/hooks/use-opencode-sessions";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
@@ -93,10 +94,10 @@ import { navigateInApp } from "@/lib/app-navigation";
 import { useAppPreferences } from "@/lib/app-preferences";
 import { getDesktopApi } from "@/lib/desktop";
 import {
-  AGENT_RUNS_STORAGE_KEY,
   buildAgentLaunchSummary,
   buildAgentRunEnvironment,
   createAgentRunId,
+  DEFAULT_AGENT_RUN_HISTORY_LIMIT,
   normalizeAgentRuns,
   sortAgentRuns,
 } from "@/lib/agent-runs";
@@ -248,13 +249,7 @@ export default function Terminals() {
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
-  const [, setAgentRuns] = usePersistentState<AgentRun[]>(
-    AGENT_RUNS_STORAGE_KEY,
-    [],
-    {
-      deserialize: (value) => normalizeAgentRuns(JSON.parse(value)),
-    },
-  );
+  const [, setAgentRuns] = useAgentRunsState();
 
   const terminalPreferences = preferences.terminal;
   const search = useMemo(() => {
@@ -533,7 +528,10 @@ export default function Terminals() {
       };
 
       setAgentRuns((currentRuns) =>
-        sortAgentRuns([...normalizeAgentRuns(currentRuns), agentRun]).slice(0, 200),
+        sortAgentRuns([...normalizeAgentRuns(currentRuns), agentRun]).slice(
+          0,
+          DEFAULT_AGENT_RUN_HISTORY_LIMIT,
+        ),
       );
       setPanes((currentPanes) => [...normalizeTerminalPanes(currentPanes), newPane]);
       setActivePaneId(newPane.id);

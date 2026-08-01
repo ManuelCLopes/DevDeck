@@ -15,10 +15,9 @@ import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAgentHarness } from "@/hooks/use-agent-harness";
+import { useAgentRunsState, useTokenUsageEventsState } from "@/hooks/use-agent-telemetry";
 import { useCodingTool } from "@/hooks/use-coding-tool";
-import { usePersistentState } from "@/hooks/use-persistent-state";
 import {
-  AGENT_RUNS_STORAGE_KEY,
   haveAgentRunLinksChanged,
   linkAgentRunsToOpenCodeUsageRecords,
   normalizeAgentRuns,
@@ -27,11 +26,9 @@ import {
 } from "@/lib/agent-runs";
 import { getDesktopApi } from "@/lib/desktop";
 import {
-  TOKEN_USAGE_EVENTS_STORAGE_KEY,
   buildTokenUsageEventsFromOpenCodeRecords,
   getTokenUsageSummaryTotal,
   mergeTokenUsageEvents,
-  normalizeTokenUsageEvents,
   summarizeTokenUsageByAgent,
   type TokenUsageSummary,
 } from "@/lib/token-usage";
@@ -40,7 +37,6 @@ import type {
   AgentDefinition,
   AgentRun,
   AgentRunStatus,
-  TokenUsageEvent,
   WorkflowDefinition,
 } from "@shared/agents";
 
@@ -358,25 +354,19 @@ export default function Agents() {
   const { toast } = useToast();
   const { openPreferredTool, preferredToolShortLabel } = useCodingTool();
   const { data, error, isFetching, isLoading, refetch } = useAgentHarness();
-  const [agentRuns, setAgentRuns] = usePersistentState<AgentRun[]>(
-    AGENT_RUNS_STORAGE_KEY,
-    [],
-    {
-      deserialize: (value) => normalizeAgentRuns(JSON.parse(value)),
-    },
-  );
-  const [tokenUsageEvents, setTokenUsageEvents] = usePersistentState<TokenUsageEvent[]>(
-    TOKEN_USAGE_EVENTS_STORAGE_KEY,
-    [],
-    {
-      deserialize: (value) => normalizeTokenUsageEvents(JSON.parse(value)),
-    },
-  );
+  const [agentRuns, setAgentRuns, { error: agentRunStorageError }] =
+    useAgentRunsState();
+  const [
+    tokenUsageEvents,
+    setTokenUsageEvents,
+    { error: tokenUsageStorageError },
+  ] = useTokenUsageEventsState();
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [usageIngestionError, setUsageIngestionError] = useState<string | null>(null);
   const [usageSyncedAt, setUsageSyncedAt] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
+  const telemetryStorageError = agentRunStorageError ?? tokenUsageStorageError;
 
   const agents = data?.agents ?? [];
   const workflows = data?.workflows ?? [];
@@ -722,7 +712,9 @@ export default function Agents() {
               <h2 className="text-sm font-semibold text-foreground">Token Usage by Agent</h2>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {usageIngestionError
+              {telemetryStorageError
+                ? `History sync failed: ${telemetryStorageError}`
+                : usageIngestionError
                 ? `OpenCode sync failed: ${usageIngestionError}`
                 : usageSyncedAt
                   ? `OpenCode usage synced ${new Date(usageSyncedAt).toLocaleTimeString()}`

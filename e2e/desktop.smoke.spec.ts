@@ -144,6 +144,7 @@ async function launchDesktopApp(
       DEVDECK_GITHUB_CLIENT_ID: "",
       DEVDECK_GITHUB_STORAGE: "file",
       DEVDECK_GITHUB_TOKEN_PATH: join(userHome, "github-token.json"),
+      DEVDECK_USER_DATA_PATH: join(userHome, "devdeck-data"),
       HOME: userHome,
     },
   });

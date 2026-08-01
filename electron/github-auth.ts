@@ -1,5 +1,4 @@
 import { execFile } from "child_process";
-import { homedir } from "os";
 import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import path from "path";
 import { promisify } from "util";
@@ -7,6 +6,7 @@ import {
   fetchGitHubViewer,
   GitHubApiError,
 } from "./github-api";
+import { getDevDeckUserDataPath } from "./user-data-path";
 
 const execFileAsync = promisify(execFile);
 
@@ -66,20 +66,6 @@ function getGitHubTokenFallbackPath() {
 
 function getGitHubOAuthClientId() {
   return process.env.DEVDECK_GITHUB_CLIENT_ID?.trim() || null;
-}
-
-function getDevDeckUserDataPath() {
-  const explicitPath = process.env.DEVDECK_USER_DATA_PATH?.trim();
-  if (explicitPath) {
-    return explicitPath;
-  }
-
-  const homeDirectory = homedir();
-  if (process.platform === "darwin") {
-    return path.join(homeDirectory, "Library", "Application Support", "DevDeck");
-  }
-
-  return path.join(homeDirectory, ".devdeck");
 }
 
 function shouldUseKeychainStorage() {
