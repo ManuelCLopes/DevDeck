@@ -7,12 +7,11 @@ import PaginationControls from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { usePersistentState } from "@/hooks/use-persistent-state";
 import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
+import { useAgentHarness } from "@/hooks/use-agent-harness";
 import { navigateInApp } from "@/lib/app-navigation";
 import { getDesktopApi } from "@/lib/desktop";
 import { useCodingTool } from "@/hooks/use-coding-tool";
-import {
-  buildCreateSessionPath,
-} from "@/lib/dev-sessions";
+import { buildRecommendedOpenCodeLaunchPath } from "@/lib/agent-launch";
 import { getCiStatusMeta, getProjectAttentionMeta } from "@/lib/project-health";
 import {
   filterPullRequestsByDependabotVisibility,
@@ -75,6 +74,7 @@ export default function Projects() {
   }, [location, setSelectedProjectId]);
 
   const { data: snapshot, isLoading } = useWorkspaceSnapshot();
+  const { data: agentHarness } = useAgentHarness();
   const desktopApi = getDesktopApi();
   const codingTool = useCodingTool();
 
@@ -139,7 +139,17 @@ export default function Projects() {
   };
 
   const startOpenCodeWorkspace = (project: WorkspaceProject) => {
-    navigateInApp(buildCreateSessionPath(project.id), setLocation);
+    navigateInApp(
+      buildRecommendedOpenCodeLaunchPath({
+        agents: agentHarness?.agents ?? [],
+        project: {
+          id: project.id,
+          name: project.name,
+        },
+        workflows: agentHarness?.workflows ?? [],
+      }),
+      setLocation,
+    );
   };
 
   const openRemote = async (project: WorkspaceProject) => {

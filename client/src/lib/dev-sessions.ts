@@ -24,6 +24,15 @@ export interface DevSession {
 
 export const DEV_SESSIONS_STORAGE_KEY = "devdeck:dev-sessions";
 
+export interface CreateSessionPathOptions {
+  agentId?: string | null;
+  baseRef?: string | null;
+  branchName?: string | null;
+  sourceRunId?: string | null;
+  taskTitle?: string | null;
+  workflowId?: string | null;
+}
+
 export function slugifySessionValue(value: string) {
   return value
     .trim()
@@ -44,6 +53,7 @@ export function createSessionId() {
 export function buildCreateSessionPath(
   projectId?: string | null,
   pullRequestId?: string | null,
+  options?: CreateSessionPathOptions,
 ) {
   const params = new URLSearchParams();
   params.set("launch", "opencode");
@@ -52,6 +62,24 @@ export function buildCreateSessionPath(
   }
   if (pullRequestId) {
     params.set("pr", pullRequestId);
+  }
+  if (options?.agentId) {
+    params.set("agent", options.agentId);
+  }
+  if (options?.workflowId) {
+    params.set("workflow", options.workflowId);
+  }
+  if (options?.taskTitle) {
+    params.set("task", options.taskTitle);
+  }
+  if (options?.baseRef) {
+    params.set("base", options.baseRef);
+  }
+  if (options?.branchName) {
+    params.set("branch", options.branchName);
+  }
+  if (options?.sourceRunId) {
+    params.set("sourceRun", options.sourceRunId);
   }
 
   return `/terminals?${params.toString()}`;

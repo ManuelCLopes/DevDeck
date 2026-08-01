@@ -20,6 +20,20 @@ test("buildCreateSessionPath includes project and pull request query params", ()
   );
 });
 
+test("buildCreateSessionPath includes optional OpenCode launch defaults", () => {
+  assert.equal(
+    buildCreateSessionPath("repo-1", null, {
+      agentId: "builder",
+      baseRef: "main",
+      branchName: "feature/opencode",
+      sourceRunId: "run-1",
+      taskTitle: "Improve launch",
+      workflowId: "feature",
+    }),
+    "/terminals?launch=opencode&project=repo-1&agent=builder&workflow=feature&task=Improve+launch&base=main&branch=feature%2Fopencode&sourceRun=run-1",
+  );
+});
+
 test("buildDefaultSessionBranchName prefers PR-oriented review branch names", () => {
   assert.equal(
     buildDefaultSessionBranchName({

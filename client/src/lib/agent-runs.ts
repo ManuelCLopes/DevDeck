@@ -1,3 +1,5 @@
+import { buildCreateSessionPath } from "./dev-sessions";
+
 export const AGENT_RUNS_STORAGE_KEY = "devdeck:agent-runs";
 
 export function buildAgentHandoffLaunchPath(options: {
@@ -9,28 +11,14 @@ export function buildAgentHandoffLaunchPath(options: {
   taskTitle?: string | null;
   workflowId?: string | null;
 }) {
-  const params = new URLSearchParams();
-  params.set("launch", "opencode");
-  params.set("project", options.projectId);
-  params.set("agent", options.agentId);
-
-  if (options.workflowId) {
-    params.set("workflow", options.workflowId);
-  }
-  if (options.taskTitle) {
-    params.set("task", options.taskTitle);
-  }
-  if (options.baseRef) {
-    params.set("base", options.baseRef);
-  }
-  if (options.branchName) {
-    params.set("branch", options.branchName);
-  }
-  if (options.sourceRunId) {
-    params.set("sourceRun", options.sourceRunId);
-  }
-
-  return `/terminals?${params.toString()}`;
+  return buildCreateSessionPath(options.projectId, null, {
+    agentId: options.agentId,
+    baseRef: options.baseRef,
+    branchName: options.branchName,
+    sourceRunId: options.sourceRunId,
+    taskTitle: options.taskTitle,
+    workflowId: options.workflowId,
+  });
 }
 
 function slugifyHandoffSegment(value: string) {

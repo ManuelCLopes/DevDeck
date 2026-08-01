@@ -1,4 +1,5 @@
 import type { AgentDefinition, WorkflowDefinition } from "@shared/agents";
+import { buildCreateSessionPath } from "./dev-sessions";
 
 export interface AgentLaunchProjectContext {
   id: string | null;
@@ -13,6 +14,15 @@ export interface AgentLaunchRecommendation {
 export interface AgentLaunchTaskTemplate {
   id: string;
   title: string;
+}
+
+export interface RecommendedOpenCodeLaunchOptions {
+  agents: AgentDefinition[];
+  project: {
+    id: string;
+    name: string;
+  };
+  workflows: WorkflowDefinition[];
 }
 
 function tokenize(value: string | null | undefined) {
@@ -43,6 +53,35 @@ function getWorkflowAgentIds(workflow: WorkflowDefinition | null) {
   return (workflow?.steps ?? [])
     .map((step) => step.agentId)
     .filter((agentId): agentId is string => Boolean(agentId));
+}
+
+function scopedAgentsForProject(
+  agents: AgentDefinition[],
+  project: AgentLaunchProjectContext,
+) {
+  const projectAgents = agents.filter((agent) => agent.projectId === project.id);
+  const workspaceAgents = agents.filter((agent) => agent.projectId === null);
+  return [...projectAgents, ...workspaceAgents];
+}
+
+function scopedWorkflowsForProject(
+  workflows: WorkflowDefinition[],
+  project: AgentLaunchProjectContext,
+) {
+  const projectWorkflows = workflows.filter(
+    (workflow) => workflow.projectId === project.id,
+  );
+  const workspaceWorkflows = workflows.filter(
+    (workflow) => workflow.projectId === null,
+  );
+  return [...projectWorkflows, ...workspaceWorkflows];
+}
+
+function selectRecommendedWorkflowForLaunch(
+  workflows: WorkflowDefinition[],
+  project: AgentLaunchProjectContext,
+) {
+  return scopedWorkflowsForProject(workflows, project)[0] ?? null;
 }
 
 function scoreAgentForLaunch(
@@ -189,6 +228,33 @@ export function buildAgentLaunchTaskTemplates(options: {
     }
     seenTitles.add(template.title);
     return true;
+  });
+}
+
+export function buildRecommendedOpenCodeLaunchPath(
+  options: RecommendedOpenCodeLaunchOptions,
+) {
+  const workflow = selectRecommendedWorkflowForLaunch(
+    options.workflows,
+    options.project,
+  );
+  const scopedAgents = scopedAgentsForProject(options.agents, options.project);
+  const recommendation = recommendAgentForLaunch(scopedAgents, {
+    project: options.project,
+    taskTitle: "",
+    workflow,
+  });
+  const taskTitle =
+    buildAgentLaunchTaskTemplates({
+      agent: recommendation.agent,
+      projectName: options.project.name,
+      workflow,
+    })[0]?.title ?? null;
+
+  return buildCreateSessionPath(options.project.id, null, {
+    agentId: recommendation.agent?.id ?? null,
+    taskTitle,
+    workflowId: workflow?.id ?? null,
   });
 }
 

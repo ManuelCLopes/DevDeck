@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildAgentLaunchTaskTemplates,
+  buildRecommendedOpenCodeLaunchPath,
   parseLaunchTokenBudget,
   recommendAgentForLaunch,
 } from "./agent-launch";
@@ -87,6 +88,36 @@ test("buildAgentLaunchTaskTemplates creates compact launch titles", () => {
     ["workflow-agent", "workflow", "responsibility", "agent", "default"],
   );
   assert.match(templates[0]?.title ?? "", /Feature Build/);
+});
+
+test("buildRecommendedOpenCodeLaunchPath preselects project harness defaults", () => {
+  const launchPath = buildRecommendedOpenCodeLaunchPath({
+    agents: [builder, reviewer],
+    project: { id: "repo", name: "Repo" },
+    workflows: [workflow],
+  });
+  const url = new URL(launchPath, "https://example.test");
+
+  assert.equal(url.pathname, "/terminals");
+  assert.equal(url.searchParams.get("launch"), "opencode");
+  assert.equal(url.searchParams.get("project"), "repo");
+  assert.equal(url.searchParams.get("workflow"), "feature");
+  assert.equal(url.searchParams.get("agent"), "reviewer");
+  assert.equal(url.searchParams.get("task"), "Feature Build: Reviewer on Repo");
+});
+
+test("buildRecommendedOpenCodeLaunchPath keeps unrelated harness entries manual", () => {
+  const launchPath = buildRecommendedOpenCodeLaunchPath({
+    agents: [{ ...builder, projectId: "other", projectName: "Other" }],
+    project: { id: "repo", name: "Repo" },
+    workflows: [{ ...workflow, projectId: "other", projectName: "Other" }],
+  });
+  const url = new URL(launchPath, "https://example.test");
+
+  assert.equal(url.searchParams.get("project"), "repo");
+  assert.equal(url.searchParams.get("agent"), null);
+  assert.equal(url.searchParams.get("workflow"), null);
+  assert.equal(url.searchParams.get("task"), "OpenCode workspace for Repo");
 });
 
 test("parseLaunchTokenBudget accepts commas and rejects invalid input", () => {
