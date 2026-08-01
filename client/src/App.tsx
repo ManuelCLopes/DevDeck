@@ -12,7 +12,11 @@ import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import {
   hasValidWorkspaceSelection,
 } from "@/lib/workspace-selection";
-import { getAppPreferences, useAppPreferences } from "@/lib/app-preferences";
+import {
+  applyAppThemePreferences,
+  getAppPreferences,
+  useAppPreferences,
+} from "@/lib/app-preferences";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
@@ -105,42 +109,23 @@ function App() {
 
   // Run synchronously during initial render to prevent light mode flash
   useState(() => {
-    const initialPrefs = getAppPreferences();
-    const theme = initialPrefs.themeMode;
-    const root = window.document.documentElement;
-    if (theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
+    applyAppThemePreferences(getAppPreferences());
   });
 
   useEffect(() => {
-    const theme = preferences.themeMode;
-    const root = window.document.documentElement;
+    applyAppThemePreferences(preferences);
 
-    const applyTheme = (effectiveTheme: "light" | "dark") => {
-      if (effectiveTheme === "dark") {
-        root.classList.add("dark");
-      } else {
-        root.classList.remove("dark");
-      }
-    };
-
-    if (theme === "system") {
+    if (preferences.themeMode === "system") {
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      applyTheme(mediaQuery.matches ? "dark" : "light");
 
       const handleChange = (e: MediaQueryListEvent) => {
-        applyTheme(e.matches ? "dark" : "light");
+        window.document.documentElement.classList.toggle("dark", e.matches);
       };
 
       mediaQuery.addEventListener("change", handleChange);
       return () => mediaQuery.removeEventListener("change", handleChange);
-    } else {
-      applyTheme(theme);
     }
-  }, [preferences.themeMode]);
+  }, [preferences.themeMode, preferences.themePreset]);
 
   return (
     <QueryClientProvider client={queryClient}>

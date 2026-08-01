@@ -13,7 +13,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { type AppPreferences, useAppPreferences } from "@/lib/app-preferences";
+import {
+  APP_THEME_PRESET_OPTIONS,
+  type AppPreferences,
+  useAppPreferences,
+} from "@/lib/app-preferences";
 import { getDesktopApi } from "@/lib/desktop";
 import { getGitHubStatusMeta } from "@/lib/github-status";
 import { formatDistanceToNow } from "date-fns";
@@ -24,6 +28,7 @@ import {
   GripVertical,
   HardDrive,
   Layers3,
+  Palette,
   RotateCcw,
   Shield,
   Terminal,
@@ -326,6 +331,7 @@ export default function Settings() {
         | "autoRefreshIntervalSeconds"
         | "preferredCodingTool"
         | "themeMode"
+        | "themePreset"
         | "terminal"
       >;
       label: string;
@@ -412,7 +418,7 @@ export default function Settings() {
               </p>
             </div>
           </div>
-          
+
           <div className="p-6 space-y-6">
             {/* Local Directory */}
             <div className="space-y-3">
@@ -924,6 +930,46 @@ export default function Settings() {
                       </button>
                     ))}
                   </div>
+                </div>
+                <div className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {APP_THEME_PRESET_OPTIONS.map((theme) => (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      onClick={() => setPreference("themePreset", theme.id)}
+                      className={`rounded-lg border p-3 text-left shadow-sm transition-colors ${
+                        preferences.themePreset === theme.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border/60 bg-white hover:bg-secondary/30"
+                      }`}
+                      aria-pressed={preferences.themePreset === theme.id}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                            <Palette className="h-3.5 w-3.5 text-muted-foreground" />
+                            {theme.label}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            {theme.description}
+                          </p>
+                        </div>
+                        <span
+                          className={`mt-0.5 h-6 w-6 shrink-0 rounded-md border border-black/10 shadow-sm ${theme.accentClassName}`}
+                          aria-hidden="true"
+                        />
+                      </div>
+                      <div className="mt-3 flex items-center gap-1.5">
+                        {theme.swatches.map((swatch) => (
+                          <span
+                            key={swatch}
+                            className={`h-4 flex-1 rounded-sm border border-black/10 ${swatch}`}
+                            aria-hidden="true"
+                          />
+                        ))}
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="space-y-1">

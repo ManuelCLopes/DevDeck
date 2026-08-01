@@ -9,6 +9,16 @@ export type TerminalFontFamilyKey =
   | "fira-code"
   | "menlo"
   | "ibm-plex-mono";
+export type AppThemePreset = "classic" | "graphite" | "circuit" | "signal";
+export type AppThemeMode = "light" | "dark" | "system";
+
+export interface AppThemePresetOption {
+  accentClassName: string;
+  description: string;
+  id: AppThemePreset;
+  label: string;
+  swatches: string[];
+}
 
 export interface TerminalPreferences {
   cursorBlink: boolean;
@@ -33,7 +43,8 @@ export interface AppPreferences {
   preferredCodingTool: "opencode" | "vscode";
   refreshOnWindowFocus: boolean;
   showMenuBarIcon: boolean;
-  themeMode: "light" | "dark" | "system";
+  themeMode: AppThemeMode;
+  themePreset: AppThemePreset;
   terminal: TerminalPreferences;
 }
 
@@ -49,6 +60,42 @@ export const DEFAULT_TERMINAL_PREFERENCES: TerminalPreferences = {
 
 const APP_PREFERENCES_KEY = "devdeck_app_preferences";
 
+export const APP_THEME_PRESET_OPTIONS: AppThemePresetOption[] = [
+  {
+    accentClassName: "bg-zinc-900",
+    description: "Neutral macOS workbench with high contrast controls.",
+    id: "classic",
+    label: "Classic",
+    swatches: ["bg-zinc-950", "bg-zinc-200", "bg-emerald-500", "bg-sky-500"],
+  },
+  {
+    accentClassName: "bg-stone-800",
+    description: "Graphite surfaces with muted steel accents.",
+    id: "graphite",
+    label: "Graphite",
+    swatches: ["bg-stone-900", "bg-stone-300", "bg-cyan-500", "bg-amber-500"],
+  },
+  {
+    accentClassName: "bg-emerald-700",
+    description: "Sharper execution theme with terminal-inspired greens.",
+    id: "circuit",
+    label: "Circuit",
+    swatches: ["bg-emerald-700", "bg-teal-200", "bg-lime-500", "bg-orange-500"],
+  },
+  {
+    accentClassName: "bg-rose-700",
+    description: "Signal-forward theme with warmer priority accents.",
+    id: "signal",
+    label: "Signal",
+    swatches: ["bg-rose-700", "bg-sky-300", "bg-teal-500", "bg-amber-500"],
+  },
+];
+
+const APP_THEME_PRESET_IDS = new Set<AppThemePreset>(
+  APP_THEME_PRESET_OPTIONS.map((option) => option.id),
+);
+const APP_THEME_MODES = new Set<AppThemeMode>(["light", "dark", "system"]);
+
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   alertFailingBuilds: true,
   autoRefreshEnabled: true,
@@ -63,10 +110,23 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   refreshOnWindowFocus: true,
   showMenuBarIcon: true,
   themeMode: "system",
+  themePreset: "classic",
   terminal: DEFAULT_TERMINAL_PREFERENCES,
 };
 
-function mergeAppPreferences(
+function normalizeThemePreset(value: unknown): AppThemePreset {
+  return typeof value === "string" && APP_THEME_PRESET_IDS.has(value as AppThemePreset)
+    ? (value as AppThemePreset)
+    : DEFAULT_APP_PREFERENCES.themePreset;
+}
+
+function normalizeThemeMode(value: unknown): AppThemeMode {
+  return typeof value === "string" && APP_THEME_MODES.has(value as AppThemeMode)
+    ? (value as AppThemeMode)
+    : DEFAULT_APP_PREFERENCES.themeMode;
+}
+
+export function normalizeAppPreferences(
   rawPreferences: Partial<AppPreferences> | null | undefined,
 ) {
   const mergedTerminal: TerminalPreferences = {
@@ -74,11 +134,36 @@ function mergeAppPreferences(
     ...((rawPreferences?.terminal ?? {}) as Partial<TerminalPreferences>),
   };
 
-  return {
+  const mergedPreferences = {
     ...DEFAULT_APP_PREFERENCES,
     ...(rawPreferences ?? {}),
     terminal: mergedTerminal,
   };
+
+  return {
+    ...mergedPreferences,
+    themeMode: normalizeThemeMode(mergedPreferences.themeMode),
+    themePreset: normalizeThemePreset(mergedPreferences.themePreset),
+  };
+}
+
+export function applyAppThemePreferences(
+  preferences: Pick<AppPreferences, "themeMode" | "themePreset">,
+) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const root = window.document.documentElement;
+  root.dataset.theme = normalizeThemePreset(preferences.themePreset);
+
+  const effectiveTheme =
+    normalizeThemeMode(preferences.themeMode) === "system"
+      ? window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light"
+      : normalizeThemeMode(preferences.themeMode);
+  root.classList.toggle("dark", effectiveTheme === "dark");
 }
 
 export function getAppPreferences() {
@@ -92,7 +177,7 @@ export function getAppPreferences() {
   }
 
   try {
-    return mergeAppPreferences(JSON.parse(rawPreferences) as Partial<AppPreferences>);
+    return normalizeAppPreferences(JSON.parse(rawPreferences) as Partial<AppPreferences>);
   } catch {
     return DEFAULT_APP_PREFERENCES;
   }
@@ -104,11 +189,11 @@ export function useAppPreferences() {
     DEFAULT_APP_PREFERENCES,
     {
       deserialize: (value) =>
-        mergeAppPreferences(JSON.parse(value) as Partial<AppPreferences>),
+        normalizeAppPreferences(JSON.parse(value) as Partial<AppPreferences>),
     },
   );
   const normalizedPreferences = useMemo(
-    () => mergeAppPreferences(preferences),
+    () => normalizeAppPreferences(preferences),
     [preferences],
   );
 
@@ -119,10 +204,15 @@ export function useAppPreferences() {
         key: Key,
         value: AppPreferences[Key],
       ) {
-        setPreferences((currentPreferences) => ({
-          ...currentPreferences,
+        const nextPreferences = normalizeAppPreferences({
+          ...normalizedPreferences,
           [key]: value,
-        }));
+        });
+        setPreferences(nextPreferences);
+
+        if (key === "themeMode" || key === "themePreset") {
+          applyAppThemePreferences(nextPreferences);
+        }
       },
       setPreferences,
     }),

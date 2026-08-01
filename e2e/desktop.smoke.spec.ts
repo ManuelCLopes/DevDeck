@@ -229,6 +229,9 @@ test("preferences supports hide, restore, and confirmed removal curation", async
     const preferences = page.locator("main").filter({
       has: page.getByRole("heading", { name: "Preferences", exact: true }),
     });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "classic");
+    await preferences.getByRole("button", { name: /Circuit/ }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "circuit");
 
     const collectionInputs = preferences.locator('input[id^="collection-"]');
     await expect
