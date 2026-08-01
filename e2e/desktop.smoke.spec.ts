@@ -416,17 +416,17 @@ test("agent productivity insights summarize persisted telemetry", async () => {
     await expect(page.getByRole("button", { name: "Export JSON" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Runs CSV" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Traces CSV" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Import Trace" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Import Trace" })).toHaveCount(0);
+    await expect(page.getByText(/Watching \.devdeck\/traces/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Reset" })).toBeEnabled();
     await expect(
       page.getByRole("button", { name: "Copy Diagnostics" }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Copy Trace Append Command" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Copy Trace Contract" }),
-    ).toBeVisible();
+    await expect(page.getByText("Advanced Trace Fallback")).toBeVisible();
+    await page.getByText("Advanced Trace Fallback").click();
+    await expect(page.getByText(/trace environment variables automatically/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Copy Trace Append Command" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Copy Trace Contract" })).toBeVisible();
     await expect(page.getByText("Handoff Trace")).toBeVisible();
     await expect(page.getByText("Task Timeline")).toBeVisible();
     await expect(page.getByText("Captured trace timeline")).toBeVisible();

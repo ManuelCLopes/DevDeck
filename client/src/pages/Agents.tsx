@@ -1,9 +1,7 @@
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type ChangeEvent,
   type ReactNode,
 } from "react";
 import { useLocation } from "wouter";
@@ -26,7 +24,6 @@ import {
   Sparkles,
   Timer,
   TrendingUp,
-  Upload,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -83,8 +80,6 @@ import {
   buildTaskTraceAppendCommandText,
   buildTaskTraceContractText,
   getTaskTraceEntriesForRun,
-  mergeTaskTraceEntries,
-  parseTaskTraceImportPayload,
   serializeTaskTraceEntriesCsv,
   summarizeWorkflowHandoffHealth,
   type AgentRunHandoffStep,
@@ -1658,7 +1653,7 @@ function AgentRunDetail({
           </div>
         ) : (
           <div className="mt-2 rounded-md border border-dashed border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200">
-            Missing trace entries. Import task trace JSON or copy the trace contract for this run.
+            Waiting for automatic trace entries from {DEVDECK_TRACE_DIRECTORY}.
           </div>
         )}
       </div>
@@ -1706,26 +1701,37 @@ function AgentRunDetail({
         <Copy className="h-3.5 w-3.5" />
         Copy Diagnostics
       </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="mt-2 h-8 w-full gap-2 text-xs"
-        onClick={() => onCopyTraceAppendCommand(run.id)}
-      >
-        <Copy className="h-3.5 w-3.5" />
-        Copy Trace Append Command
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="mt-2 h-8 w-full gap-2 text-xs"
-        onClick={() => onCopyTraceContract(run.id)}
-      >
-        <Copy className="h-3.5 w-3.5" />
-        Copy Trace Contract
-      </Button>
+
+      <details className="mt-3 rounded-md border border-black/10 bg-secondary/30 p-2 text-xs dark:border-white/10">
+        <summary className="cursor-pointer text-[11px] font-semibold uppercase text-muted-foreground">
+          Advanced Trace Fallback
+        </summary>
+        <div className="mt-2 space-y-2">
+          <p className="text-[11px] leading-5 text-muted-foreground">
+            DevDeck-launched agents receive trace environment variables automatically.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 w-full gap-2 text-xs"
+            onClick={() => onCopyTraceAppendCommand(run.id)}
+          >
+            <Copy className="h-3.5 w-3.5" />
+            Copy Trace Append Command
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 w-full gap-2 text-xs"
+            onClick={() => onCopyTraceContract(run.id)}
+          >
+            <Copy className="h-3.5 w-3.5" />
+            Copy Trace Contract
+          </Button>
+        </div>
+      </details>
     </aside>
   );
 }
@@ -1761,7 +1767,6 @@ export default function Agents() {
     rejectedCount: number;
   } | null>(null);
   const [traceIngestionSyncedAt, setTraceIngestionSyncedAt] = useState<string | null>(null);
-  const traceImportInputRef = useRef<HTMLInputElement | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
   const telemetryStorageError =
     agentRunStorageError ?? tokenUsageStorageError ?? taskTraceStorageError;
@@ -2156,40 +2161,6 @@ export default function Agents() {
     }
   };
 
-  const handleImportTraceJson = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.currentTarget.files?.[0] ?? null;
-    event.currentTarget.value = "";
-    if (!file) {
-      return;
-    }
-
-    try {
-      const rawPayload = JSON.parse(await file.text());
-      const result = parseTaskTraceImportPayload(rawPayload);
-      if (result.entries.length === 0) {
-        throw new Error("No valid task trace entries were found in the selected file.");
-      }
-
-      setTaskTraceEntries((currentEntries) =>
-        mergeTaskTraceEntries(currentEntries, result.entries),
-      );
-      toast({
-        title: "Trace JSON imported",
-        description:
-          result.rejectedCount > 0
-            ? `${result.entries.length} imported, ${result.rejectedCount} rejected`
-            : `${result.entries.length} trace entries imported`,
-      });
-    } catch (nextError) {
-      toast({
-        title: "Trace import failed",
-        description:
-          nextError instanceof Error ? nextError.message : String(nextError),
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleResetTelemetry = async () => {
     const confirmed = window.confirm(
       "Reset agent telemetry history? This clears agent runs, token usage, and task traces.",
@@ -2396,23 +2367,6 @@ export default function Agents() {
               <Download className="h-3.5 w-3.5" />
               Traces CSV
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() => traceImportInputRef.current?.click()}
-            >
-              <Upload className="h-3.5 w-3.5" />
-              Import Trace
-            </Button>
-            <input
-              ref={traceImportInputRef}
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              onChange={(event) => void handleImportTraceJson(event)}
-            />
             <Button
               type="button"
               variant="outline"
