@@ -132,17 +132,94 @@ export interface AgentReworkSignal {
   traceCount: number;
 }
 
+export interface AgentProductivityTrendPoint {
+  averageDurationMs: number | null;
+  completedRunCount: number;
+  day: string;
+  estimatedCost: number;
+  failedRunCount: number;
+  failedTraceCount: number;
+  label: string;
+  reworkRate: number;
+  reworkRunCount: number;
+  runCount: number;
+  totalTokens: number;
+  traceCount: number;
+}
+
+export interface AgentThroughputTrendPoint {
+  completedRunCount: number;
+  day: string;
+  failedRunCount: number;
+  label: string;
+  runCount: number;
+}
+
+export interface AgentThroughputTrend {
+  agentId: string | null;
+  agentName: string;
+  averageRunsPerActiveDay: number;
+  completedRunCount: number;
+  completionRate: number;
+  points: AgentThroughputTrendPoint[];
+  runCount: number;
+}
+
+export interface WorkflowCostTrendPoint {
+  day: string;
+  estimatedCost: number;
+  label: string;
+  runCount: number;
+  totalTokens: number;
+}
+
+export interface WorkflowCostTrend {
+  averageTokensPerRun: number;
+  estimatedCost: number;
+  points: WorkflowCostTrendPoint[];
+  runCount: number;
+  totalTokens: number;
+  workflowId: string | null;
+  workflowName: string;
+}
+
+export interface AgentHandoffLatencySample {
+  fromAgentId: string | null;
+  fromAgentName: string;
+  handoffAt: string;
+  latencyMs: number;
+  sourceRunId: string;
+  startedAt: string;
+  targetRunId: string;
+  taskTitle: string;
+  toAgentId: string;
+  toAgentName: string;
+  workflowId: string | null;
+  workflowName: string;
+}
+
+export interface AgentHandoffLatencySummary {
+  averageLatencyMs: number | null;
+  maxLatencyMs: number | null;
+  sampleCount: number;
+  slowestSamples: AgentHandoffLatencySample[];
+}
+
 export interface AgentProductivityInsights {
+  agentThroughputTrends: AgentThroughputTrend[];
   agentSummaries: AgentProductivityAgentSummary[];
   budgetWarnings: AgentProductivityRunInsight[];
   expensiveRuns: AgentProductivityRunInsight[];
+  handoffLatency: AgentHandoffLatencySummary;
   handoffRoles: AgentHandoffRoleSummary[];
   modelSummaries: AgentProductivityModelSummary[];
+  productivityTrendPoints: AgentProductivityTrendPoint[];
   projectSummaries: AgentProductivityProjectSummary[];
   reworkSignals: AgentReworkSignal[];
   runInsights: AgentProductivityRunInsight[];
   telemetryGaps: AgentTelemetryGap[];
   totals: AgentProductivityTotals;
+  workflowCostTrends: WorkflowCostTrend[];
   workflowSummaries: AgentProductivityWorkflowSummary[];
 }
 
@@ -181,6 +258,8 @@ const STATUS_ORDER: AgentRunStatus[] = [
   "failed",
   "paused",
 ];
+const DAY_MS = 24 * 60 * 60 * 1_000;
+const PRODUCTIVITY_TREND_DAY_COUNT = 14;
 
 function createEmptyUsageRollup(): TokenUsageRollup {
   return {
@@ -262,6 +341,102 @@ function countRepeatedValues(values: string[]) {
   }
 
   return Array.from(counts.values()).filter((count) => count > 1).length;
+}
+
+function getUtcDayStartMs(time: number) {
+  const date = new Date(time);
+  return Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+  );
+}
+
+function getDayKeyFromMs(time: number) {
+  return new Date(getUtcDayStartMs(time)).toISOString().slice(0, 10);
+}
+
+function getDayKey(value: string | null | undefined) {
+  const time = getTime(value);
+  return time > 0 ? getDayKeyFromMs(time) : null;
+}
+
+function getDayLabel(day: string) {
+  return new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(`${day}T00:00:00.000Z`));
+}
+
+function getObservedTime(values: Array<string | null | undefined>) {
+  return values.map(getTime).filter((time) => time > 0);
+}
+
+function buildTrendDays(options: {
+  agentRuns: AgentRun[];
+  nowMs: number;
+  taskTraceEntries: TaskTraceEntry[];
+  tokenUsageEvents: TokenUsageEvent[];
+}) {
+  const observedTimes = [
+    ...getObservedTime(
+      options.agentRuns.flatMap((run) => [run.startedAt, run.endedAt]),
+    ),
+    ...getObservedTime(options.taskTraceEntries.map((entry) => entry.createdAt)),
+    ...getObservedTime(options.tokenUsageEvents.map((event) => event.createdAt)),
+  ];
+  const latestObservedTime = observedTimes.length
+    ? Math.max(...observedTimes)
+    : options.nowMs;
+  const latestDayStart = getUtcDayStartMs(latestObservedTime);
+
+  return Array.from({ length: PRODUCTIVITY_TREND_DAY_COUNT }, (_, index) =>
+    getDayKeyFromMs(
+      latestDayStart - (PRODUCTIVITY_TREND_DAY_COUNT - index - 1) * DAY_MS,
+    ),
+  );
+}
+
+function createProductivityTrendPoint(day: string): AgentProductivityTrendPoint {
+  return {
+    averageDurationMs: null,
+    completedRunCount: 0,
+    day,
+    estimatedCost: 0,
+    failedRunCount: 0,
+    failedTraceCount: 0,
+    label: getDayLabel(day),
+    reworkRate: 0,
+    reworkRunCount: 0,
+    runCount: 0,
+    totalTokens: 0,
+    traceCount: 0,
+  };
+}
+
+function createAgentThroughputTrendPoint(day: string): AgentThroughputTrendPoint {
+  return {
+    completedRunCount: 0,
+    day,
+    failedRunCount: 0,
+    label: getDayLabel(day),
+    runCount: 0,
+  };
+}
+
+function createWorkflowCostTrendPoint(day: string): WorkflowCostTrendPoint {
+  return {
+    day,
+    estimatedCost: 0,
+    label: getDayLabel(day),
+    runCount: 0,
+    totalTokens: 0,
+  };
+}
+
+function roundToSingleDecimal(value: number) {
+  return Math.round(value * 10) / 10;
 }
 
 function getRunDurationMs(run: AgentRun, nowMs: number) {
@@ -449,6 +624,79 @@ function resolveEventRun(
   return runsByOpenCodeUsageId.get(event.id) ?? null;
 }
 
+function buildReworkSignalForRun(
+  runInsight: AgentProductivityRunInsight,
+  traces: TaskTraceEntry[],
+): AgentReworkSignal | null {
+  const failedTraceCount = traces.filter((trace) => trace.errors.length > 0).length;
+  const repeatedFileCount = countRepeatedValues(
+    traces.flatMap((trace) => trace.filesTouched),
+  );
+  const repeatedTestCount = countRepeatedValues(
+    traces.flatMap((trace) => trace.testsRun),
+  );
+  if (
+    failedTraceCount === 0 &&
+    repeatedFileCount === 0 &&
+    repeatedTestCount === 0
+  ) {
+    return null;
+  }
+
+  return {
+    agentId: runInsight.agentId,
+    agentName: runInsight.agentName,
+    failedTraceCount,
+    latestTraceAt:
+      traces
+        .map((trace) => trace.createdAt)
+        .sort((left, right) => getTime(right) - getTime(left))[0] ?? null,
+    repeatedFileCount,
+    repeatedTestCount,
+    runId: runInsight.run.id,
+    taskTitle: runInsight.run.taskTitle,
+    traceCount: traces.length,
+  };
+}
+
+function sortReworkSignals(
+  left: AgentReworkSignal,
+  right: AgentReworkSignal,
+) {
+  return (
+    right.failedTraceCount - left.failedTraceCount ||
+    right.repeatedFileCount - left.repeatedFileCount ||
+    right.repeatedTestCount - left.repeatedTestCount ||
+    getTime(right.latestTraceAt) - getTime(left.latestTraceAt)
+  );
+}
+
+function matchesHandoffTargetRun(
+  sourceRun: AgentRun,
+  targetRun: AgentRun,
+  targetAgentId: string,
+) {
+  if (targetRun.id === sourceRun.id || targetRun.agentId !== targetAgentId) {
+    return false;
+  }
+  if (
+    sourceRun.workflowRunId &&
+    targetRun.workflowRunId &&
+    sourceRun.workflowRunId !== targetRun.workflowRunId
+  ) {
+    return false;
+  }
+  if (
+    sourceRun.projectId &&
+    targetRun.projectId &&
+    sourceRun.projectId !== targetRun.projectId
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 export function buildAgentProductivityInsights(
   input: AgentProductivityInput,
 ): AgentProductivityInsights {
@@ -546,48 +794,17 @@ export function buildAgentProductivityInsights(
     addEventToRollup(totals, event);
   }
 
-  const reworkSignals = runInsights
-    .map((runInsight): AgentReworkSignal | null => {
-      const traces = taskTraceEntriesByRunId.get(runInsight.run.id) ?? [];
-      const failedTraceCount = traces.filter((trace) => trace.errors.length > 0).length;
-      const repeatedFileCount = countRepeatedValues(
-        traces.flatMap((trace) => trace.filesTouched),
-      );
-      const repeatedTestCount = countRepeatedValues(
-        traces.flatMap((trace) => trace.testsRun),
-      );
-      if (
-        failedTraceCount === 0 &&
-        repeatedFileCount === 0 &&
-        repeatedTestCount === 0
-      ) {
-        return null;
-      }
-
-      return {
-        agentId: runInsight.agentId,
-        agentName: runInsight.agentName,
-        failedTraceCount,
-        latestTraceAt:
-          traces
-            .map((trace) => trace.createdAt)
-            .sort((left, right) => getTime(right) - getTime(left))[0] ?? null,
-        repeatedFileCount,
-        repeatedTestCount,
-        runId: runInsight.run.id,
-        taskTitle: runInsight.run.taskTitle,
-        traceCount: traces.length,
-      };
-    })
-    .filter((signal): signal is AgentReworkSignal => Boolean(signal))
-    .sort(
-      (left, right) =>
-        right.failedTraceCount - left.failedTraceCount ||
-        right.repeatedFileCount - left.repeatedFileCount ||
-        right.repeatedTestCount - left.repeatedTestCount ||
-        getTime(right.latestTraceAt) - getTime(left.latestTraceAt),
+  const allReworkSignals = runInsights
+    .map((runInsight) =>
+      buildReworkSignalForRun(
+        runInsight,
+        taskTraceEntriesByRunId.get(runInsight.run.id) ?? [],
+      ),
     )
-    .slice(0, 8);
+    .filter((signal): signal is AgentReworkSignal => Boolean(signal))
+    .sort(sortReworkSignals);
+  const reworkSignals = allReworkSignals.slice(0, 8);
+  const reworkRunIds = new Set(allReworkSignals.map((signal) => signal.runId));
 
   for (const runInsight of runInsights) {
     statusCounts[runInsight.run.status] += 1;
@@ -622,6 +839,292 @@ export function buildAgentProductivityInsights(
   totals.usageCoverageRate = getRate(totals.runsWithUsageCount, totals.runCount);
   totals.averageTokensPerRun =
     totals.runCount > 0 ? Math.round(totals.totalTokens / totals.runCount) : 0;
+
+  const trendDays = buildTrendDays({
+    agentRuns,
+    nowMs,
+    taskTraceEntries,
+    tokenUsageEvents,
+  });
+  const productivityTrendPointsByDay = new Map(
+    trendDays.map((day) => [day, createProductivityTrendPoint(day)]),
+  );
+  const durationSamplesByDay = new Map<string, number[]>();
+
+  for (const runInsight of runInsights) {
+    const day = getDayKey(runInsight.run.startedAt);
+    if (!day) {
+      continue;
+    }
+
+    const point = productivityTrendPointsByDay.get(day);
+    if (!point) {
+      continue;
+    }
+
+    point.runCount += 1;
+    if (runInsight.run.status === "completed") {
+      point.completedRunCount += 1;
+    }
+    if (runInsight.run.status === "failed") {
+      point.failedRunCount += 1;
+    }
+    if (reworkRunIds.has(runInsight.run.id)) {
+      point.reworkRunCount += 1;
+    }
+    point.totalTokens += runInsight.totalTokens;
+    point.estimatedCost += runInsight.estimatedCost;
+    if (runInsight.durationMs !== null) {
+      const samples = durationSamplesByDay.get(day) ?? [];
+      samples.push(runInsight.durationMs);
+      durationSamplesByDay.set(day, samples);
+    }
+  }
+
+  for (const trace of taskTraceEntries) {
+    const day = getDayKey(trace.createdAt);
+    if (!day) {
+      continue;
+    }
+
+    const point = productivityTrendPointsByDay.get(day);
+    if (!point) {
+      continue;
+    }
+
+    point.traceCount += 1;
+    if (trace.errors.length > 0) {
+      point.failedTraceCount += 1;
+    }
+  }
+
+  const productivityTrendPoints = trendDays.map((day) => {
+    const point = productivityTrendPointsByDay.get(day) ?? createProductivityTrendPoint(day);
+    point.averageDurationMs = getAverage(durationSamplesByDay.get(day) ?? []);
+    point.reworkRate = getRate(point.reworkRunCount, point.runCount);
+    return point;
+  });
+
+  const agentThroughputTrendsById = new Map<
+    string,
+    {
+      agentId: string | null;
+      agentName: string;
+      completedRunCount: number;
+      pointsByDay: Map<string, AgentThroughputTrendPoint>;
+      runCount: number;
+    }
+  >();
+  const getAgentThroughputTrend = (runInsight: AgentProductivityRunInsight) => {
+    const agentKey = runInsight.agentId ?? "unassigned";
+    const existing = agentThroughputTrendsById.get(agentKey);
+    if (existing) {
+      return existing;
+    }
+
+    const trend = {
+      agentId: runInsight.agentId,
+      agentName: runInsight.agentName,
+      completedRunCount: 0,
+      pointsByDay: new Map(
+        trendDays.map((day) => [day, createAgentThroughputTrendPoint(day)]),
+      ),
+      runCount: 0,
+    };
+    agentThroughputTrendsById.set(agentKey, trend);
+    return trend;
+  };
+
+  for (const runInsight of runInsights) {
+    const day = getDayKey(runInsight.run.startedAt);
+    const trend = getAgentThroughputTrend(runInsight);
+    trend.runCount += 1;
+    if (runInsight.run.status === "completed") {
+      trend.completedRunCount += 1;
+    }
+    if (!day) {
+      continue;
+    }
+
+    const point = trend.pointsByDay.get(day);
+    if (!point) {
+      continue;
+    }
+
+    point.runCount += 1;
+    if (runInsight.run.status === "completed") {
+      point.completedRunCount += 1;
+    }
+    if (runInsight.run.status === "failed") {
+      point.failedRunCount += 1;
+    }
+  }
+
+  const agentThroughputTrends = Array.from(agentThroughputTrendsById.values())
+    .map((trend): AgentThroughputTrend => {
+      const points = trendDays.map(
+        (day) => trend.pointsByDay.get(day) ?? createAgentThroughputTrendPoint(day),
+      );
+      const activeDayCount = points.filter((point) => point.runCount > 0).length;
+      return {
+        agentId: trend.agentId,
+        agentName: trend.agentName,
+        averageRunsPerActiveDay:
+          activeDayCount > 0
+            ? roundToSingleDecimal(trend.runCount / activeDayCount)
+            : 0,
+        completedRunCount: trend.completedRunCount,
+        completionRate: getRate(trend.completedRunCount, trend.runCount),
+        points,
+        runCount: trend.runCount,
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.runCount - left.runCount ||
+        right.completedRunCount - left.completedRunCount ||
+        left.agentName.localeCompare(right.agentName),
+    );
+
+  const workflowCostTrendsById = new Map<
+    string,
+    {
+      estimatedCost: number;
+      pointsByDay: Map<string, WorkflowCostTrendPoint>;
+      runCount: number;
+      totalTokens: number;
+      workflowId: string | null;
+      workflowName: string;
+    }
+  >();
+  const getWorkflowCostTrend = (runInsight: AgentProductivityRunInsight) => {
+    const workflowKey = runInsight.workflowId ?? "unassigned";
+    const existing = workflowCostTrendsById.get(workflowKey);
+    if (existing) {
+      return existing;
+    }
+
+    const trend = {
+      estimatedCost: 0,
+      pointsByDay: new Map(
+        trendDays.map((day) => [day, createWorkflowCostTrendPoint(day)]),
+      ),
+      runCount: 0,
+      totalTokens: 0,
+      workflowId: runInsight.workflowId,
+      workflowName: runInsight.workflowName,
+    };
+    workflowCostTrendsById.set(workflowKey, trend);
+    return trend;
+  };
+
+  for (const runInsight of runInsights) {
+    const day = getDayKey(runInsight.run.startedAt);
+    const trend = getWorkflowCostTrend(runInsight);
+    trend.runCount += 1;
+    trend.totalTokens += runInsight.totalTokens;
+    trend.estimatedCost += runInsight.estimatedCost;
+    if (!day) {
+      continue;
+    }
+
+    const point = trend.pointsByDay.get(day);
+    if (!point) {
+      continue;
+    }
+
+    point.runCount += 1;
+    point.totalTokens += runInsight.totalTokens;
+    point.estimatedCost += runInsight.estimatedCost;
+  }
+
+  const workflowCostTrends = Array.from(workflowCostTrendsById.values())
+    .map((trend): WorkflowCostTrend => ({
+      averageTokensPerRun:
+        trend.runCount > 0 ? Math.round(trend.totalTokens / trend.runCount) : 0,
+      estimatedCost: trend.estimatedCost,
+      points: trendDays.map(
+        (day) => trend.pointsByDay.get(day) ?? createWorkflowCostTrendPoint(day),
+      ),
+      runCount: trend.runCount,
+      totalTokens: trend.totalTokens,
+      workflowId: trend.workflowId,
+      workflowName: trend.workflowName,
+    }))
+    .sort(
+      (left, right) =>
+        right.totalTokens - left.totalTokens ||
+        right.estimatedCost - left.estimatedCost ||
+        right.runCount - left.runCount ||
+        left.workflowName.localeCompare(right.workflowName),
+    );
+
+  const runInsightsByStartTime = [...runInsights].sort(
+    (left, right) => getTime(left.run.startedAt) - getTime(right.run.startedAt),
+  );
+  const handoffLatencySamples: AgentHandoffLatencySample[] = [];
+  for (const trace of taskTraceEntries) {
+    if (!trace.handoffTargetAgentId) {
+      continue;
+    }
+
+    const sourceRun = runsById.get(trace.agentRunId);
+    const handoffAtMs = getTime(trace.createdAt);
+    if (!sourceRun || !handoffAtMs) {
+      continue;
+    }
+
+    const targetRunInsight = runInsightsByStartTime.find(
+      (candidate) =>
+        matchesHandoffTargetRun(
+          sourceRun,
+          candidate.run,
+          trace.handoffTargetAgentId!,
+        ) && getTime(candidate.run.startedAt) >= handoffAtMs,
+    );
+    if (!targetRunInsight) {
+      continue;
+    }
+
+    const startedAtMs = getTime(targetRunInsight.run.startedAt);
+    const latencyMs = startedAtMs - handoffAtMs;
+    if (latencyMs < 0) {
+      continue;
+    }
+
+    const fromAgent = sourceRun.agentId ? agentsById.get(sourceRun.agentId) : undefined;
+    const toAgent = agentsById.get(trace.handoffTargetAgentId);
+    const workflow = sourceRun.workflowRunId
+      ? workflowsById.get(sourceRun.workflowRunId)
+      : undefined;
+    handoffLatencySamples.push({
+      fromAgentId: sourceRun.agentId,
+      fromAgentName: getAgentName(fromAgent, sourceRun.agentId),
+      handoffAt: trace.createdAt,
+      latencyMs,
+      sourceRunId: sourceRun.id,
+      startedAt: targetRunInsight.run.startedAt,
+      targetRunId: targetRunInsight.run.id,
+      taskTitle: targetRunInsight.run.taskTitle,
+      toAgentId: trace.handoffTargetAgentId,
+      toAgentName: getAgentName(toAgent, trace.handoffTargetAgentId),
+      workflowId: sourceRun.workflowRunId,
+      workflowName: getWorkflowName(workflow, sourceRun.workflowRunId),
+    });
+  }
+  const handoffLatencyValues = handoffLatencySamples.map((sample) => sample.latencyMs);
+  const handoffLatency: AgentHandoffLatencySummary = {
+    averageLatencyMs: getAverage(handoffLatencyValues),
+    maxLatencyMs: handoffLatencyValues.length ? Math.max(...handoffLatencyValues) : null,
+    sampleCount: handoffLatencyValues.length,
+    slowestSamples: [...handoffLatencySamples]
+      .sort(
+        (left, right) =>
+          right.latencyMs - left.latencyMs ||
+          getTime(right.handoffAt) - getTime(left.handoffAt),
+      )
+      .slice(0, 5),
+  };
 
   const agentSummariesById = new Map<string, AgentProductivityAgentSummary>();
   for (const agent of agents) {
@@ -880,6 +1383,7 @@ export function buildAgentProductivityInsights(
   }
 
   return {
+    agentThroughputTrends,
     agentSummaries: Array.from(agentSummariesById.values()).sort(
       (left, right) =>
         right.runCount - left.runCount ||
@@ -888,6 +1392,7 @@ export function buildAgentProductivityInsights(
     ),
     budgetWarnings,
     expensiveRuns,
+    handoffLatency,
     handoffRoles: Array.from(handoffRolesByAgentId.values()).sort(
       (left, right) =>
         right.firstRunCount +
@@ -899,6 +1404,7 @@ export function buildAgentProductivityInsights(
         left.agentName.localeCompare(right.agentName),
     ),
     modelSummaries: Array.from(modelSummariesByKey.values()).sort(sortByUsage),
+    productivityTrendPoints,
     projectSummaries: Array.from(projectSummariesById.values()).sort(
       (left, right) =>
         right.runCount - left.runCount ||
@@ -911,6 +1417,7 @@ export function buildAgentProductivityInsights(
       .sort((left, right) => getTime(right.createdAt) - getTime(left.createdAt))
       .slice(0, 12),
     totals,
+    workflowCostTrends,
     workflowSummaries: Array.from(workflowSummariesById.values()).sort(
       (left, right) =>
         right.runCount - left.runCount ||

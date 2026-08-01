@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Sparkles,
   Timer,
+  TrendingUp,
   Upload,
   Workflow,
   type LucideIcon,
@@ -153,6 +154,10 @@ function formatDateTime(value: string | null) {
 
 function formatPercent(value: number) {
   return `${value}%`;
+}
+
+function formatDecimal(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function formatDuration(durationMs: number | null) {
@@ -359,6 +364,57 @@ function EmptyInsight({ children }: { children: ReactNode }) {
   );
 }
 
+function MiniTrendBars<TPoint extends { day: string; label: string }>({
+  formatValue,
+  getValue,
+  points,
+  tone = "blue",
+}: {
+  formatValue: (value: number) => string;
+  getValue: (point: TPoint) => number;
+  points: TPoint[];
+  tone?: "amber" | "blue" | "green" | "red";
+}) {
+  const maxValue = points.reduce(
+    (currentMax, point) => Math.max(currentMax, getValue(point)),
+    0,
+  );
+  const toneClassName =
+    tone === "green"
+      ? "bg-emerald-500"
+      : tone === "amber"
+        ? "bg-amber-500"
+        : tone === "red"
+          ? "bg-red-500"
+          : "bg-primary";
+
+  return (
+    <div className="flex h-14 items-end gap-1" aria-hidden="true">
+      {points.map((point) => {
+        const value = getValue(point);
+        const heightPercent =
+          maxValue > 0 ? Math.max(8, Math.round((value / maxValue) * 100)) : 0;
+
+        return (
+          <div
+            key={point.day}
+            className="flex min-w-0 flex-1 flex-col justify-end"
+            title={`${point.label}: ${formatValue(value)}`}
+          >
+            <div
+              className={cn(
+                "w-full rounded-sm opacity-80 transition-opacity hover:opacity-100",
+                value > 0 ? toneClassName : "bg-muted",
+              )}
+              style={{ height: value > 0 ? `${heightPercent}%` : "2px" }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function HarnessQualitySection({
   report,
 }: {
@@ -447,6 +503,18 @@ function ProductivityInsightsSection({
   const topModels = insights.modelSummaries.slice(0, 5);
   const topProjects = insights.projectSummaries.slice(0, 5);
   const topHandoffRoles = insights.handoffRoles.slice(0, 5);
+  const activeProductivityTrendPoints = insights.productivityTrendPoints.filter(
+    (point) => point.runCount > 0 || point.traceCount > 0 || point.totalTokens > 0,
+  );
+  const latestProductivityTrend = activeProductivityTrendPoints.at(-1) ?? null;
+  const peakReworkTrend =
+    [...activeProductivityTrendPoints].sort(
+      (left, right) =>
+        right.reworkRate - left.reworkRate ||
+        right.reworkRunCount - left.reworkRunCount ||
+        right.failedTraceCount - left.failedTraceCount,
+    )[0] ?? null;
+  const topAgentThroughputTrends = insights.agentThroughputTrends.slice(0, 3);
   const topAgentCycleTimes = insights.agentSummaries
     .filter((summary) => summary.runCount > 0)
     .sort(
@@ -457,6 +525,7 @@ function ProductivityInsightsSection({
     )
     .slice(0, 5);
   const topReworkSignals = insights.reworkSignals.slice(0, 5);
+  const topWorkflowCostTrends = insights.workflowCostTrends.slice(0, 3);
 
   return (
     <section className="space-y-4">
@@ -508,6 +577,173 @@ function ProductivityInsightsSection({
           value={insights.totals.budgetWarningCount.toLocaleString()}
           detail={`${insights.totals.overBudgetRunCount} over budget`}
         />
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground">Productivity Trends</h3>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-4">
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-semibold uppercase text-muted-foreground">
+              Agent Throughput Trend
+            </h4>
+            {topAgentThroughputTrends.length > 0 ? (
+              <div className="space-y-2">
+                {topAgentThroughputTrends.map((trend) => (
+                  <div
+                    key={trend.agentId ?? "unassigned"}
+                    className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate font-semibold text-foreground">
+                        {trend.agentName}
+                      </p>
+                      <AgentPill>{`${trend.runCount} runs`}</AgentPill>
+                    </div>
+                    <div className="mt-3">
+                      <MiniTrendBars
+                        points={trend.points}
+                        getValue={(point) => point.runCount}
+                        formatValue={(value) => `${value} runs`}
+                      />
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      {formatDecimal(trend.averageRunsPerActiveDay)} runs / active day ·{" "}
+                      {formatPercent(trend.completionRate)} completion
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyInsight>No throughput trend yet.</EmptyInsight>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-semibold uppercase text-muted-foreground">
+              Rework Rate Trend
+            </h4>
+            {latestProductivityTrend ? (
+              <div className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-foreground">
+                    {latestProductivityTrend.label}
+                  </p>
+                  <AgentPill
+                    tone={latestProductivityTrend.reworkRate > 0 ? "amber" : "green"}
+                  >
+                    {formatPercent(latestProductivityTrend.reworkRate)}
+                  </AgentPill>
+                </div>
+                <div className="mt-3">
+                  <MiniTrendBars
+                    points={insights.productivityTrendPoints}
+                    getValue={(point) => point.reworkRate}
+                    formatValue={formatPercent}
+                    tone={latestProductivityTrend.reworkRate > 0 ? "amber" : "green"}
+                  />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <AgentPill>{`${latestProductivityTrend.reworkRunCount} rework runs`}</AgentPill>
+                  <AgentPill>{`${latestProductivityTrend.failedTraceCount} failed traces`}</AgentPill>
+                  {peakReworkTrend ? (
+                    <AgentPill tone={peakReworkTrend.reworkRate > 0 ? "amber" : "green"}>
+                      {`Peak ${formatPercent(peakReworkTrend.reworkRate)}`}
+                    </AgentPill>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <EmptyInsight>No rework trend yet.</EmptyInsight>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-semibold uppercase text-muted-foreground">
+              Workflow Cost Trend
+            </h4>
+            {topWorkflowCostTrends.length > 0 ? (
+              <div className="space-y-2">
+                {topWorkflowCostTrends.map((trend) => (
+                  <div
+                    key={trend.workflowId ?? "unassigned"}
+                    className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate font-semibold text-foreground">
+                        {trend.workflowName}
+                      </p>
+                      <AgentPill>{formatEstimatedCost(trend.estimatedCost)}</AgentPill>
+                    </div>
+                    <div className="mt-3">
+                      <MiniTrendBars
+                        points={trend.points}
+                        getValue={(point) => point.totalTokens}
+                        formatValue={formatTokenCount}
+                        tone="green"
+                      />
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      {formatTokenCount(trend.totalTokens)} total ·{" "}
+                      {formatTokenCount(trend.averageTokensPerRun)} / run
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyInsight>No workflow cost trend yet.</EmptyInsight>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-semibold uppercase text-muted-foreground">
+              Handoff Latency
+            </h4>
+            {insights.handoffLatency.sampleCount > 0 ? (
+              <div className="space-y-2">
+                <div className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-[10px] uppercase text-muted-foreground">Average</p>
+                      <p className="font-semibold text-foreground">
+                        {formatDuration(insights.handoffLatency.averageLatencyMs)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-muted-foreground">Slowest</p>
+                      <p className="font-semibold text-foreground">
+                        {formatDuration(insights.handoffLatency.maxLatencyMs)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    {insights.handoffLatency.sampleCount} matched handoffs
+                  </p>
+                </div>
+                {insights.handoffLatency.slowestSamples.slice(0, 2).map((sample) => (
+                  <div
+                    key={`${sample.sourceRunId}:${sample.targetRunId}:${sample.handoffAt}`}
+                    className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate font-semibold text-foreground">
+                        {sample.workflowName}
+                      </p>
+                      <AgentPill>{formatDuration(sample.latencyMs)}</AgentPill>
+                    </div>
+                    <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                      {sample.fromAgentName} to {sample.toAgentName}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyInsight>No matched handoff starts yet.</EmptyInsight>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.9fr)]">

@@ -403,6 +403,11 @@ test("agent productivity insights summarize persisted telemetry", async () => {
     await expect(insights).toContainText("Feature Build");
     await expect(insights).toContainText("openai / gpt-5-codex");
     await expect(insights).toContainText("Budget & Linking Attention");
+    await expect(insights).toContainText("Productivity Trends");
+    await expect(insights).toContainText("Agent Throughput Trend");
+    await expect(insights).toContainText("Rework Rate Trend");
+    await expect(insights).toContainText("Workflow Cost Trend");
+    await expect(insights).toContainText("Handoff Latency");
     await expect(insights).toContainText("Agent Cycle Time");
     await expect(insights).toContainText("Rework Signals");
     await expect(insights).toContainText("Handoff Health");

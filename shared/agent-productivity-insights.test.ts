@@ -209,6 +209,18 @@ test("buildAgentProductivityInsights rolls up runs, usage, budgets, gaps, and ha
   assert.equal(insights.reworkSignals[0]?.failedTraceCount, 1);
   assert.equal(insights.reworkSignals[0]?.repeatedFileCount, 1);
   assert.equal(insights.reworkSignals[0]?.repeatedTestCount, 1);
+  assert.equal(insights.productivityTrendPoints.length, 14);
+  assert.equal(insights.productivityTrendPoints.at(-1)?.day, "2026-08-01");
+  assert.equal(insights.productivityTrendPoints.at(-1)?.runCount, 2);
+  assert.equal(insights.productivityTrendPoints.at(-1)?.reworkRunCount, 1);
+  assert.equal(insights.productivityTrendPoints.at(-1)?.reworkRate, 50);
+  assert.equal(insights.productivityTrendPoints.at(-1)?.failedTraceCount, 1);
+  assert.equal(insights.agentThroughputTrends[0]?.agentName, "Builder Agent");
+  assert.equal(insights.agentThroughputTrends[0]?.runCount, 1);
+  assert.equal(insights.agentThroughputTrends[0]?.averageRunsPerActiveDay, 1);
+  assert.equal(insights.workflowCostTrends[0]?.workflowName, "Feature Build");
+  assert.equal(insights.workflowCostTrends[0]?.totalTokens, 1550);
+  assert.equal(insights.workflowCostTrends[0]?.points.at(-1)?.totalTokens, 1550);
   assert.ok(
     insights.telemetryGaps.some((gap) =>
       gap.issueLabels.includes("Unassigned token event"),
@@ -221,6 +233,43 @@ test("buildAgentProductivityInsights rolls up runs, usage, budgets, gaps, and ha
         gap.issueLabels.includes("No OpenCode session"),
     ),
   );
+});
+
+test("buildAgentProductivityInsights infers handoff latency from trace handoffs", () => {
+  const targetRun = {
+    ...completedRun,
+    agentId: "reviewer",
+    endedAt: "2026-08-01T11:15:00.000Z",
+    id: "run-3",
+    opencodeSessionId: null,
+    startedAt: "2026-08-01T10:55:00.000Z",
+    taskTitle: "Review handoff",
+    tokenBudget: null,
+  } satisfies AgentRun;
+  const handoffTrace = {
+    ...failedTrace,
+    agentRunId: "run-1",
+    createdAt: "2026-08-01T10:45:00.000Z",
+    handoffTargetAgentId: "reviewer",
+    id: "trace-handoff",
+    nextAction: "Start reviewer",
+  } satisfies TaskTraceEntry;
+
+  const insights = buildAgentProductivityInsights({
+    agents: [builder, reviewer],
+    agentRuns: [completedRun, targetRun],
+    now: "2026-08-01T12:00:00.000Z",
+    taskTraceEntries: [handoffTrace],
+    tokenUsageEvents: [],
+    workflows: [workflow],
+  });
+
+  assert.equal(insights.handoffLatency.sampleCount, 1);
+  assert.equal(insights.handoffLatency.averageLatencyMs, 600_000);
+  assert.equal(insights.handoffLatency.maxLatencyMs, 600_000);
+  assert.equal(insights.handoffLatency.slowestSamples[0]?.sourceRunId, "run-1");
+  assert.equal(insights.handoffLatency.slowestSamples[0]?.targetRunId, "run-3");
+  assert.equal(insights.handoffLatency.slowestSamples[0]?.toAgentName, "Reviewer Agent");
 });
 
 test("serializeAgentTelemetryCsv writes escaped run rows with token rollups", () => {
