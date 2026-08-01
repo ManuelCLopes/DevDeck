@@ -210,8 +210,8 @@ function orderWorkflowsForProject(
 }
 
 export default function Terminals() {
-  const [, setLocation] = useLocation();
-  const search = useSearch();
+  const [location, setLocation] = useLocation();
+  const routeSearch = useSearch();
   const { preferences, setPreference } = useAppPreferences();
   const { availability: codingToolAvailability, preferredTool, isLoading: codingToolLoading } = useCodingTool();
   const { isLoading: opencodeSessionsLoading, sessions: opencodeSessions, refresh: refreshSessions } =
@@ -257,6 +257,13 @@ export default function Terminals() {
   );
 
   const terminalPreferences = preferences.terminal;
+  const search = useMemo(() => {
+    const hashSearch = window.location.hash.includes("?")
+      ? window.location.hash.split("?").slice(1).join("?")
+      : "";
+    const windowSearch = window.location.search.replace(/^\?/, "");
+    return hashSearch || routeSearch || windowSearch;
+  }, [location, routeSearch]);
   const searchParams = useMemo(() => new URLSearchParams(search), [search]);
   const requestedProjectId = searchParams.get("project");
   const requestedSessionId = searchParams.get("session");
