@@ -321,7 +321,20 @@ test("terminal launcher exposes agent-aware OpenCode setup before launch", async
     await expect(
       page.getByRole("heading", { name: /Overview$/ }),
     ).toBeVisible();
-    await navigateDesktopApp(page, "/terminals?launch=opencode&project=alpha");
+    const alphaProjectId = await page.evaluate(async () => {
+      const desktopApi = (window as any).devdeck;
+      const persistedSelection = JSON.parse(
+        window.localStorage.getItem("devdeck_workspace_selection") ?? "null",
+      );
+      const snapshot = await desktopApi.loadWorkspaceSnapshot(persistedSelection);
+      return snapshot.projects.find((project: { name: string }) => project.name === "alpha")?.id ?? null;
+    });
+    expect(alphaProjectId).toBeTruthy();
+
+    await navigateDesktopApp(
+      page,
+      `/terminals?launch=opencode&project=${encodeURIComponent(alphaProjectId!)}`,
+    );
 
     await expect(
       page.locator("main").getByRole("heading", { name: "alpha", exact: true }),
