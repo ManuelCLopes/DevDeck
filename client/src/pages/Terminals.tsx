@@ -94,6 +94,11 @@ import { navigateInApp } from "@/lib/app-navigation";
 import { useAppPreferences } from "@/lib/app-preferences";
 import { getDesktopApi } from "@/lib/desktop";
 import {
+  buildAgentLaunchTaskTemplates,
+  parseLaunchTokenBudget,
+  recommendAgentForLaunch,
+} from "@/lib/agent-launch";
+import {
   buildAgentLaunchSummary,
   buildAgentRunEnvironment,
   createAgentRunId,
@@ -246,6 +251,7 @@ export default function Terminals() {
   const [selectedAgentId, setSelectedAgentId] = useState("none");
   const [selectedWorkflowId, setSelectedWorkflowId] = useState("none");
   const [launchTaskTitle, setLaunchTaskTitle] = useState("");
+  const [launchTokenBudget, setLaunchTokenBudget] = useState("");
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
@@ -290,6 +296,47 @@ export default function Terminals() {
     launchAgents.find((agent) => agent.id === selectedAgentId) ?? null;
   const selectedWorkflow =
     launchWorkflows.find((workflow) => workflow.id === selectedWorkflowId) ?? null;
+  const recommendedAgent = useMemo(
+    () =>
+      recommendAgentForLaunch(launchAgents, {
+        project: selectedRepoForLaunch
+          ? {
+              id: selectedRepoForLaunch.id,
+              name: selectedRepoForLaunch.name,
+            }
+          : null,
+        taskTitle: launchTaskTitle,
+        workflow: selectedWorkflow,
+      }),
+    [
+      launchAgents,
+      launchTaskTitle,
+      selectedRepoForLaunch?.id,
+      selectedRepoForLaunch?.name,
+      selectedWorkflow,
+    ],
+  );
+  const resolvedLaunchTokenBudget =
+    parseLaunchTokenBudget(launchTokenBudget) ?? selectedAgent?.tokenBudget ?? null;
+  const selectedAgentIsRecommended = Boolean(
+    selectedAgent && recommendedAgent.agent?.id === selectedAgent.id,
+  );
+  const agentRecommendationText = selectedAgentIsRecommended
+    ? recommendedAgent.reason
+    : recommendedAgent.agent
+      ? `Recommended: ${recommendedAgent.agent.name}. ${recommendedAgent.reason}`
+      : recommendedAgent.reason;
+  const launchTaskTemplates = useMemo(
+    () =>
+      selectedRepoForLaunch
+        ? buildAgentLaunchTaskTemplates({
+            agent: selectedAgent,
+            projectName: selectedRepoForLaunch.name,
+            workflow: selectedWorkflow,
+          })
+        : [],
+    [selectedAgent, selectedRepoForLaunch, selectedWorkflow],
+  );
   const requestedProject =
     trackedProjects.find((project) => project.id === requestedProjectId) ?? null;
   const isRepositoryLaunchRequest =
@@ -385,9 +432,9 @@ export default function Terminals() {
     }
 
     if (!launchAgents.some((agent) => agent.id === selectedAgentId)) {
-      setSelectedAgentId(launchAgents[0]?.id ?? "none");
+      setSelectedAgentId(recommendedAgent.agent?.id ?? launchAgents[0]?.id ?? "none");
     }
-  }, [launchAgents, selectedAgentId, selectedRepoForLaunch]);
+  }, [launchAgents, recommendedAgent.agent?.id, selectedAgentId, selectedRepoForLaunch]);
 
   useEffect(() => {
     if (!selectedRepoForLaunch) {
@@ -421,7 +468,18 @@ export default function Terminals() {
     setSelectedAgentId("none");
     setSelectedWorkflowId("none");
     setLaunchTaskTitle("");
+    setLaunchTokenBudget("");
   }, [requestedLaunch, requestedProject, selectedRepoForLaunch?.id]);
+
+  useEffect(() => {
+    if (!selectedRepoForLaunch) {
+      return;
+    }
+
+    setLaunchTokenBudget(
+      selectedAgent?.tokenBudget ? String(selectedAgent.tokenBudget) : "",
+    );
+  }, [selectedAgent?.id, selectedAgent?.tokenBudget, selectedRepoForLaunch]);
 
   const clearSelectedLaunchRepository = useCallback(() => {
     setSelectedRepoForLaunch(null);
@@ -430,6 +488,7 @@ export default function Terminals() {
     setSelectedAgentId("none");
     setSelectedWorkflowId("none");
     setLaunchTaskTitle("");
+    setLaunchTokenBudget("");
 
     if (requestedLaunch === "opencode" && requestedProjectId) {
       navigateInApp("/terminals", setLocation);
@@ -463,6 +522,8 @@ export default function Terminals() {
     const taskTitle =
       launchTaskTitle.trim() ||
       `${agentForRun?.name ?? "OpenCode"} on ${branchToUse}`;
+    const tokenBudgetForRun =
+      parseLaunchTokenBudget(launchTokenBudget) ?? agentForRun?.tokenBudget ?? null;
     
     setIsCreatingSession(true);
     try {
@@ -495,7 +556,7 @@ export default function Terminals() {
         status: "active",
         taskTitle,
         terminalPaneId: basePane.id,
-        tokenBudget: agentForRun?.tokenBudget ?? null,
+        tokenBudget: tokenBudgetForRun,
         workflowRunId: workflowForRun?.id ?? null,
         worktreePath: result.localPath,
       };
@@ -504,6 +565,7 @@ export default function Terminals() {
         branchName: result.branchName,
         projectName: selectedRepoForLaunch.name,
         taskTitle,
+        tokenBudget: tokenBudgetForRun,
         workflow: workflowForRun,
       });
 
@@ -1334,9 +1396,23 @@ export default function Terminals() {
                             placeholder="e.g. Implement agent-aware OpenCode launch"
                             className="h-9 w-full bg-white dark:bg-background border border-black/10 dark:border-white/10 rounded-md px-3 focus:outline-none focus:border-primary/50 text-[12px]"
                           />
+                          {launchTaskTemplates.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {launchTaskTemplates.slice(0, 4).map((template) => (
+                                <button
+                                  key={template.id}
+                                  type="button"
+                                  onClick={() => setLaunchTaskTitle(template.title)}
+                                  className="rounded-md border border-black/10 bg-white px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground dark:border-white/10 dark:bg-background"
+                                >
+                                  {template.title}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                        <div className="grid grid-cols-1 gap-4 text-xs md:grid-cols-3">
                           <div className="space-y-2">
                             <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
                               <Workflow className="h-3.5 w-3.5" />
@@ -1382,19 +1458,51 @@ export default function Terminals() {
                               </SelectContent>
                             </Select>
                           </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
+                              <Sparkles className="h-3.5 w-3.5" />
+                              Token Budget
+                            </Label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={launchTokenBudget}
+                              onChange={(event) => setLaunchTokenBudget(event.target.value)}
+                              placeholder="Optional budget"
+                              className="h-9 w-full rounded-md border border-black/10 bg-white px-3 text-[12px] outline-none transition-colors focus:border-primary/50 dark:border-white/10 dark:bg-background"
+                            />
+                          </div>
                         </div>
 
                         {selectedAgent ? (
                           <div className="border-l-2 border-primary/50 pl-3 text-[11px] leading-5 text-muted-foreground">
                             <div className="flex items-center justify-between gap-3">
-                              <span className="font-semibold text-foreground">
-                                {selectedAgent.name}
+                              <span className="flex min-w-0 items-center gap-2 font-semibold text-foreground">
+                                <span className="truncate">{selectedAgent.name}</span>
+                                {selectedAgentIsRecommended ? (
+                                  <span className="rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] uppercase text-primary">
+                                    Recommended
+                                  </span>
+                                ) : null}
                               </span>
                               <span className="font-mono">
-                                {selectedAgent.tokenBudget
-                                  ? `${selectedAgent.tokenBudget.toLocaleString()} tokens`
+                                {resolvedLaunchTokenBudget
+                                  ? `${resolvedLaunchTokenBudget.toLocaleString()} tokens`
                                   : "No token budget"}
                               </span>
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <p className="line-clamp-1">{agentRecommendationText}</p>
+                              {!selectedAgentIsRecommended && recommendedAgent.agent ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAgentId(recommendedAgent.agent!.id)}
+                                  className="rounded-md border border-black/10 bg-white px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground dark:border-white/10 dark:bg-background"
+                                >
+                                  Use recommendation
+                                </button>
+                              ) : null}
                             </div>
                             {selectedAgent.responsibilities.length > 0 ? (
                               <p className="mt-1 line-clamp-2">

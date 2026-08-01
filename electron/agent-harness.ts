@@ -612,6 +612,91 @@ async function listExistingHarnessFiles(projectPath: string) {
   return uniqueStrings(files);
 }
 
+function appendSourceValidationErrors(
+  sources: AgentHarnessSource[],
+  agents: AgentDefinition[],
+  workflows: WorkflowDefinition[],
+) {
+  const errorsBySourcePath = new Map<string, string[]>();
+  const agentsById = new Map<string, AgentDefinition[]>();
+
+  const addError = (sourcePath: string, message: string) => {
+    const errors = errorsBySourcePath.get(sourcePath) ?? [];
+    errors.push(message);
+    errorsBySourcePath.set(sourcePath, errors);
+  };
+
+  for (const agent of agents) {
+    const matchingAgents = agentsById.get(agent.id) ?? [];
+    matchingAgents.push(agent);
+    agentsById.set(agent.id, matchingAgents);
+
+    if (agent.responsibilities.length === 0 && !agent.description) {
+      addError(
+        agent.sourcePath,
+        `Agent "${agent.name}" has no responsibilities or description; launch recommendations may be weak.`,
+      );
+    }
+
+    if (!agent.tokenBudget) {
+      addError(
+        agent.sourcePath,
+        `Agent "${agent.name}" has no token budget; DevDeck will rely on per-run launch overrides.`,
+      );
+    }
+  }
+
+  for (const duplicateAgents of Array.from(agentsById.values())) {
+    if (duplicateAgents.length <= 1) {
+      continue;
+    }
+
+    for (const agent of duplicateAgents) {
+      addError(
+        agent.sourcePath,
+        `Agent id "${agent.id}" is duplicated across harness sources; runs and token usage may attach to the wrong definition.`,
+      );
+    }
+  }
+
+  for (const agent of agents) {
+    for (const handoffTarget of agent.handoffTargets) {
+      if (!agentsById.has(handoffTarget)) {
+        addError(
+          agent.sourcePath,
+          `Agent "${agent.name}" hands off to unknown agent "${handoffTarget}".`,
+        );
+      }
+    }
+  }
+
+  for (const workflow of workflows) {
+    if (workflow.steps.length === 0) {
+      addError(
+        workflow.sourcePath,
+        `Workflow "${workflow.name}" has no steps; it cannot drive launch recommendations.`,
+      );
+    }
+
+    for (const step of workflow.steps) {
+      if (step.agentId && !agentsById.has(step.agentId)) {
+        addError(
+          workflow.sourcePath,
+          `Workflow "${workflow.name}" step "${step.name}" references unknown agent "${step.agentId}".`,
+        );
+      }
+    }
+  }
+
+  return sources.map((source) => ({
+    ...source,
+    errors: uniqueStrings([
+      ...source.errors,
+      ...(errorsBySourcePath.get(source.sourcePath) ?? []),
+    ]),
+  }));
+}
+
 export async function discoverAgentHarness(
   request: AgentHarnessDiscoveryRequest,
 ): Promise<AgentHarnessDiscoveryResult> {
@@ -676,7 +761,7 @@ export async function discoverAgentHarness(
   return {
     agents,
     scannedAt: new Date().toISOString(),
-    sources,
+    sources: appendSourceValidationErrors(sources, agents, workflows),
     workflows,
   };
 }

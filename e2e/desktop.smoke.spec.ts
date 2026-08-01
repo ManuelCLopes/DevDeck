@@ -348,7 +348,12 @@ test("terminal launcher exposes agent-aware OpenCode setup before launch", async
     await expect(
       page.locator("main").getByText("Builder Agent", { exact: true }).first(),
     ).toBeVisible();
-    await expect(page.getByText("Implement scoped changes")).toBeVisible();
+    await expect(
+      page
+        .locator("main")
+        .getByText(/Implement scoped changes \| Run focused verification/),
+    ).toBeVisible();
+    await expect(page.getByText("Token Budget", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Launch OpenCode Workspace", exact: true }),
     ).toBeVisible();

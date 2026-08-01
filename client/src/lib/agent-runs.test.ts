@@ -143,11 +143,16 @@ test("linkAgentRunsToOpenCodeUsageRecords persists matched OpenCode session ids"
 });
 
 test("buildAgentRunEnvironment exports agent and workflow identifiers", () => {
-  const environment = buildAgentRunEnvironment({ agent, run, workflow });
+  const environment = buildAgentRunEnvironment({
+    agent,
+    run: { ...run, tokenBudget: 90000 },
+    workflow,
+  });
 
   assert.equal(environment.DEVDECK_AGENT_RUN_ID, "run-1");
   assert.equal(environment.DEVDECK_AGENT_ID, "builder");
-  assert.equal(environment.DEVDECK_AGENT_TOKEN_BUDGET, "120000");
+  assert.equal(environment.DEVDECK_AGENT_RUN_TOKEN_BUDGET, "90000");
+  assert.equal(environment.DEVDECK_AGENT_TOKEN_BUDGET, "90000");
   assert.equal(environment.DEVDECK_WORKFLOW_ID, "feature");
 });
 
@@ -157,10 +162,12 @@ test("buildAgentLaunchSummary includes responsibilities and boundaries", () => {
     branchName: "feature/agent-launch",
     projectName: "Repo",
     taskTitle: "Improve launch",
+    tokenBudget: 90000,
     workflow,
   });
 
   assert.match(summary, /Task: Improve launch/);
+  assert.match(summary, /Token Budget: 90,000 tokens/);
   assert.match(summary, /Responsibilities: Implement changes; Run tests/);
   assert.match(summary, /Boundaries: Do not merge without review/);
 });

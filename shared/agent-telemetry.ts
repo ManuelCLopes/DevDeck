@@ -269,13 +269,17 @@ export function buildAgentRunEnvironment(options: {
     DEVDECK_AGENT_RUN_ID: options.run.id,
     DEVDECK_AGENT_RUN_TITLE: options.run.taskTitle,
   };
+  if (options.run.tokenBudget) {
+    environment.DEVDECK_AGENT_RUN_TOKEN_BUDGET = String(options.run.tokenBudget);
+  }
 
   if (options.agent) {
     environment.DEVDECK_AGENT_ID = options.agent.id;
     environment.DEVDECK_AGENT_NAME = options.agent.name;
     environment.DEVDECK_AGENT_SOURCE = options.agent.sourcePath;
-    if (options.agent.tokenBudget) {
-      environment.DEVDECK_AGENT_TOKEN_BUDGET = String(options.agent.tokenBudget);
+    const effectiveTokenBudget = options.run.tokenBudget ?? options.agent.tokenBudget;
+    if (effectiveTokenBudget) {
+      environment.DEVDECK_AGENT_TOKEN_BUDGET = String(effectiveTokenBudget);
     }
   }
 
@@ -292,6 +296,7 @@ export function buildAgentLaunchSummary(options: {
   branchName: string;
   projectName: string;
   taskTitle: string;
+  tokenBudget?: number | null;
   workflow: WorkflowDefinition | null;
 }) {
   return [
@@ -300,6 +305,9 @@ export function buildAgentLaunchSummary(options: {
     `Branch: ${options.branchName}`,
     `Agent: ${options.agent?.name ?? "Unassigned"}`,
     `Workflow: ${options.workflow?.name ?? "None"}`,
+    options.tokenBudget
+      ? `Token Budget: ${options.tokenBudget.toLocaleString()} tokens`
+      : null,
     options.agent?.responsibilities.length
       ? `Responsibilities: ${options.agent.responsibilities.slice(0, 4).join("; ")}`
       : null,

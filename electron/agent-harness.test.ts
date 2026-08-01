@@ -128,3 +128,49 @@ test("discoverAgentHarness scans configured project paths", async () => {
     rmSync(root, { force: true, recursive: true });
   }
 });
+
+test("discoverAgentHarness reports invalid workflow references", async () => {
+  const root = mkdtempSync(join(tmpdir(), "devdeck-agent-validation-"));
+  const repoPath = join(root, "repo");
+  mkdirSync(repoPath, { recursive: true });
+  writeFileSync(
+    join(repoPath, "agents.json"),
+    JSON.stringify({
+      agents: [
+        {
+          id: "builder",
+          name: "Builder",
+          responsibilities: ["Implement scoped changes"],
+          tokenBudget: 120000,
+        },
+      ],
+      workflows: [
+        {
+          id: "feature",
+          name: "Feature",
+          steps: [
+            {
+              agent: "reviewer",
+              id: "review",
+              name: "Review",
+            },
+          ],
+        },
+      ],
+    }),
+    "utf8",
+  );
+
+  try {
+    const result = await discoverAgentHarness({
+      projects: [{ id: "repo", localPath: repoPath, name: "Repo" }],
+    });
+
+    assert.match(
+      result.sources[0]?.errors.join("\n") ?? "",
+      /references unknown agent "reviewer"/,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
