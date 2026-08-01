@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Bot,
@@ -32,6 +32,11 @@ import {
   summarizeTokenUsageByAgent,
   type TokenUsageSummary,
 } from "@/lib/token-usage";
+import {
+  getAgentRunBudgetUsagePercent,
+  summarizeTokenUsageForAgentRun,
+  type AgentRunUsageSummary,
+} from "@/lib/agent-run-detail";
 import { cn } from "@/lib/utils";
 import type {
   AgentDefinition,
@@ -77,6 +82,22 @@ function formatEstimatedCost(cost: number) {
   }).format(cost);
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "Not recorded";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
 function getProjectLabel(projectName: string | null) {
   return projectName ?? "Workspace";
 }
@@ -102,8 +123,8 @@ function AgentPill({
   children,
   tone = "neutral",
 }: {
-  children: string;
-  tone?: "blue" | "green" | "neutral";
+  children: ReactNode;
+  tone?: "amber" | "blue" | "green" | "neutral" | "red";
 }) {
   return (
     <span
@@ -113,6 +134,10 @@ function AgentPill({
           "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200",
         tone === "green" &&
           "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200",
+        tone === "amber" &&
+          "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200",
+        tone === "red" &&
+          "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-200",
         tone === "neutral" &&
           "border-black/10 bg-white/70 text-muted-foreground dark:border-white/10 dark:bg-white/5",
       )}
@@ -280,13 +305,19 @@ function WorkflowRow({ workflow }: { workflow: WorkflowDefinition }) {
 
 function AgentRunRow({
   agents,
+  isSelected,
   onStatusChange,
+  onSelect,
   run,
+  usage,
   workflows,
 }: {
   agents: AgentDefinition[];
+  isSelected: boolean;
   onStatusChange: (runId: string, status: AgentRunStatus) => void;
+  onSelect: (runId: string) => void;
   run: AgentRun;
+  usage: AgentRunUsageSummary;
   workflows: WorkflowDefinition[];
 }) {
   const agent = run.agentId
@@ -295,9 +326,25 @@ function AgentRunRow({
   const workflow = run.workflowRunId
     ? workflows.find((candidate) => candidate.id === run.workflowRunId)
     : null;
+  const budgetPercent = getAgentRunBudgetUsagePercent(run, usage);
+  const budgetTone =
+    budgetPercent === null
+      ? "neutral"
+      : budgetPercent >= 100
+        ? "red"
+        : budgetPercent >= 80
+          ? "amber"
+          : "green";
 
   return (
-    <div className="rounded-lg border border-black/10 bg-white/70 p-3 dark:border-white/10 dark:bg-white/5">
+    <div
+      className={cn(
+        "rounded-lg border bg-white/70 p-3 transition-colors dark:bg-white/5",
+        isSelected
+          ? "border-primary/50"
+          : "border-black/10 dark:border-white/10",
+      )}
+    >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -319,7 +366,19 @@ function AgentRunRow({
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {(["active", "blocked", "paused", "completed"] as AgentRunStatus[]).map(
+          <button
+            type="button"
+            onClick={() => onSelect(run.id)}
+            className={cn(
+              "rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
+              isSelected
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-black/10 bg-white text-muted-foreground hover:text-foreground dark:border-white/10 dark:bg-background",
+            )}
+          >
+            {isSelected ? "Viewing" : "Details"}
+          </button>
+          {(["active", "blocked", "paused", "completed", "failed"] as AgentRunStatus[]).map(
             (status) => (
               <button
                 key={status}
@@ -343,9 +402,178 @@ function AgentRunRow({
         <AgentPill>
           {run.tokenBudget ? `${run.tokenBudget.toLocaleString()} budget` : "No budget"}
         </AgentPill>
+        {usage.totalTokens > 0 ? (
+          <AgentPill tone={budgetTone}>
+            {formatTokenCount(usage.totalTokens)} used
+          </AgentPill>
+        ) : null}
+        {budgetPercent !== null ? (
+          <AgentPill tone={budgetTone}>{`${budgetPercent}% budget`}</AgentPill>
+        ) : null}
         {run.terminalPaneId ? <AgentPill>{run.terminalPaneId}</AgentPill> : null}
       </div>
     </div>
+  );
+}
+
+function AgentRunDetail({
+  agents,
+  onCopyValue,
+  onStatusChange,
+  run,
+  usage,
+  workflows,
+}: {
+  agents: AgentDefinition[];
+  onCopyValue: (value: string, title: string) => void;
+  onStatusChange: (runId: string, status: AgentRunStatus) => void;
+  run: AgentRun | null;
+  usage: AgentRunUsageSummary | null;
+  workflows: WorkflowDefinition[];
+}) {
+  if (!run || !usage) {
+    return (
+      <aside className="rounded-lg border border-dashed border-black/10 p-4 text-sm text-muted-foreground dark:border-white/10">
+        Select an agent run to inspect branch, worktree, token usage, and status.
+      </aside>
+    );
+  }
+
+  const agent = run.agentId
+    ? agents.find((candidate) => candidate.id === run.agentId)
+    : null;
+  const workflow = run.workflowRunId
+    ? workflows.find((candidate) => candidate.id === run.workflowRunId)
+    : null;
+  const budgetPercent = getAgentRunBudgetUsagePercent(run, usage);
+  const budgetTone =
+    budgetPercent === null
+      ? "neutral"
+      : budgetPercent >= 100
+        ? "red"
+        : budgetPercent >= 80
+          ? "amber"
+          : "green";
+
+  return (
+    <aside className="rounded-lg border border-black/10 bg-white/70 p-4 text-xs dark:border-white/10 dark:bg-white/5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-semibold text-foreground">
+            {run.taskTitle}
+          </h3>
+          <p className="mt-1 text-muted-foreground">
+            {agent?.name ?? "Unassigned"} · {workflow?.name ?? "No workflow"}
+          </p>
+        </div>
+        <span
+          className={cn(
+            "rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase",
+            getRunStatusClassName(run.status),
+          )}
+        >
+          {run.status}
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="rounded-md border border-black/10 bg-secondary/35 p-2 dark:border-white/10">
+          <p className="text-[10px] uppercase text-muted-foreground">Tokens</p>
+          <p className="mt-1 font-semibold text-foreground">
+            {formatTokenCount(usage.totalTokens)}
+          </p>
+        </div>
+        <div className="rounded-md border border-black/10 bg-secondary/35 p-2 dark:border-white/10">
+          <p className="text-[10px] uppercase text-muted-foreground">Budget</p>
+          <p className="mt-1 font-semibold text-foreground">
+            {budgetPercent === null ? "No budget" : `${budgetPercent}%`}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {run.tokenBudget ? (
+          <AgentPill tone={budgetTone}>
+            {`${usage.totalTokens.toLocaleString()} / ${run.tokenBudget.toLocaleString()}`}
+          </AgentPill>
+        ) : null}
+        <AgentPill>{`${usage.eventCount} usage events`}</AgentPill>
+        <AgentPill>{formatEstimatedCost(usage.estimatedCost)}</AgentPill>
+      </div>
+
+      <dl className="mt-4 space-y-3">
+        {[
+          ["Started", formatDateTime(run.startedAt)],
+          ["Ended", formatDateTime(run.endedAt)],
+          ["Branch", run.branchName ?? "No branch"],
+          ["Worktree", run.worktreePath ?? "No worktree path"],
+          ["OpenCode Session", run.opencodeSessionId ?? "Not linked"],
+          ["Last Usage", formatDateTime(usage.lastUsedAt)],
+          ["Models", usage.modelLabels.length ? usage.modelLabels.join(", ") : "No model data"],
+        ].map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-[10px] font-semibold uppercase text-muted-foreground">
+              {label}
+            </dt>
+            <dd className="mt-0.5 truncate text-foreground">{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-black/10 pt-3 dark:border-white/10">
+        <div>
+          <p className="text-[10px] uppercase text-muted-foreground">Input</p>
+          <p className="font-semibold text-foreground">
+            {formatTokenCount(usage.inputTokens)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase text-muted-foreground">Output</p>
+          <p className="font-semibold text-foreground">
+            {formatTokenCount(usage.outputTokens)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase text-muted-foreground">Reasoning</p>
+          <p className="font-semibold text-foreground">
+            {formatTokenCount(usage.reasoningTokens)}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        {(["active", "blocked", "paused", "completed", "failed"] as AgentRunStatus[]).map(
+          (status) => (
+            <button
+              key={status}
+              type="button"
+              onClick={() => onStatusChange(run.id, status)}
+              className={cn(
+                "rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
+                run.status === status
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-black/10 bg-white text-muted-foreground hover:text-foreground dark:border-white/10 dark:bg-background",
+              )}
+            >
+              {status}
+            </button>
+          ),
+        )}
+      </div>
+
+      {run.worktreePath ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-3 h-8 w-full gap-2 text-xs"
+          onClick={() => onCopyValue(run.worktreePath!, "Worktree path copied")}
+        >
+          <FileText className="h-3.5 w-3.5" />
+          Copy Worktree Path
+        </Button>
+      ) : null}
+    </aside>
   );
 }
 
@@ -363,6 +591,7 @@ export default function Agents() {
   ] = useTokenUsageEventsState();
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [usageIngestionError, setUsageIngestionError] = useState<string | null>(null);
   const [usageSyncedAt, setUsageSyncedAt] = useState<string | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
@@ -418,6 +647,16 @@ export default function Agents() {
   const tokenUsageTotal = useMemo(
     () => getTokenUsageSummaryTotal(tokenUsageSummaries),
     [tokenUsageSummaries],
+  );
+  const tokenUsageByRunId = useMemo(
+    () =>
+      new Map(
+        agentRuns.map((run) => [
+          run.id,
+          summarizeTokenUsageForAgentRun(tokenUsageEvents, run),
+        ]),
+      ),
+    [agentRuns, tokenUsageEvents],
   );
   const projectOptions = useMemo(
     () => uniqueValues(agents.map((agent) => agent.projectName)),
@@ -495,6 +734,19 @@ export default function Agents() {
     };
   }, [agentRuns, desktopApi, setAgentRuns, setTokenUsageEvents]);
 
+  useEffect(() => {
+    if (visibleAgentRuns.length === 0) {
+      if (selectedRunId) {
+        setSelectedRunId(null);
+      }
+      return;
+    }
+
+    if (!selectedRunId || !visibleAgentRuns.some((run) => run.id === selectedRunId)) {
+      setSelectedRunId(visibleAgentRuns[0]?.id ?? null);
+    }
+  }, [selectedRunId, visibleAgentRuns]);
+
   const handleRevealSource = async (sourcePath: string) => {
     try {
       await desktopApi?.showItemInFinder(sourcePath);
@@ -512,16 +764,16 @@ export default function Agents() {
     await openPreferredTool(sourcePath);
   };
 
-  const handleCopySourcePath = async (sourcePath: string) => {
+  const handleCopyValue = async (value: string, title: string) => {
     try {
       if (desktopApi?.copyToClipboard) {
-        await desktopApi.copyToClipboard(sourcePath);
+        await desktopApi.copyToClipboard(value);
       } else {
-        await navigator.clipboard.writeText(sourcePath);
+        await navigator.clipboard.writeText(value);
       }
       toast({
-        title: "Source path copied",
-        description: sourcePath,
+        title,
+        description: value,
       });
     } catch (nextError) {
       toast({
@@ -533,11 +785,20 @@ export default function Agents() {
     }
   };
 
+  const handleCopySourcePath = async (sourcePath: string) => {
+    await handleCopyValue(sourcePath, "Source path copied");
+  };
+
   const handleRunStatusChange = (runId: string, status: AgentRunStatus) => {
     setAgentRuns((currentRuns) =>
       updateAgentRunStatus(normalizeAgentRuns(currentRuns), runId, status),
     );
   };
+  const selectedRun =
+    selectedRunId ? agentRuns.find((run) => run.id === selectedRunId) ?? null : null;
+  const selectedRunUsage = selectedRun
+    ? tokenUsageByRunId.get(selectedRun.id) ?? null
+    : null;
 
   return (
     <AppLayout>
@@ -687,16 +948,32 @@ export default function Agents() {
             <h2 className="text-sm font-semibold text-foreground">Agent Runs</h2>
           </div>
           {visibleAgentRuns.length > 0 ? (
-            <div className="space-y-2">
-              {visibleAgentRuns.map((run) => (
-                <AgentRunRow
-                  key={run.id}
-                  agents={agents}
-                  workflows={workflows}
-                  run={run}
-                  onStatusChange={handleRunStatusChange}
-                />
-              ))}
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="space-y-2">
+                {visibleAgentRuns.map((run) => (
+                  <AgentRunRow
+                    key={run.id}
+                    agents={agents}
+                    isSelected={selectedRunId === run.id}
+                    workflows={workflows}
+                    run={run}
+                    usage={
+                      tokenUsageByRunId.get(run.id) ??
+                      summarizeTokenUsageForAgentRun([], run)
+                    }
+                    onSelect={setSelectedRunId}
+                    onStatusChange={handleRunStatusChange}
+                  />
+                ))}
+              </div>
+              <AgentRunDetail
+                agents={agents}
+                workflows={workflows}
+                run={selectedRun}
+                usage={selectedRunUsage}
+                onCopyValue={handleCopyValue}
+                onStatusChange={handleRunStatusChange}
+              />
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-black/10 p-5 text-sm text-muted-foreground dark:border-white/10">
