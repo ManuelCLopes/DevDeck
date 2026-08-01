@@ -95,6 +95,7 @@ import { useAppPreferences } from "@/lib/app-preferences";
 import { getDesktopApi } from "@/lib/desktop";
 import {
   buildAgentLaunchTaskTemplates,
+  buildRecommendedOpenCodeLaunchDefaults,
   parseLaunchTokenBudget,
   recommendAgentForLaunch,
 } from "@/lib/agent-launch";
@@ -226,7 +227,10 @@ export default function Terminals() {
   const { availability: codingToolAvailability, preferredTool, isLoading: codingToolLoading } = useCodingTool();
   const { isLoading: opencodeSessionsLoading, sessions: opencodeSessions, refresh: refreshSessions } =
     useOpenCodeSessions();
-  const { data: agentHarness } = useAgentHarness();
+  const {
+    data: agentHarness,
+    isLoading: isAgentHarnessLoading,
+  } = useAgentHarness();
   const { data: snapshot } = useWorkspaceSnapshot();
   const desktopApi = getDesktopApi();
   const [ptyAvailability, setPtyAvailability] = useState<PtyAvailability | null>(null);
@@ -290,6 +294,10 @@ export default function Terminals() {
     requestedSourceRunId,
   ].join("|");
   const [appliedLaunchRequestKey, setAppliedLaunchRequestKey] = useState<string | null>(null);
+  const [
+    appliedAutomaticLaunchDefaultsKey,
+    setAppliedAutomaticLaunchDefaultsKey,
+  ] = useState<string | null>(null);
   const archivedSessionIdSet = useMemo(
     () => new Set(archivedSessionIds),
     [archivedSessionIds],
@@ -313,6 +321,32 @@ export default function Terminals() {
       ),
     [agentHarness?.workflows, selectedRepoForLaunch],
   );
+  const recommendedOpenCodeDefaults = useMemo(
+    () =>
+      selectedRepoForLaunch
+        ? buildRecommendedOpenCodeLaunchDefaults({
+            agents: agentHarness?.agents ?? [],
+            project: {
+              id: selectedRepoForLaunch.id,
+              name: selectedRepoForLaunch.name,
+            },
+            workflows: agentHarness?.workflows ?? [],
+          })
+        : null,
+    [
+      agentHarness?.agents,
+      agentHarness?.workflows,
+      selectedRepoForLaunch?.id,
+      selectedRepoForLaunch?.name,
+    ],
+  );
+  const automaticLaunchDefaultsKey = selectedRepoForLaunch
+    ? [
+        selectedRepoForLaunch.id,
+        recommendedOpenCodeDefaults?.workflow?.id ?? "none",
+        recommendedOpenCodeDefaults?.agent?.id ?? "none",
+      ].join("|")
+    : null;
   const selectedAgent =
     launchAgents.find((agent) => agent.id === selectedAgentId) ?? null;
   const selectedWorkflow =
@@ -452,10 +486,25 @@ export default function Terminals() {
       return;
     }
 
-    if (!launchAgents.some((agent) => agent.id === selectedAgentId)) {
-      setSelectedAgentId(recommendedAgent.agent?.id ?? launchAgents[0]?.id ?? "none");
+    if (selectedAgentId === "none") {
+      return;
     }
-  }, [launchAgents, recommendedAgent.agent?.id, selectedAgentId, selectedRepoForLaunch]);
+
+    if (!launchAgents.some((agent) => agent.id === selectedAgentId)) {
+      setSelectedAgentId(
+        recommendedAgent.agent?.id ??
+          recommendedOpenCodeDefaults?.agent?.id ??
+          launchAgents[0]?.id ??
+          "none",
+      );
+    }
+  }, [
+    launchAgents,
+    recommendedAgent.agent?.id,
+    recommendedOpenCodeDefaults?.agent?.id,
+    selectedAgentId,
+    selectedRepoForLaunch,
+  ]);
 
   useEffect(() => {
     if (!selectedRepoForLaunch) {
@@ -469,10 +518,21 @@ export default function Terminals() {
       return;
     }
 
-    if (!launchWorkflows.some((workflow) => workflow.id === selectedWorkflowId)) {
-      setSelectedWorkflowId(launchWorkflows[0]?.id ?? "none");
+    if (selectedWorkflowId === "none") {
+      return;
     }
-  }, [launchWorkflows, selectedRepoForLaunch, selectedWorkflowId]);
+
+    if (!launchWorkflows.some((workflow) => workflow.id === selectedWorkflowId)) {
+      setSelectedWorkflowId(
+        recommendedOpenCodeDefaults?.workflow?.id ?? "none",
+      );
+    }
+  }, [
+    launchWorkflows,
+    recommendedOpenCodeDefaults?.workflow?.id,
+    selectedRepoForLaunch,
+    selectedWorkflowId,
+  ]);
 
   useEffect(() => {
     if (requestedLaunch !== "opencode" || !requestedProject) {
@@ -494,6 +554,7 @@ export default function Terminals() {
     setLaunchTaskTitle(requestedTaskTitle ?? "");
     setLaunchTokenBudget("");
     setAppliedLaunchRequestKey(launchRequestKey);
+    setAppliedAutomaticLaunchDefaultsKey(null);
   }, [
     appliedLaunchRequestKey,
     launchRequestKey,
@@ -504,6 +565,71 @@ export default function Terminals() {
     requestedProject,
     requestedTaskTitle,
     requestedWorkflowId,
+  ]);
+
+  useEffect(() => {
+    if (
+      !selectedRepoForLaunch ||
+      !recommendedOpenCodeDefaults ||
+      !automaticLaunchDefaultsKey ||
+      isAgentHarnessLoading
+    ) {
+      return;
+    }
+
+    if (appliedAutomaticLaunchDefaultsKey === automaticLaunchDefaultsKey) {
+      return;
+    }
+
+    if (
+      !requestedWorkflowId &&
+      selectedWorkflowId === "none" &&
+      recommendedOpenCodeDefaults.workflow
+    ) {
+      setSelectedWorkflowId(recommendedOpenCodeDefaults.workflow.id);
+    }
+
+    const automaticAgent =
+      selectedAgent ??
+      (selectedWorkflow
+        ? recommendedAgent.agent
+        : recommendedOpenCodeDefaults.agent) ??
+      recommendedAgent.agent ??
+      null;
+
+    if (!requestedAgentId && selectedAgentId === "none" && automaticAgent) {
+      setSelectedAgentId(automaticAgent.id);
+    }
+
+    if (!requestedTaskTitle && !launchTaskTitle.trim()) {
+      const automaticWorkflow =
+        selectedWorkflow ?? recommendedOpenCodeDefaults.workflow;
+      const automaticTaskTitle =
+        buildAgentLaunchTaskTemplates({
+          agent: automaticAgent,
+          projectName: selectedRepoForLaunch.name,
+          workflow: automaticWorkflow,
+        })[0]?.title ?? recommendedOpenCodeDefaults.taskTitle;
+
+      setLaunchTaskTitle(automaticTaskTitle);
+    }
+
+    setAppliedAutomaticLaunchDefaultsKey(automaticLaunchDefaultsKey);
+  }, [
+    appliedAutomaticLaunchDefaultsKey,
+    automaticLaunchDefaultsKey,
+    isAgentHarnessLoading,
+    launchTaskTitle,
+    recommendedAgent.agent,
+    recommendedOpenCodeDefaults,
+    requestedAgentId,
+    requestedTaskTitle,
+    requestedWorkflowId,
+    selectedAgent,
+    selectedAgentId,
+    selectedRepoForLaunch,
+    selectedWorkflow,
+    selectedWorkflowId,
   ]);
 
   useEffect(() => {
@@ -525,6 +651,7 @@ export default function Terminals() {
     setLaunchTaskTitle("");
     setLaunchTokenBudget("");
     setAppliedLaunchRequestKey(null);
+    setAppliedAutomaticLaunchDefaultsKey(null);
 
     if (requestedLaunch === "opencode" && requestedProjectId) {
       navigateInApp("/terminals", setLocation);
@@ -1633,6 +1760,7 @@ export default function Terminals() {
                                 setSelectedAgentId("none");
                                 setSelectedWorkflowId("none");
                                 setLaunchTaskTitle("");
+                                setAppliedAutomaticLaunchDefaultsKey(null);
                               }}
                               className="group relative p-4 rounded-xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-[#202022]/70 hover:border-primary/50 dark:hover:border-primary/50 cursor-pointer shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between h-36"
                             >

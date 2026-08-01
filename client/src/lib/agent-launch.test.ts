@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildAgentLaunchTaskTemplates,
+  buildRecommendedOpenCodeLaunchDefaults,
   buildRecommendedOpenCodeLaunchPath,
   parseLaunchTokenBudget,
   recommendAgentForLaunch,
@@ -104,6 +105,18 @@ test("buildRecommendedOpenCodeLaunchPath preselects project harness defaults", (
   assert.equal(url.searchParams.get("workflow"), "feature");
   assert.equal(url.searchParams.get("agent"), "reviewer");
   assert.equal(url.searchParams.get("task"), "Feature Build: Reviewer on Repo");
+});
+
+test("buildRecommendedOpenCodeLaunchDefaults returns reusable launcher defaults", () => {
+  const defaults = buildRecommendedOpenCodeLaunchDefaults({
+    agents: [builder, reviewer],
+    project: { id: "repo", name: "Repo" },
+    workflows: [workflow],
+  });
+
+  assert.equal(defaults.agent?.id, "reviewer");
+  assert.equal(defaults.workflow?.id, "feature");
+  assert.equal(defaults.taskTitle, "Feature Build: Reviewer on Repo");
 });
 
 test("buildRecommendedOpenCodeLaunchPath keeps unrelated harness entries manual", () => {

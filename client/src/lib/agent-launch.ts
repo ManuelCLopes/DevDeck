@@ -25,6 +25,12 @@ export interface RecommendedOpenCodeLaunchOptions {
   workflows: WorkflowDefinition[];
 }
 
+export interface RecommendedOpenCodeLaunchDefaults {
+  agent: AgentDefinition | null;
+  taskTitle: string;
+  workflow: WorkflowDefinition | null;
+}
+
 function tokenize(value: string | null | undefined) {
   return new Set(
     (value ?? "")
@@ -234,6 +240,18 @@ export function buildAgentLaunchTaskTemplates(options: {
 export function buildRecommendedOpenCodeLaunchPath(
   options: RecommendedOpenCodeLaunchOptions,
 ) {
+  const defaults = buildRecommendedOpenCodeLaunchDefaults(options);
+
+  return buildCreateSessionPath(options.project.id, null, {
+    agentId: defaults.agent?.id ?? null,
+    taskTitle: defaults.taskTitle,
+    workflowId: defaults.workflow?.id ?? null,
+  });
+}
+
+export function buildRecommendedOpenCodeLaunchDefaults(
+  options: RecommendedOpenCodeLaunchOptions,
+): RecommendedOpenCodeLaunchDefaults {
   const workflow = selectRecommendedWorkflowForLaunch(
     options.workflows,
     options.project,
@@ -251,11 +269,11 @@ export function buildRecommendedOpenCodeLaunchPath(
       workflow,
     })[0]?.title ?? null;
 
-  return buildCreateSessionPath(options.project.id, null, {
-    agentId: recommendation.agent?.id ?? null,
-    taskTitle,
-    workflowId: workflow?.id ?? null,
-  });
+  return {
+    agent: recommendation.agent,
+    taskTitle: taskTitle ?? `OpenCode workspace for ${options.project.name}`,
+    workflow,
+  };
 }
 
 export function parseLaunchTokenBudget(value: string) {
