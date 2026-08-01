@@ -1,15 +1,24 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
+  BarChart3,
   Bot,
   ClipboardList,
+  Copy,
+  Download,
   ExternalLink,
   FileText,
+  Gauge,
+  Layers,
+  Link2Off,
   RefreshCw,
+  RotateCcw,
   Search,
   ShieldCheck,
   Sparkles,
+  Timer,
   Workflow,
+  type LucideIcon,
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -37,11 +46,19 @@ import {
   summarizeTokenUsageForAgentRun,
   type AgentRunUsageSummary,
 } from "@/lib/agent-run-detail";
+import {
+  buildAgentProductivityInsights,
+  buildAgentTelemetryExport,
+  serializeAgentTelemetryCsv,
+  type AgentProductivityInsights,
+  type AgentProductivityRunInsight,
+} from "@/lib/agent-productivity-insights";
 import { cn } from "@/lib/utils";
 import type {
   AgentDefinition,
   AgentRun,
   AgentRunStatus,
+  TaskTraceEntry,
   WorkflowDefinition,
 } from "@shared/agents";
 
@@ -98,6 +115,77 @@ function formatDateTime(value: string | null) {
   }).format(date);
 }
 
+function formatPercent(value: number) {
+  return `${value}%`;
+}
+
+function formatDuration(durationMs: number | null) {
+  if (durationMs === null) {
+    return "Not enough data";
+  }
+
+  const minutes = Math.round(durationMs / 60_000);
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours < 24) {
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+  }
+
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
+}
+
+function getExportTimestamp() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function buildRunDiagnosticsText(runInsight: AgentProductivityRunInsight) {
+  return [
+    "Agent Run Diagnostics",
+    `Task: ${runInsight.run.taskTitle}`,
+    `Status: ${runInsight.run.status}`,
+    `Agent: ${runInsight.agentName}`,
+    `Workflow: ${runInsight.workflowName}`,
+    `Project: ${runInsight.projectName}`,
+    `Started: ${formatDateTime(runInsight.run.startedAt)}`,
+    `Ended: ${formatDateTime(runInsight.run.endedAt)}`,
+    `Duration: ${formatDuration(runInsight.durationMs)}`,
+    `Tokens: ${runInsight.totalTokens.toLocaleString()}`,
+    `Budget: ${
+      runInsight.run.tokenBudget
+        ? runInsight.run.tokenBudget.toLocaleString()
+        : "No budget"
+    }`,
+    `Budget Usage: ${
+      runInsight.budgetPercent === null
+        ? "No budget"
+        : formatPercent(runInsight.budgetPercent)
+    }`,
+    `Estimated Cost: ${formatEstimatedCost(runInsight.estimatedCost)}`,
+    `Usage Events: ${runInsight.eventCount}`,
+    `Branch: ${runInsight.run.branchName ?? "No branch"}`,
+    `Worktree: ${runInsight.run.worktreePath ?? "No worktree path"}`,
+    `OpenCode Session: ${runInsight.run.opencodeSessionId ?? "Not linked"}`,
+  ].join("\n");
+}
+
 function getProjectLabel(projectName: string | null) {
   return projectName ?? "Workspace";
 }
@@ -144,6 +232,338 @@ function AgentPill({
     >
       <span className="truncate">{children}</span>
     </span>
+  );
+}
+
+function InsightMetric({
+  detail,
+  icon: Icon,
+  label,
+  value,
+}: {
+  detail?: string;
+  icon: LucideIcon;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-lg border border-black/10 bg-white/75 p-3 dark:border-white/10 dark:bg-[#1d1d1f]/75">
+      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase text-muted-foreground">
+        <Icon className="h-3.5 w-3.5 text-primary" />
+        {label}
+      </div>
+      <p className="mt-2 text-xl font-bold text-foreground">{value}</p>
+      {detail ? (
+        <p className="mt-1 truncate text-[11px] text-muted-foreground">{detail}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function EmptyInsight({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-dashed border-black/10 p-4 text-xs text-muted-foreground dark:border-white/10">
+      {children}
+    </div>
+  );
+}
+
+function ProductivityInsightsSection({
+  insights,
+}: {
+  insights: AgentProductivityInsights;
+}) {
+  const topWorkflows = insights.workflowSummaries.slice(0, 6);
+  const topModels = insights.modelSummaries.slice(0, 5);
+  const topProjects = insights.projectSummaries.slice(0, 5);
+  const topHandoffRoles = insights.handoffRoles.slice(0, 5);
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-2">
+        <BarChart3 className="h-4 w-4 text-primary" />
+        <h2 className="text-sm font-semibold text-foreground">Productivity Insights</h2>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+        <InsightMetric
+          icon={Gauge}
+          label="Completion"
+          value={formatPercent(insights.totals.completionRate)}
+          detail={`${insights.totals.completedRunCount}/${insights.totals.runCount} runs`}
+        />
+        <InsightMetric
+          icon={AlertTriangle}
+          label="Failure"
+          value={formatPercent(insights.totals.failureRate)}
+          detail={`${insights.totals.failedRunCount} failed`}
+        />
+        <InsightMetric
+          icon={Timer}
+          label="Avg Duration"
+          value={formatDuration(insights.totals.averageDurationMs)}
+          detail={`${formatTokenCount(insights.totals.averageTokensPerRun)} avg tokens`}
+        />
+        <InsightMetric
+          icon={Sparkles}
+          label="Usage Coverage"
+          value={formatPercent(insights.totals.usageCoverageRate)}
+          detail={`${insights.totals.runsWithUsageCount} linked runs`}
+        />
+        <InsightMetric
+          icon={Link2Off}
+          label="Unlinked"
+          value={insights.totals.unlinkedOpenCodeRunCount.toLocaleString()}
+          detail={`${insights.totals.linkedOpenCodeRunCount} OpenCode links`}
+        />
+        <InsightMetric
+          icon={ShieldCheck}
+          label="Budget Risk"
+          value={insights.totals.budgetWarningCount.toLocaleString()}
+          detail={`${insights.totals.overBudgetRunCount} over budget`}
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.9fr)]">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Workflow className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">Workflow Rollups</h3>
+          </div>
+          {topWorkflows.length > 0 ? (
+            <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
+              <table className="w-full min-w-[760px] text-left text-xs">
+                <thead className="border-b border-black/10 bg-secondary/50 text-[10px] uppercase text-muted-foreground dark:border-white/10">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">Workflow</th>
+                    <th className="px-3 py-2 font-semibold">Runs</th>
+                    <th className="px-3 py-2 font-semibold">Tokens</th>
+                    <th className="px-3 py-2 font-semibold">Avg / Run</th>
+                    <th className="px-3 py-2 font-semibold">Avg Duration</th>
+                    <th className="px-3 py-2 font-semibold">Issues</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-black/10 bg-white/70 dark:divide-white/10 dark:bg-white/5">
+                  {topWorkflows.map((workflow) => (
+                    <tr key={workflow.workflowId ?? "unassigned"}>
+                      <td className="px-3 py-2">
+                        <p className="font-medium text-foreground">{workflow.workflowName}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {workflow.projectName}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {workflow.runCount}
+                      </td>
+                      <td className="px-3 py-2 font-semibold text-foreground">
+                        {formatTokenCount(workflow.totalTokens)}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {formatTokenCount(workflow.averageTokensPerRun)}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {formatDuration(workflow.averageDurationMs)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {workflow.metadataIssues.length > 0 ? (
+                          <div className="flex max-w-[260px] flex-wrap gap-1">
+                            {workflow.metadataIssues.slice(0, 3).map((issue) => (
+                              <AgentPill key={issue} tone="amber">
+                                {issue}
+                              </AgentPill>
+                            ))}
+                          </div>
+                        ) : (
+                          <AgentPill tone="green">Ready</AgentPill>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyInsight>No workflow rollups yet.</EmptyInsight>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold text-foreground">Model Usage</h3>
+            </div>
+            {topModels.length > 0 ? (
+              <div className="space-y-2">
+                {topModels.map((model) => (
+                  <div
+                    key={model.label}
+                    className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate font-semibold text-foreground">{model.label}</p>
+                      <AgentPill>{`${model.eventCount} events`}</AgentPill>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-3 text-muted-foreground">
+                      <span>{formatTokenCount(model.totalTokens)} tokens</span>
+                      <span>{formatEstimatedCost(model.estimatedCost)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyInsight>No model usage recorded.</EmptyInsight>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold text-foreground">Project Usage</h3>
+            </div>
+            {topProjects.length > 0 ? (
+              <div className="space-y-2">
+                {topProjects.map((project) => (
+                  <div
+                    key={project.projectId ?? project.projectName}
+                    className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate font-semibold text-foreground">
+                        {project.projectName}
+                      </p>
+                      <AgentPill>{`${project.runCount} runs`}</AgentPill>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-3 text-muted-foreground">
+                      <span>{formatTokenCount(project.totalTokens)} tokens</span>
+                      <span>{formatEstimatedCost(project.estimatedCost)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyInsight>No project usage recorded.</EmptyInsight>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">Budget & Linking Attention</h3>
+          </div>
+          {insights.budgetWarnings.length > 0 || insights.telemetryGaps.length > 0 ? (
+            <div className="space-y-2">
+              {insights.budgetWarnings.slice(0, 4).map((runInsight) => (
+                <div
+                  key={`budget:${runInsight.run.id}`}
+                  className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 truncate font-semibold">{runInsight.run.taskTitle}</p>
+                    <AgentPill tone={runInsight.budgetPercent && runInsight.budgetPercent > 100 ? "red" : "amber"}>
+                      {runInsight.budgetPercent}% budget
+                    </AgentPill>
+                  </div>
+                  <p className="mt-1 text-[11px] opacity-85">
+                    {runInsight.agentName} · {formatTokenCount(runInsight.totalTokens)}
+                  </p>
+                </div>
+              ))}
+              {insights.telemetryGaps.slice(0, 4).map((gap) => (
+                <div
+                  key={`gap:${gap.runId ?? gap.taskTitle}:${gap.createdAt}`}
+                  className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
+                >
+                  <p className="truncate font-semibold text-foreground">{gap.taskTitle}</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {gap.issueLabels.map((issue) => (
+                      <AgentPill key={issue} tone="red">
+                        {issue}
+                      </AgentPill>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {gap.agentName} · {gap.workflowName}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyInsight>No budget or linking issues detected.</EmptyInsight>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">Recent Expensive Runs</h3>
+          </div>
+          {insights.expensiveRuns.length > 0 ? (
+            <div className="space-y-2">
+              {insights.expensiveRuns.slice(0, 5).map((runInsight) => (
+                <div
+                  key={`expensive:${runInsight.run.id}`}
+                  className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 truncate font-semibold text-foreground">
+                      {runInsight.run.taskTitle}
+                    </p>
+                    <AgentPill>{formatEstimatedCost(runInsight.estimatedCost)}</AgentPill>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {runInsight.agentName} · {formatTokenCount(runInsight.totalTokens)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyInsight>No costed runs recorded.</EmptyInsight>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Workflow className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">Handoff Roles</h3>
+          </div>
+          {topHandoffRoles.length > 0 ? (
+            <div className="space-y-2">
+              {topHandoffRoles.map((role) => (
+                <div
+                  key={role.agentId}
+                  className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
+                >
+                  <p className="truncate font-semibold text-foreground">{role.agentName}</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-[10px] uppercase text-muted-foreground">First</p>
+                      <p className="font-semibold text-foreground">
+                        {role.firstRunCount} runs
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-muted-foreground">Last</p>
+                      <p className="font-semibold text-foreground">
+                        {role.lastRunCount} runs
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {role.firstWorkflowCount} first-step, {role.lastWorkflowCount} last-step workflows
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyInsight>No handoff roles detected.</EmptyInsight>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -419,12 +839,14 @@ function AgentRunRow({
 function AgentRunDetail({
   agents,
   onCopyValue,
+  onCopyDiagnostics,
   onStatusChange,
   run,
   usage,
   workflows,
 }: {
   agents: AgentDefinition[];
+  onCopyDiagnostics: (runId: string) => void;
   onCopyValue: (value: string, title: string) => void;
   onStatusChange: (runId: string, status: AgentRunStatus) => void;
   run: AgentRun | null;
@@ -573,6 +995,17 @@ function AgentRunDetail({
           Copy Worktree Path
         </Button>
       ) : null}
+
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-2 h-8 w-full gap-2 text-xs"
+        onClick={() => onCopyDiagnostics(run.id)}
+      >
+        <Copy className="h-3.5 w-3.5" />
+        Copy Diagnostics
+      </Button>
     </aside>
   );
 }
@@ -657,6 +1090,16 @@ export default function Agents() {
         ]),
       ),
     [agentRuns, tokenUsageEvents],
+  );
+  const productivityInsights = useMemo(
+    () =>
+      buildAgentProductivityInsights({
+        agents,
+        agentRuns,
+        tokenUsageEvents,
+        workflows,
+      }),
+    [agents, agentRuns, tokenUsageEvents, workflows],
   );
   const projectOptions = useMemo(
     () => uniqueValues(agents.map((agent) => agent.projectName)),
@@ -764,7 +1207,11 @@ export default function Agents() {
     await openPreferredTool(sourcePath);
   };
 
-  const handleCopyValue = async (value: string, title: string) => {
+  const handleCopyValue = async (
+    value: string,
+    title: string,
+    description = value,
+  ) => {
     try {
       if (desktopApi?.copyToClipboard) {
         await desktopApi.copyToClipboard(value);
@@ -773,7 +1220,7 @@ export default function Agents() {
       }
       toast({
         title,
-        description: value,
+        description,
       });
     } catch (nextError) {
       toast({
@@ -787,6 +1234,126 @@ export default function Agents() {
 
   const handleCopySourcePath = async (sourcePath: string) => {
     await handleCopyValue(sourcePath, "Source path copied");
+  };
+
+  const buildTelemetryExportPayload = async () => {
+    let taskTraceEntries: TaskTraceEntry[] = [];
+    let storeUpdatedAt: string | null = null;
+
+    if (desktopApi?.getAgentTelemetry) {
+      const snapshot = await desktopApi.getAgentTelemetry();
+      taskTraceEntries = snapshot.taskTraceEntries;
+      storeUpdatedAt = snapshot.updatedAt;
+    }
+
+    return buildAgentTelemetryExport({
+      agents,
+      agentRuns,
+      now: new Date(),
+      sources,
+      storeUpdatedAt,
+      taskTraceEntries,
+      tokenUsageEvents,
+      workflows,
+    });
+  };
+
+  const handleExportTelemetryJson = async () => {
+    try {
+      const payload = await buildTelemetryExportPayload();
+      downloadTextFile(
+        `devdeck-agent-telemetry-${getExportTimestamp()}.json`,
+        `${JSON.stringify(payload, null, 2)}\n`,
+        "application/json;charset=utf-8",
+      );
+      toast({
+        title: "Telemetry JSON exported",
+        description: `${payload.telemetry.agentRuns.length} runs included`,
+      });
+    } catch (nextError) {
+      toast({
+        title: "JSON export failed",
+        description:
+          nextError instanceof Error ? nextError.message : String(nextError),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExportTelemetryCsv = () => {
+    try {
+      const csv = serializeAgentTelemetryCsv({
+        agents,
+        agentRuns,
+        now: new Date(),
+        tokenUsageEvents,
+        workflows,
+      });
+      downloadTextFile(
+        `devdeck-agent-runs-${getExportTimestamp()}.csv`,
+        `${csv}\n`,
+        "text/csv;charset=utf-8",
+      );
+      toast({
+        title: "Telemetry CSV exported",
+        description: `${agentRuns.length} runs included`,
+      });
+    } catch (nextError) {
+      toast({
+        title: "CSV export failed",
+        description:
+          nextError instanceof Error ? nextError.message : String(nextError),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleResetTelemetry = async () => {
+    const confirmed = window.confirm(
+      "Reset agent telemetry history? This clears agent runs, token usage, and task traces.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await Promise.all([
+        desktopApi?.saveAgentRuns?.([]),
+        desktopApi?.saveTokenUsageEvents?.([]),
+        desktopApi?.saveTaskTraceEntries?.([]),
+      ]);
+      setAgentRuns([]);
+      setTokenUsageEvents([]);
+      setSelectedRunId(null);
+      setUsageSyncedAt(null);
+      setUsageIngestionError(null);
+      toast({
+        title: "Telemetry reset",
+        description: "Agent runs and token usage were cleared",
+      });
+    } catch (nextError) {
+      toast({
+        title: "Telemetry reset failed",
+        description:
+          nextError instanceof Error ? nextError.message : String(nextError),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCopyRunDiagnostics = async (runId: string) => {
+    const runInsight = productivityInsights.runInsights.find(
+      (candidate) => candidate.run.id === runId,
+    );
+    if (!runInsight) {
+      return;
+    }
+
+    await handleCopyValue(
+      buildRunDiagnosticsText(runInsight),
+      "Run diagnostics copied",
+      `${runInsight.run.taskTitle} diagnostics are on the clipboard`,
+    );
   };
 
   const handleRunStatusChange = (runId: string, status: AgentRunStatus) => {
@@ -816,6 +1383,37 @@ export default function Agents() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => void handleExportTelemetryJson()}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export JSON
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleExportTelemetryCsv}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export CSV
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => void handleResetTelemetry()}
+              disabled={agentRuns.length === 0 && tokenUsageEvents.length === 0}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reset
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -916,6 +1514,8 @@ export default function Agents() {
           </section>
         ) : null}
 
+        <ProductivityInsightsSection insights={productivityInsights} />
+
         {isLoading ? (
           <div className="rounded-lg border border-dashed border-black/10 p-10 text-center text-sm text-muted-foreground dark:border-white/10">
             Scanning local harness files...
@@ -971,6 +1571,7 @@ export default function Agents() {
                 workflows={workflows}
                 run={selectedRun}
                 usage={selectedRunUsage}
+                onCopyDiagnostics={handleCopyRunDiagnostics}
                 onCopyValue={handleCopyValue}
                 onStatusChange={handleRunStatusChange}
               />

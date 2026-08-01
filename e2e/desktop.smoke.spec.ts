@@ -291,18 +291,97 @@ test("agent registry imports harness definitions and tracking surfaces", async (
       page.getByRole("heading", { name: "Agent Registry", exact: true }),
     ).toBeVisible();
 
-    await expect(page.getByText("Builder Agent", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Builder Agent", exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("Implement scoped changes")).toBeVisible();
     await expect(page.getByText("120,000")).toBeVisible();
-    await expect(page.getByText("Feature Build", { exact: true })).toBeVisible();
+    await expect(page.getByText("Feature Build", { exact: true }).first()).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Agent Runs", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Productivity Insights", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Token Usage by Agent", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByText(/No agent runs have been recorded yet/),
+    ).toBeVisible();
+  } finally {
+    await electronApp.close();
+    rmSync(workspace.tempDir, { force: true, recursive: true });
+  }
+});
+
+test("agent productivity insights summarize persisted telemetry", async () => {
+  const workspace = createTestWorkspace();
+  const selection = createWorkspaceSelection(workspace.rootDir);
+  const { electronApp, page } = await launchDesktopApp(
+    workspace.userHome,
+    selection,
+  );
+
+  try {
+    await page.evaluate(async () => {
+      const desktopApi = (window as any).devdeck;
+      await desktopApi.saveAgentRuns([
+        {
+          agentId: "builder",
+          branchName: "feature/insights",
+          endedAt: "2026-08-01T11:00:00.000Z",
+          id: "run-insights",
+          opencodeSessionId: "ses_insights",
+          projectId: "alpha",
+          startedAt: "2026-08-01T10:00:00.000Z",
+          status: "completed",
+          taskTitle: "Build insight panel",
+          terminalPaneId: "pane-insights",
+          tokenBudget: 1000,
+          workflowRunId: "feature",
+          worktreePath: "/tmp/devdeck-insights",
+        },
+      ]);
+      await desktopApi.saveTokenUsageEvents([
+        {
+          agentId: "builder",
+          agentRunId: "run-insights",
+          cacheReadTokens: 10,
+          cacheWriteTokens: 0,
+          createdAt: "2026-08-01T10:30:00.000Z",
+          estimatedCost: 0.42,
+          id: "usage-insights",
+          inputTokens: 700,
+          model: "gpt-5-codex",
+          outputTokens: 120,
+          projectId: "alpha",
+          provider: "openai",
+          reasoningTokens: 50,
+          toolCallTokens: 20,
+          workflowRunId: "feature",
+        },
+      ]);
+    });
+
+    await page.getByRole("button", { name: "Agents", exact: true }).click();
+
+    const insights = page.locator("section").filter({
+      has: page.getByRole("heading", {
+        name: "Productivity Insights",
+        exact: true,
+      }),
+    });
+    await expect(insights).toContainText("Completion");
+    await expect(insights).toContainText("Usage Coverage");
+    await expect(insights).toContainText("Feature Build");
+    await expect(insights).toContainText("openai / gpt-5-codex");
+    await expect(insights).toContainText("Budget & Linking Attention");
+    await expect(page.getByRole("button", { name: "Export JSON" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Export CSV" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reset" })).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Copy Diagnostics" }),
     ).toBeVisible();
   } finally {
     await electronApp.close();

@@ -90,12 +90,14 @@ test("saveAgentRuns normalizes and persists durable run history", async () => {
       },
     ]);
     const reloaded = await readAgentTelemetryStore();
+    const persistedRun = saved.agentRuns.find((run) => run.id === "run-1");
+    const fallbackRun = saved.agentRuns.find((run) => run.id !== "run-1");
 
     assert.equal(saved.agentRuns.length, 2);
-    assert.equal(saved.agentRuns[0]?.id, "run-1");
-    assert.equal(saved.agentRuns[1]?.status, "active");
-    assert.equal(saved.agentRuns[1]?.taskTitle, "Agent run");
-    assert.equal(saved.agentRuns[1]?.tokenBudget, 90000);
+    assert.equal(persistedRun?.id, "run-1");
+    assert.equal(fallbackRun?.status, "active");
+    assert.equal(fallbackRun?.taskTitle, "Agent run");
+    assert.equal(fallbackRun?.tokenBudget, 90000);
     assert.deepEqual(reloaded.agentRuns, saved.agentRuns);
   } finally {
     fixture.cleanup();

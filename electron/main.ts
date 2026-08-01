@@ -74,6 +74,7 @@ import {
   saveTaskTraceEntries,
   saveTokenUsageEvents,
 } from "./agent-telemetry-store";
+import { getDevDeckUserDataPath } from "./user-data-path";
 import { registerPtyIpc } from "./pty";
 import { generateAICompletion, getPullRequestDiff } from "./ai-service";
 import { initializeMenubar, destroyMenubarTray, updateMenubarTray } from "./menubar";
@@ -82,6 +83,7 @@ import { getConflictedFiles, resolveFileConflict } from "./git-conflict";
 
 const execFileAsync = promisify(execFile);
 const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
+app.setPath("userData", getDevDeckUserDataPath());
 const DEFAULT_WORKSPACE_MONITOR_PREFERENCES = {
   alertFailingBuilds: true,
   autoRefreshEnabled: true,
