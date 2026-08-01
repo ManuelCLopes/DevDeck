@@ -171,6 +171,10 @@ test("buildAgentLaunchSummary includes responsibilities and boundaries", () => {
     branchName: "feature/agent-launch",
     projectName: "Repo",
     taskTitle: "Improve launch",
+    traceAppendCommand: [
+      "TRACE_PATH='/tmp/repo-feature/.devdeck/traces/run-1.jsonl'",
+      "cat <<'DEVDECK_TRACE_JSONL' >> \"$TRACE_PATH\"",
+    ].join("\n"),
     tracePath: "/tmp/repo-feature/.devdeck/traces/run-1.jsonl",
     tokenBudget: 90000,
     workflow,
@@ -180,6 +184,8 @@ test("buildAgentLaunchSummary includes responsibilities and boundaries", () => {
   assert.match(summary, /Agent Run ID: run-1/);
   assert.match(summary, /DEVDECK_AGENT_RUN_ID=run-1/);
   assert.match(summary, /Trace File: append JSONL task trace entries/);
+  assert.match(summary, /Trace Append Command:/);
+  assert.match(summary, /DEVDECK_TRACE_JSONL/);
   assert.match(summary, /Token Budget: 90,000 tokens/);
   assert.match(summary, /Responsibilities: Implement changes; Run tests/);
   assert.match(summary, /Boundaries: Do not merge without review/);

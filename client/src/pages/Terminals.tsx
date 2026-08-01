@@ -106,7 +106,10 @@ import {
   normalizeAgentRuns,
   sortAgentRuns,
 } from "@/lib/agent-runs";
-import { buildAgentRunTracePath } from "@/lib/task-trace";
+import {
+  buildAgentRunTracePath,
+  buildTaskTraceAppendCommandText,
+} from "@/lib/task-trace";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import { cn } from "@/lib/utils";
 import {
@@ -594,12 +597,17 @@ export default function Terminals() {
         worktreePath: result.localPath,
       };
       const tracePath = buildAgentRunTracePath(result.localPath, runId);
+      const traceAppendCommand = buildTaskTraceAppendCommandText({
+        runId,
+        tracePath,
+      });
       const launchSummary = buildAgentLaunchSummary({
         agent: agentForRun,
         agentRunId: runId,
         branchName: result.branchName,
         projectName: selectedRepoForLaunch.name,
         taskTitle,
+        traceAppendCommand,
         tracePath,
         tokenBudget: tokenBudgetForRun,
         workflow: workflowForRun,

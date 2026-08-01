@@ -302,6 +302,7 @@ export function buildAgentLaunchSummary(options: {
   branchName: string;
   projectName: string;
   taskTitle: string;
+  traceAppendCommand?: string | null;
   tracePath?: string | null;
   tokenBudget?: number | null;
   workflow: WorkflowDefinition | null;
@@ -318,6 +319,9 @@ export function buildAgentLaunchSummary(options: {
       : null,
     options.tracePath
       ? `Trace File: append JSONL task trace entries to ${options.tracePath}.`
+      : null,
+    options.traceAppendCommand
+      ? `Trace Append Command:\n${options.traceAppendCommand}`
       : null,
     options.tokenBudget
       ? `Token Budget: ${options.tokenBudget.toLocaleString()} tokens`
