@@ -106,6 +106,17 @@ export async function saveTaskTraceEntries(taskTraceEntries: unknown) {
   }));
 }
 
+export async function importTaskTraceEntries(taskTraceEntries: unknown) {
+  return mutateStore((currentSnapshot) => ({
+    ...currentSnapshot,
+    taskTraceEntries: mergeTaskTraceEntries(
+      currentSnapshot.taskTraceEntries,
+      taskTraceEntries,
+      DEFAULT_TASK_TRACE_HISTORY_LIMIT,
+    ),
+  }));
+}
+
 export async function saveTokenUsageEvents(tokenUsageEvents: unknown) {
   return mutateStore((currentSnapshot) => ({
     ...currentSnapshot,

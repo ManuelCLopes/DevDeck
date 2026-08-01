@@ -4,6 +4,7 @@ import type {
   TaskTraceEntry,
   WorkflowDefinition,
 } from "./agents";
+import type { WorkspaceSelection } from "./workspace";
 import {
   mergeTaskTraceEntries,
   normalizeAgentRuns,
@@ -13,6 +14,32 @@ import {
 export interface TaskTraceImportResult {
   entries: TaskTraceEntry[];
   rejectedCount: number;
+}
+
+export const DEVDECK_TRACE_DIRECTORY = ".devdeck/traces";
+export const DEVDECK_TRACE_FORMAT_ENV = "DEVDECK_TRACE_FORMAT";
+export const DEVDECK_TRACE_PATH_ENV = "DEVDECK_TRACE_PATH";
+
+export interface AgentTaskTraceFileIngestionResult {
+  error: string | null;
+  importedCount: number;
+  path: string;
+  rejectedCount: number;
+}
+
+export interface AgentTaskTraceIngestionRequest {
+  selection?: WorkspaceSelection | null;
+  tracePaths?: string[];
+}
+
+export interface AgentTaskTraceIngestionResult {
+  errorCount: number;
+  fileResults: AgentTaskTraceFileIngestionResult[];
+  filesScanned: number;
+  importedCount: number;
+  newEntryCount: number;
+  rejectedCount: number;
+  taskTraceEntries: TaskTraceEntry[];
 }
 
 export interface AgentRunHandoffStep {
@@ -76,6 +103,10 @@ function getImportEntries(rawValue: unknown) {
     return [];
   }
 
+  if (getString(record.agentRunId)) {
+    return [record];
+  }
+
   for (const key of ["taskTraceEntries", "traceEntries", "entries"]) {
     const entries = record[key];
     if (Array.isArray(entries)) {
@@ -88,14 +119,24 @@ function getImportEntries(rawValue: unknown) {
 
 export function parseTaskTraceImportPayload(rawValue: unknown): TaskTraceImportResult {
   const rawEntries = getImportEntries(rawValue);
+  const record = getRecord(rawValue);
+  const hasEntryCollection = Boolean(
+    record &&
+      ["taskTraceEntries", "traceEntries", "entries"].some((key) =>
+        Array.isArray(record[key]),
+      ),
+  );
   const importableEntries = rawEntries.filter((entry) => {
-    const record = getRecord(entry);
-    return Boolean(record && getString(record.agentRunId));
+    const entryRecord = getRecord(entry);
+    return Boolean(entryRecord && getString(entryRecord.agentRunId));
   });
 
   return {
     entries: normalizeTaskTraceEntries(importableEntries),
-    rejectedCount: rawEntries.length - importableEntries.length,
+    rejectedCount:
+      rawEntries.length === 0 && record && !hasEntryCollection
+        ? 1
+        : rawEntries.length - importableEntries.length,
   };
 }
 
@@ -117,6 +158,7 @@ export function buildTaskTraceImportTemplate(runId: string) {
         errors: [],
         filesTouched: ["client/src/pages/Agents.tsx"],
         handoffTargetAgentId: null,
+        id: `${runId}-trace-1`,
         nextAction: "Continue implementation or hand off to the next agent.",
         summary: "Describe what changed and why.",
         testsRun: ["npm test"],
@@ -128,17 +170,44 @@ export function buildTaskTraceImportTemplate(runId: string) {
 export function buildTaskTraceContractText(options: {
   agent: AgentDefinition | null;
   run: AgentRun;
+  tracePath?: string | null;
   workflow: WorkflowDefinition | null;
 }) {
   return [
     "DevDeck Task Trace Contract",
     `Agent Run ID: ${options.run.id}`,
     `Environment: DEVDECK_AGENT_RUN_ID=${options.run.id}`,
+    options.tracePath ? `Trace Path: ${options.tracePath}` : null,
     `Agent: ${options.agent?.name ?? "Unassigned"}`,
     `Workflow: ${options.workflow?.name ?? "No workflow"}`,
-    "Import this JSON from the Agents page after the agent finishes a meaningful step:",
+    `Append one JSON object per line to ${DEVDECK_TRACE_PATH_ENV}; DevDeck imports ${DEVDECK_TRACE_DIRECTORY}/*.jsonl automatically.`,
+    "You can also import this JSON from the Agents page after the agent finishes a meaningful step:",
     JSON.stringify(buildTaskTraceImportTemplate(options.run.id), null, 2),
-  ].join("\n");
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
+function sanitizeTracePathSegment(value: string) {
+  const normalized = value.trim().replace(/[^A-Za-z0-9._-]+/g, "-");
+  return normalized.length > 0 ? normalized : "agent-run";
+}
+
+export function buildAgentRunTraceFileName(runId: string) {
+  return `${sanitizeTracePathSegment(runId)}.jsonl`;
+}
+
+export function buildAgentRunTracePath(worktreePath: string, runId: string) {
+  const trimmedRoot = worktreePath.trim().replace(/[\\/]+$/, "");
+  const separator = trimmedRoot.includes("\\") && !trimmedRoot.includes("/")
+    ? "\\"
+    : "/";
+
+  return [
+    trimmedRoot,
+    ...DEVDECK_TRACE_DIRECTORY.split("/"),
+    buildAgentRunTraceFileName(runId),
+  ].join(separator);
 }
 
 export function buildAgentRunHandoffSteps(options: {

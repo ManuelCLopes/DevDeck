@@ -146,10 +146,16 @@ test("buildAgentRunEnvironment exports agent and workflow identifiers", () => {
   const environment = buildAgentRunEnvironment({
     agent,
     run: { ...run, tokenBudget: 90000 },
+    tracePath: "/tmp/repo-feature/.devdeck/traces/run-1.jsonl",
     workflow,
   });
 
   assert.equal(environment.DEVDECK_AGENT_RUN_ID, "run-1");
+  assert.equal(
+    environment.DEVDECK_TRACE_PATH,
+    "/tmp/repo-feature/.devdeck/traces/run-1.jsonl",
+  );
+  assert.equal(environment.DEVDECK_TRACE_FORMAT, "jsonl");
   assert.equal(environment.DEVDECK_AGENT_ID, "builder");
   assert.equal(environment.DEVDECK_AGENT_RUN_TOKEN_BUDGET, "90000");
   assert.equal(environment.DEVDECK_AGENT_TOKEN_BUDGET, "90000");
@@ -163,6 +169,7 @@ test("buildAgentLaunchSummary includes responsibilities and boundaries", () => {
     branchName: "feature/agent-launch",
     projectName: "Repo",
     taskTitle: "Improve launch",
+    tracePath: "/tmp/repo-feature/.devdeck/traces/run-1.jsonl",
     tokenBudget: 90000,
     workflow,
   });
@@ -170,6 +177,7 @@ test("buildAgentLaunchSummary includes responsibilities and boundaries", () => {
   assert.match(summary, /Task: Improve launch/);
   assert.match(summary, /Agent Run ID: run-1/);
   assert.match(summary, /DEVDECK_AGENT_RUN_ID=run-1/);
+  assert.match(summary, /Trace File: append JSONL task trace entries/);
   assert.match(summary, /Token Budget: 90,000 tokens/);
   assert.match(summary, /Responsibilities: Implement changes; Run tests/);
   assert.match(summary, /Boundaries: Do not merge without review/);

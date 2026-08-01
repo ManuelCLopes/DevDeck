@@ -13,6 +13,10 @@ import type {
 } from "@shared/agents";
 import type { AgentTelemetrySnapshot } from "@shared/agent-telemetry";
 import type {
+  AgentTaskTraceIngestionRequest,
+  AgentTaskTraceIngestionResult,
+} from "@shared/agent-task-trace";
+import type {
   CreateGitWorktreeSessionResult,
   DevSessionOperationalSnapshot,
   InspectDevSessionRequest,
@@ -59,6 +63,9 @@ interface DevDeckDesktopApi {
     payload: AgentHarnessDiscoveryRequest,
   ): Promise<AgentHarnessDiscoveryResult>;
   getAgentTelemetry(): Promise<AgentTelemetrySnapshot>;
+  ingestAgentTaskTraces(
+    payload?: AgentTaskTraceIngestionRequest,
+  ): Promise<AgentTaskTraceIngestionResult>;
   saveAgentRuns(agentRuns: AgentRun[]): Promise<AgentTelemetrySnapshot>;
   saveTaskTraceEntries(
     taskTraceEntries: TaskTraceEntry[],

@@ -23,6 +23,7 @@ import type {
   WorkspaceSelection,
   WorkspaceSnapshot,
 } from "../shared/workspace";
+import type { AgentTaskTraceIngestionRequest } from "../shared/agent-task-trace";
 import {
   collectWorkspaceNotifications,
   getWorkspaceAttentionSummary,
@@ -68,6 +69,7 @@ import {
 } from "./opencode-sessions";
 import { listOpenCodeUsageRecords } from "./opencode-usage";
 import { discoverAgentHarness } from "./agent-harness";
+import { ingestAgentTaskTraces } from "./agent-task-trace-ingestion";
 import {
   readAgentTelemetryStore,
   saveAgentRuns,
@@ -620,6 +622,13 @@ ipcMain.handle(
 ipcMain.handle("devdeck:get-agent-telemetry", async () => {
   return readAgentTelemetryStore();
 });
+
+ipcMain.handle(
+  "devdeck:ingest-agent-task-traces",
+  async (_event, payload: AgentTaskTraceIngestionRequest | undefined) => {
+    return ingestAgentTaskTraces(payload);
+  },
+);
 
 ipcMain.handle("devdeck:save-agent-runs", async (_event, agentRuns: unknown) => {
   return saveAgentRuns(agentRuns);

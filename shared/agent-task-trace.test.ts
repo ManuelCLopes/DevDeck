@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  DEVDECK_TRACE_DIRECTORY,
+  buildAgentRunTracePath,
   buildAgentRunHandoffSteps,
   buildTaskTraceContractText,
   getTaskTraceEntriesForRun,
@@ -126,6 +128,17 @@ test("parseTaskTraceImportPayload accepts common payload shapes and rejects miss
   assert.equal(result.entries[0]?.id, "trace-1");
 });
 
+test("parseTaskTraceImportPayload accepts a single JSONL trace object", () => {
+  const result = parseTaskTraceImportPayload({
+    agentRunId: "run-1",
+    summary: "Single trace line",
+  });
+
+  assert.equal(result.entries.length, 1);
+  assert.equal(result.entries[0]?.agentRunId, "run-1");
+  assert.equal(result.entries[0]?.summary, "Single trace line");
+});
+
 test("getTaskTraceEntriesForRun sorts trace entries chronologically", () => {
   const entries = getTaskTraceEntriesForRun([handoffTrace, firstTrace], "run-1");
 
@@ -183,11 +196,21 @@ test("buildTaskTraceContractText includes env var instructions and import JSON",
   const contract = buildTaskTraceContractText({
     agent: builder,
     run,
+    tracePath: "/tmp/alpha/.devdeck/traces/run-1.jsonl",
     workflow,
   });
 
   assert.match(contract, /DEVDECK_AGENT_RUN_ID=run-1/);
+  assert.match(contract, /DEVDECK_TRACE_PATH/);
+  assert.match(contract, new RegExp(DEVDECK_TRACE_DIRECTORY));
   assert.match(contract, /"taskTraceEntries"/);
+});
+
+test("buildAgentRunTracePath creates a stable trace file path", () => {
+  assert.equal(
+    buildAgentRunTracePath("/tmp/alpha-worktree/", "run:1"),
+    "/tmp/alpha-worktree/.devdeck/traces/run-1.jsonl",
+  );
 });
 
 test("serializeTaskTraceEntriesCsv escapes trace rows", () => {

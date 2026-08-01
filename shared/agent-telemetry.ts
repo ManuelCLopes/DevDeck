@@ -263,12 +263,17 @@ export function haveAgentRunLinksChanged(left: AgentRun[], right: AgentRun[]) {
 export function buildAgentRunEnvironment(options: {
   agent: AgentDefinition | null;
   run: AgentRun;
+  tracePath?: string | null;
   workflow: WorkflowDefinition | null;
 }) {
   const environment: Record<string, string> = {
     DEVDECK_AGENT_RUN_ID: options.run.id,
     DEVDECK_AGENT_RUN_TITLE: options.run.taskTitle,
   };
+  if (options.tracePath) {
+    environment.DEVDECK_TRACE_FORMAT = "jsonl";
+    environment.DEVDECK_TRACE_PATH = options.tracePath;
+  }
   if (options.run.tokenBudget) {
     environment.DEVDECK_AGENT_RUN_TOKEN_BUDGET = String(options.run.tokenBudget);
   }
@@ -297,6 +302,7 @@ export function buildAgentLaunchSummary(options: {
   branchName: string;
   projectName: string;
   taskTitle: string;
+  tracePath?: string | null;
   tokenBudget?: number | null;
   workflow: WorkflowDefinition | null;
 }) {
@@ -309,6 +315,9 @@ export function buildAgentLaunchSummary(options: {
     options.agentRunId ? `Agent Run ID: ${options.agentRunId}` : null,
     options.agentRunId
       ? `Trace: use DEVDECK_AGENT_RUN_ID=${options.agentRunId} in imported taskTraceEntries JSON.`
+      : null,
+    options.tracePath
+      ? `Trace File: append JSONL task trace entries to ${options.tracePath}.`
       : null,
     options.tokenBudget
       ? `Token Budget: ${options.tokenBudget.toLocaleString()} tokens`

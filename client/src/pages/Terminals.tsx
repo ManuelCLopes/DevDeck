@@ -106,6 +106,7 @@ import {
   normalizeAgentRuns,
   sortAgentRuns,
 } from "@/lib/agent-runs";
+import { buildAgentRunTracePath } from "@/lib/task-trace";
 import { getProjectTagClassName } from "@/lib/project-tag-color";
 import { cn } from "@/lib/utils";
 import {
@@ -560,12 +561,14 @@ export default function Terminals() {
         workflowRunId: workflowForRun?.id ?? null,
         worktreePath: result.localPath,
       };
+      const tracePath = buildAgentRunTracePath(result.localPath, runId);
       const launchSummary = buildAgentLaunchSummary({
         agent: agentForRun,
         agentRunId: runId,
         branchName: result.branchName,
         projectName: selectedRepoForLaunch.name,
         taskTitle,
+        tracePath,
         tokenBudget: tokenBudgetForRun,
         workflow: workflowForRun,
       });
@@ -584,6 +587,7 @@ export default function Terminals() {
           ...buildAgentRunEnvironment({
             agent: agentForRun,
             run: agentRun,
+            tracePath,
             workflow: workflowForRun,
           }),
           [DEVDECK_AGENT_LAUNCH_SUMMARY_ENV]: launchSummary,

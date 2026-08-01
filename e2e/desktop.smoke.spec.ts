@@ -317,6 +317,24 @@ test("agent registry imports harness definitions and tracking surfaces", async (
 
 test("agent productivity insights summarize persisted telemetry", async () => {
   const workspace = createTestWorkspace();
+  const alphaPath = join(workspace.rootDir, "alpha");
+  const traceDirectory = join(alphaPath, ".devdeck", "traces");
+  mkdirSync(traceDirectory, { recursive: true });
+  writeFileSync(
+    join(traceDirectory, "run-insights.jsonl"),
+    `${JSON.stringify({
+      agentRunId: "run-insights",
+      commandsRun: ["npm test"],
+      createdAt: "2026-08-01T10:40:00.000Z",
+      errors: ["Type check failed once"],
+      filesTouched: ["client/src/pages/Agents.tsx"],
+      handoffTargetAgentId: "builder",
+      nextAction: "Continue implementation",
+      summary: "Captured trace timeline",
+      testsRun: ["npm run check"],
+    })}\n`,
+    "utf8",
+  );
   const selection = createWorkspaceSelection(workspace.rootDir);
   const { electronApp, page } = await launchDesktopApp(
     workspace.userHome,
@@ -324,7 +342,7 @@ test("agent productivity insights summarize persisted telemetry", async () => {
   );
 
   try {
-    await page.evaluate(async () => {
+    await page.evaluate(async (worktreePath) => {
       const desktopApi = (window as any).devdeck;
       await desktopApi.saveAgentRuns([
         {
@@ -340,7 +358,7 @@ test("agent productivity insights summarize persisted telemetry", async () => {
           terminalPaneId: "pane-insights",
           tokenBudget: 1000,
           workflowRunId: "feature",
-          worktreePath: "/tmp/devdeck-insights",
+          worktreePath,
         },
       ]);
       await desktopApi.saveTokenUsageEvents([
@@ -362,21 +380,11 @@ test("agent productivity insights summarize persisted telemetry", async () => {
           workflowRunId: "feature",
         },
       ]);
-      await desktopApi.saveTaskTraceEntries([
-        {
-          agentRunId: "run-insights",
-          commandsRun: ["npm test"],
-          createdAt: "2026-08-01T10:40:00.000Z",
-          errors: ["Type check failed once"],
-          filesTouched: ["client/src/pages/Agents.tsx"],
-          handoffTargetAgentId: "builder",
-          id: "trace-insights",
-          nextAction: "Continue implementation",
-          summary: "Captured trace timeline",
-          testsRun: ["npm run check"],
-        },
-      ]);
-    });
+      const persistedSelection = JSON.parse(
+        window.localStorage.getItem("devdeck_workspace_selection") ?? "null",
+      );
+      await desktopApi.ingestAgentTaskTraces({ selection: persistedSelection });
+    }, alphaPath);
 
     await page.getByRole("button", { name: "Agents", exact: true }).click();
 

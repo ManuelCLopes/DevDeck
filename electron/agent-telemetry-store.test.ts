@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRun, TokenUsageEvent } from "../shared/agents";
 import {
+  importTaskTraceEntries,
   readAgentTelemetryStore,
   saveAgentRuns,
   saveTaskTraceEntries,
@@ -134,6 +135,48 @@ test("telemetry mutations preserve other slices when writes overlap", async () =
     assert.equal(snapshot.tokenUsageEvents[0]?.id, "usage-1");
     assert.equal(snapshot.taskTraceEntries.length, 1);
     assert.equal(snapshot.taskTraceEntries[0]?.id, "trace-1");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("importTaskTraceEntries merges with existing task trace history", async () => {
+  const fixture = createStoreFixture();
+  try {
+    await saveTaskTraceEntries([
+      {
+        agentRunId: "run-1",
+        commandsRun: ["npm test"],
+        createdAt: "2026-08-01T10:02:00.000Z",
+        errors: [],
+        filesTouched: ["client/src/pages/Agents.tsx"],
+        handoffTargetAgentId: null,
+        id: "trace-1",
+        nextAction: "Commit phase 2",
+        summary: "Verified persistence",
+        testsRun: ["npm test"],
+      },
+    ]);
+
+    const saved = await importTaskTraceEntries([
+      {
+        agentRunId: "run-1",
+        commandsRun: ["npm run check"],
+        createdAt: "2026-08-01T10:03:00.000Z",
+        errors: [],
+        filesTouched: ["shared/agent-task-trace.ts"],
+        handoffTargetAgentId: null,
+        id: "trace-2",
+        nextAction: "Run smoke tests",
+        summary: "Imported trace file",
+        testsRun: ["npm run check"],
+      },
+    ]);
+
+    assert.deepEqual(
+      saved.taskTraceEntries.map((entry) => entry.id),
+      ["trace-2", "trace-1"],
+    );
   } finally {
     fixture.cleanup();
   }

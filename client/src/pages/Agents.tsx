@@ -38,6 +38,7 @@ import {
   useTokenUsageEventsState,
 } from "@/hooks/use-agent-telemetry";
 import { useCodingTool } from "@/hooks/use-coding-tool";
+import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import {
   haveAgentRunLinksChanged,
   linkAgentRunsToOpenCodeUsageRecords,
@@ -66,6 +67,8 @@ import {
   type AgentProductivityRunInsight,
 } from "@/lib/agent-productivity-insights";
 import {
+  DEVDECK_TRACE_DIRECTORY,
+  buildAgentRunTracePath,
   buildAgentRunHandoffSteps,
   buildTaskTraceContractText,
   getTaskTraceEntriesForRun,
@@ -1255,6 +1258,7 @@ export default function Agents() {
   const desktopApi = getDesktopApi();
   const { toast } = useToast();
   const { openPreferredTool, preferredToolShortLabel } = useCodingTool();
+  const workspaceSelection = useWorkspaceSelection();
   const { data, error, isFetching, isLoading, refetch } = useAgentHarness();
   const [agentRuns, setAgentRuns, { error: agentRunStorageError }] =
     useAgentRunsState();
@@ -1273,6 +1277,13 @@ export default function Agents() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [usageIngestionError, setUsageIngestionError] = useState<string | null>(null);
   const [usageSyncedAt, setUsageSyncedAt] = useState<string | null>(null);
+  const [traceIngestionError, setTraceIngestionError] = useState<string | null>(null);
+  const [traceIngestionSummary, setTraceIngestionSummary] = useState<{
+    filesScanned: number;
+    newEntryCount: number;
+    rejectedCount: number;
+  } | null>(null);
+  const [traceIngestionSyncedAt, setTraceIngestionSyncedAt] = useState<string | null>(null);
   const traceImportInputRef = useRef<HTMLInputElement | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
   const telemetryStorageError =
@@ -1434,6 +1445,67 @@ export default function Agents() {
       cancelled = true;
     };
   }, [agentRuns, desktopApi, setAgentRuns, setTokenUsageEvents]);
+
+  useEffect(() => {
+    if (!desktopApi?.ingestAgentTaskTraces) {
+      return;
+    }
+
+    let cancelled = false;
+    const ingestTaskTraceFiles = async () => {
+      try {
+        const result = await desktopApi.ingestAgentTaskTraces({
+          selection: workspaceSelection,
+        });
+        if (cancelled) {
+          return;
+        }
+
+        setTaskTraceEntries((currentEntries) => {
+          if (
+            result.newEntryCount === 0 &&
+            result.taskTraceEntries.length === currentEntries.length
+          ) {
+            return currentEntries;
+          }
+
+          return result.taskTraceEntries;
+        });
+        const firstFileError =
+          result.fileResults.find((fileResult) => fileResult.error)?.error ?? null;
+        setTraceIngestionError(
+          firstFileError
+            ? `${result.errorCount} trace file issue${
+                result.errorCount === 1 ? "" : "s"
+              }: ${firstFileError}`
+            : null,
+        );
+        setTraceIngestionSummary({
+          filesScanned: result.filesScanned,
+          newEntryCount: result.newEntryCount,
+          rejectedCount: result.rejectedCount,
+        });
+        setTraceIngestionSyncedAt(new Date().toISOString());
+      } catch (nextError) {
+        if (cancelled) {
+          return;
+        }
+        setTraceIngestionError(
+          nextError instanceof Error ? nextError.message : String(nextError),
+        );
+      }
+    };
+
+    void ingestTaskTraceFiles();
+    const intervalId = window.setInterval(() => {
+      void ingestTaskTraceFiles();
+    }, 15_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [desktopApi, setTaskTraceEntries, workspaceSelection]);
 
   useEffect(() => {
     if (visibleAgentRuns.length === 0) {
@@ -1687,7 +1759,12 @@ export default function Agents() {
       : null;
 
     await handleCopyValue(
-      buildTaskTraceContractText({ agent, run, workflow }),
+      buildTaskTraceContractText({
+        agent,
+        run,
+        tracePath: run.worktreePath ? buildAgentRunTracePath(run.worktreePath, run.id) : null,
+        workflow,
+      }),
       "Trace contract copied",
       `${run.taskTitle} trace contract is on the clipboard`,
     );
@@ -1928,9 +2005,26 @@ export default function Agents() {
         )}
 
         <section className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Workflow className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Agent Runs</h2>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Workflow className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Agent Runs</h2>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {traceIngestionError
+                ? `Trace ingest warning: ${traceIngestionError}`
+                : traceIngestionSyncedAt
+                  ? `Watching ${DEVDECK_TRACE_DIRECTORY}: ${
+                      traceIngestionSummary?.filesScanned ?? 0
+                    } files scanned, ${
+                      traceIngestionSummary?.newEntryCount ?? 0
+                    } new, ${
+                      traceIngestionSummary?.rejectedCount ?? 0
+                    } rejected`
+                  : desktopApi?.ingestAgentTaskTraces
+                    ? `Watching ${DEVDECK_TRACE_DIRECTORY} for JSONL traces`
+                    : "Automatic trace ingest requires the desktop app"}
+            </p>
           </div>
           {visibleAgentRuns.length > 0 ? (
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">

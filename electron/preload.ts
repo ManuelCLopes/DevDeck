@@ -14,6 +14,10 @@ import type {
 } from "../shared/agents";
 import type { AgentTelemetrySnapshot } from "../shared/agent-telemetry";
 import type {
+  AgentTaskTraceIngestionRequest,
+  AgentTaskTraceIngestionResult,
+} from "../shared/agent-task-trace";
+import type {
   CreateGitWorktreeSessionResult,
   DevSessionOperationalSnapshot,
   InspectDevSessionRequest,
@@ -141,6 +145,11 @@ const devdeck = {
   },
   getAgentTelemetry(): Promise<AgentTelemetrySnapshot> {
     return ipcRenderer.invoke("devdeck:get-agent-telemetry");
+  },
+  ingestAgentTaskTraces(
+    payload?: AgentTaskTraceIngestionRequest,
+  ): Promise<AgentTaskTraceIngestionResult> {
+    return ipcRenderer.invoke("devdeck:ingest-agent-task-traces", payload);
   },
   saveAgentRuns(agentRuns: AgentRun[]): Promise<AgentTelemetrySnapshot> {
     return ipcRenderer.invoke("devdeck:save-agent-runs", agentRuns);
