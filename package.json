@@ -46,6 +46,8 @@
     "check": "tsc",
     "test": "tsx --test client/src/lib/*.test.ts shared/*.test.ts electron/*.test.ts",
     "test:e2e": "playwright test",
+    "test:e2e:native": "DEVDECK_RUN_NATIVE_E2E=true playwright test --grep @native",
+    "test:e2e:ui": "playwright test --grep-invert @native",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
