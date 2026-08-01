@@ -449,7 +449,7 @@ test("terminal launcher exposes agent-aware OpenCode setup before launch", async
 
     await navigateDesktopApp(
       page,
-      `/terminals?launch=opencode&project=${encodeURIComponent(alphaProjectId!)}`,
+      `/terminals?launch=opencode&project=${encodeURIComponent(alphaProjectId!)}&agent=builder&workflow=feature&task=${encodeURIComponent("Continue implementation")}&base=main&branch=${encodeURIComponent("handoff/feature-builder")}&sourceRun=run-insights`,
     );
 
     await expect(
@@ -460,6 +460,8 @@ test("terminal launcher exposes agent-aware OpenCode setup before launch", async
     await expect(page.getByText("Workflow", { exact: true })).toBeVisible();
     await expect(page.getByText("Agent", { exact: true })).toBeVisible();
     await expect(page.getByText("Feature Build", { exact: true })).toBeVisible();
+    await expect(page.locator('input[value="handoff/feature-builder"]')).toBeVisible();
+    await expect(page.locator('input[value="Continue implementation"]')).toBeVisible();
     await expect(
       page.locator("main").getByText("Builder Agent", { exact: true }).first(),
     ).toBeVisible();

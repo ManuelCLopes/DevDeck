@@ -270,6 +270,23 @@ export default function Terminals() {
   const requestedProjectId = searchParams.get("project");
   const requestedSessionId = searchParams.get("session");
   const requestedLaunch = searchParams.get("launch");
+  const requestedAgentId = searchParams.get("agent");
+  const requestedWorkflowId = searchParams.get("workflow");
+  const requestedTaskTitle = searchParams.get("task");
+  const requestedBaseRef = searchParams.get("base");
+  const requestedBranchName = searchParams.get("branch");
+  const requestedSourceRunId = searchParams.get("sourceRun");
+  const launchRequestKey = [
+    requestedLaunch,
+    requestedProjectId,
+    requestedAgentId,
+    requestedWorkflowId,
+    requestedTaskTitle,
+    requestedBaseRef,
+    requestedBranchName,
+    requestedSourceRunId,
+  ].join("|");
+  const [appliedLaunchRequestKey, setAppliedLaunchRequestKey] = useState<string | null>(null);
   const archivedSessionIdSet = useMemo(
     () => new Set(archivedSessionIds),
     [archivedSessionIds],
@@ -459,18 +476,32 @@ export default function Terminals() {
       return;
     }
 
-    if (selectedRepoForLaunch?.id === requestedProject.id) {
+    if (appliedLaunchRequestKey === launchRequestKey) {
       return;
     }
 
     setSelectedRepoForLaunch(requestedProject);
-    setNewBranchName(`feature/opencode-${Math.random().toString(36).substring(2, 6)}`);
-    setBaseRef(requestedProject.defaultBranch || "main");
-    setSelectedAgentId("none");
-    setSelectedWorkflowId("none");
-    setLaunchTaskTitle("");
+    setNewBranchName(
+      requestedBranchName ??
+        `feature/opencode-${Math.random().toString(36).substring(2, 6)}`,
+    );
+    setBaseRef(requestedBaseRef ?? requestedProject.defaultBranch ?? "main");
+    setSelectedAgentId(requestedAgentId ?? "none");
+    setSelectedWorkflowId(requestedWorkflowId ?? "none");
+    setLaunchTaskTitle(requestedTaskTitle ?? "");
     setLaunchTokenBudget("");
-  }, [requestedLaunch, requestedProject, selectedRepoForLaunch?.id]);
+    setAppliedLaunchRequestKey(launchRequestKey);
+  }, [
+    appliedLaunchRequestKey,
+    launchRequestKey,
+    requestedAgentId,
+    requestedBaseRef,
+    requestedBranchName,
+    requestedLaunch,
+    requestedProject,
+    requestedTaskTitle,
+    requestedWorkflowId,
+  ]);
 
   useEffect(() => {
     if (!selectedRepoForLaunch) {
@@ -490,6 +521,7 @@ export default function Terminals() {
     setSelectedWorkflowId("none");
     setLaunchTaskTitle("");
     setLaunchTokenBudget("");
+    setAppliedLaunchRequestKey(null);
 
     if (requestedLaunch === "opencode" && requestedProjectId) {
       navigateInApp("/terminals", setLocation);
@@ -1375,6 +1407,14 @@ export default function Terminals() {
                               <SelectValue placeholder="Choose base branch" />
                             </SelectTrigger>
                             <SelectContent>
+                              {baseRef &&
+                              baseRef !== selectedRepoForLaunch.defaultBranch &&
+                              baseRef !== selectedRepoForLaunch.currentBranch &&
+                              baseRef !== "HEAD" ? (
+                                <SelectItem value={baseRef}>
+                                  {baseRef} (Handoff)
+                                </SelectItem>
+                              ) : null}
                               <SelectItem value={selectedRepoForLaunch.defaultBranch}>
                                 {selectedRepoForLaunch.defaultBranch} (Default)
                               </SelectItem>

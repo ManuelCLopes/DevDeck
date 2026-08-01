@@ -6,6 +6,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react";
+import { useLocation } from "wouter";
 import {
   AlertTriangle,
   BarChart3,
@@ -40,6 +41,8 @@ import {
 import { useCodingTool } from "@/hooks/use-coding-tool";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import {
+  buildAgentHandoffLaunchPath,
+  buildDefaultHandoffBranchName,
   haveAgentRunLinksChanged,
   linkAgentRunsToOpenCodeUsageRecords,
   normalizeAgentRuns,
@@ -47,6 +50,7 @@ import {
   updateAgentRunStatus,
 } from "@/lib/agent-runs";
 import { getDesktopApi } from "@/lib/desktop";
+import { navigateInApp } from "@/lib/app-navigation";
 import {
   buildTokenUsageEventsFromOpenCodeRecords,
   getTokenUsageSummaryTotal,
@@ -965,6 +969,7 @@ function AgentRunDetail({
   onCopyValue,
   onCopyDiagnostics,
   onCopyTraceContract,
+  onStartHandoff,
   onStatusChange,
   run,
   traceEntries,
@@ -976,6 +981,7 @@ function AgentRunDetail({
   onCopyDiagnostics: (runId: string) => void;
   onCopyTraceContract: (runId: string) => void;
   onCopyValue: (value: string, title: string) => void;
+  onStartHandoff: (run: AgentRun, step: AgentRunHandoffStep) => void;
   onStatusChange: (runId: string, status: AgentRunStatus) => void;
   run: AgentRun | null;
   traceEntries: TaskTraceEntry[];
@@ -1123,6 +1129,18 @@ function AgentRunDetail({
                     <AgentPill tone="red">{`${step.errorCount} errors`}</AgentPill>
                   ) : null}
                 </div>
+                {step.status === "handoff-target" && step.agentId ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 h-7 w-full gap-1.5 text-[11px]"
+                    onClick={() => onStartHandoff(run, step)}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Start Next Agent
+                  </Button>
+                ) : null}
               </div>
             ))}
           </div>
@@ -1256,6 +1274,7 @@ function AgentRunDetail({
 
 export default function Agents() {
   const desktopApi = getDesktopApi();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { openPreferredTool, preferredToolShortLabel } = useCodingTool();
   const workspaceSelection = useWorkspaceSelection();
@@ -1770,6 +1789,51 @@ export default function Agents() {
     );
   };
 
+  const handleStartHandoff = (run: AgentRun, step: AgentRunHandoffStep) => {
+    if (!step.agentId) {
+      return;
+    }
+    if (!run.projectId) {
+      toast({
+        title: "Cannot start handoff",
+        description: "This run is not linked to a tracked project.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const targetAgent =
+      agents.find((candidate) => candidate.id === step.agentId) ?? null;
+    const targetTraces = getTaskTraceEntriesForRun(taskTraceEntries, run.id).filter(
+      (entry) => entry.handoffTargetAgentId === step.agentId,
+    );
+    const latestTargetTrace = targetTraces[targetTraces.length - 1] ?? null;
+    const taskTitle =
+      latestTargetTrace?.nextAction ??
+      `Continue ${run.taskTitle} with ${targetAgent?.name ?? step.agentName}`;
+
+    navigateInApp(
+      buildAgentHandoffLaunchPath({
+        agentId: step.agentId,
+        baseRef: run.branchName,
+        branchName: buildDefaultHandoffBranchName({
+          agentId: step.agentId,
+          sourceBranchName: run.branchName,
+          sourceRunId: run.id,
+        }),
+        projectId: run.projectId,
+        sourceRunId: run.id,
+        taskTitle,
+        workflowId: run.workflowRunId,
+      }),
+      setLocation,
+    );
+    toast({
+      title: "Handoff staged",
+      description: `${targetAgent?.name ?? step.agentName} is preselected in the OpenCode launcher.`,
+    });
+  };
+
   const handleRunStatusChange = (runId: string, status: AgentRunStatus) => {
     setAgentRuns((currentRuns) =>
       updateAgentRunStatus(normalizeAgentRuns(currentRuns), runId, status),
@@ -2055,6 +2119,7 @@ export default function Agents() {
                 onCopyDiagnostics={handleCopyRunDiagnostics}
                 onCopyTraceContract={handleCopyTraceContract}
                 onCopyValue={handleCopyValue}
+                onStartHandoff={handleStartHandoff}
                 onStatusChange={handleRunStatusChange}
               />
             </div>

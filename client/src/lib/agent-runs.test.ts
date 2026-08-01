@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildAgentHandoffLaunchPath,
   buildAgentLaunchSummary,
   buildAgentRunEnvironment,
+  buildDefaultHandoffBranchName,
   haveAgentRunLinksChanged,
   linkAgentRunsToOpenCodeUsageRecords,
   normalizeAgentRuns,
@@ -181,4 +183,32 @@ test("buildAgentLaunchSummary includes responsibilities and boundaries", () => {
   assert.match(summary, /Token Budget: 90,000 tokens/);
   assert.match(summary, /Responsibilities: Implement changes; Run tests/);
   assert.match(summary, /Boundaries: Do not merge without review/);
+});
+
+test("buildAgentHandoffLaunchPath carries next-agent launch context", () => {
+  const launchPath = buildAgentHandoffLaunchPath({
+    agentId: "reviewer",
+    baseRef: "feature/agent-launch",
+    branchName: "handoff/agent-launch-reviewer",
+    projectId: "repo",
+    sourceRunId: "run-1",
+    taskTitle: "Review the implementation",
+    workflowId: "feature",
+  });
+
+  assert.equal(
+    launchPath,
+    "/terminals?launch=opencode&project=repo&agent=reviewer&workflow=feature&task=Review+the+implementation&base=feature%2Fagent-launch&branch=handoff%2Fagent-launch-reviewer&sourceRun=run-1",
+  );
+});
+
+test("buildDefaultHandoffBranchName creates bounded branch names", () => {
+  assert.equal(
+    buildDefaultHandoffBranchName({
+      agentId: "Reviewer Agent",
+      sourceBranchName: "feature/Agent Launch!!",
+      sourceRunId: "run-1",
+    }),
+    "handoff/feature-agent-launch-reviewer-agent",
+  );
 });
