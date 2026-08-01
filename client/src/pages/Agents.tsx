@@ -285,7 +285,7 @@ function ProductivityInsightsSection({
         <h2 className="text-sm font-semibold text-foreground">Productivity Insights</h2>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
         <InsightMetric
           icon={Gauge}
           label="Completion"
@@ -297,6 +297,12 @@ function ProductivityInsightsSection({
           label="Failure"
           value={formatPercent(insights.totals.failureRate)}
           detail={`${insights.totals.failedRunCount} failed`}
+        />
+        <InsightMetric
+          icon={AlertTriangle}
+          label="Paused / Blocked"
+          value={formatPercent(insights.totals.pausedOrBlockedRate)}
+          detail={`${insights.totals.pausedRunCount + insights.totals.blockedRunCount} runs`}
         />
         <InsightMetric
           icon={Timer}

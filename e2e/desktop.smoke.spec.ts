@@ -373,6 +373,7 @@ test("agent productivity insights summarize persisted telemetry", async () => {
       }),
     });
     await expect(insights).toContainText("Completion");
+    await expect(insights).toContainText("Paused / Blocked");
     await expect(insights).toContainText("Usage Coverage");
     await expect(insights).toContainText("Feature Build");
     await expect(insights).toContainText("openai / gpt-5-codex");
