@@ -413,12 +413,18 @@ test("agent productivity insights summarize persisted telemetry", async () => {
     await expect(insights).toContainText("Handoff Health");
     await expect(insights).toContainText("1 traces");
     await expect(insights).toContainText("Errors");
-    await expect(page.getByRole("button", { name: "Export JSON" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Runs CSV" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Traces CSV" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Export JSON" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Runs CSV" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Traces CSV" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Data tools" })).toBeVisible();
+    await page.getByRole("button", { name: "Data tools" }).click();
+    await expect(page.getByRole("menuitem", { name: "Export telemetry JSON" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Export runs CSV" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Export traces CSV" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Reset telemetry" })).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(page.getByRole("button", { name: "Import Trace" })).toHaveCount(0);
     await expect(page.getByText(/Watching \.devdeck\/traces/)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Reset" })).toBeEnabled();
     await expect(
       page.getByRole("button", { name: "Copy Diagnostics" }),
     ).toBeVisible();

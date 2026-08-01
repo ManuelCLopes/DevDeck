@@ -17,6 +17,7 @@ import {
   Gauge,
   Layers,
   Link2Off,
+  MoreHorizontal,
   RefreshCw,
   RotateCcw,
   Search,
@@ -29,6 +30,12 @@ import {
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAgentHarness } from "@/hooks/use-agent-harness";
 import {
@@ -2342,57 +2349,52 @@ export default function Agents() {
               variant="outline"
               size="sm"
               className="gap-2"
-              onClick={() => void handleExportTelemetryJson()}
-            >
-              <Download className="h-3.5 w-3.5" />
-              Export JSON
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={handleExportTelemetryCsv}
-            >
-              <Download className="h-3.5 w-3.5" />
-              Runs CSV
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={handleExportTraceCsv}
-            >
-              <Download className="h-3.5 w-3.5" />
-              Traces CSV
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() => void handleResetTelemetry()}
-              disabled={
-                agentRuns.length === 0 &&
-                tokenUsageEvents.length === 0 &&
-                taskTraceEntries.length === 0
-              }
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Reset
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2"
               onClick={() => void refetch()}
               disabled={isFetching}
             >
               <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
               Refresh
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  aria-label="Data tools"
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                  Data
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onSelect={() => void handleExportTelemetryJson()}>
+                  <Download className="h-3.5 w-3.5" />
+                  Export telemetry JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={handleExportTelemetryCsv}>
+                  <Download className="h-3.5 w-3.5" />
+                  Export runs CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={handleExportTraceCsv}>
+                  <Download className="h-3.5 w-3.5" />
+                  Export traces CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={
+                    agentRuns.length === 0 &&
+                    tokenUsageEvents.length === 0 &&
+                    taskTraceEntries.length === 0
+                  }
+                  onSelect={() => void handleResetTelemetry()}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Reset telemetry
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
