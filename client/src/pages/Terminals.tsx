@@ -1235,7 +1235,9 @@ export default function Terminals() {
                   "fixed inset-0 z-[90] min-h-0 bg-[#fbfbfb] dark:bg-[#121212] p-3 sm:p-4 lg:p-5",
               )}
             >
-              {isFocusMode && (selectedSession === null && sanitizedPanes.length === 0) ? (
+              {isFocusMode &&
+              selectedSession === null &&
+              (selectedRepoForLaunch || sanitizedPanes.length === 0) ? (
                 <div className="pointer-events-none absolute right-3 top-3 z-[100] sm:right-4 sm:top-4 lg:right-5 lg:top-5">
                   <Button
                     type="button"
@@ -1252,7 +1254,8 @@ export default function Terminals() {
               ) : null}
 
               {/* Launcher empty state vs active terminal workspace */}
-              {selectedSession === null && sanitizedPanes.length === 0 ? (
+              {selectedSession === null &&
+              (selectedRepoForLaunch || sanitizedPanes.length === 0) ? (
                 <div className="flex-1 flex flex-col p-6 rounded-xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-[#1b1b1c]/60 backdrop-blur-md overflow-y-auto">
                   {selectedRepoForLaunch ? (
                     <div className="max-w-xl mx-auto w-full border border-black/10 dark:border-white/10 rounded-xl bg-white/80 dark:bg-[#202022]/80 p-6 shadow-md space-y-5 animate-in fade-in zoom-in-95 duration-200 mt-10">
