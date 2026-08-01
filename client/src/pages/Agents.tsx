@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from "react";
 import {
   AlertTriangle,
   BarChart3,
@@ -17,6 +24,7 @@ import {
   ShieldCheck,
   Sparkles,
   Timer,
+  Upload,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -24,7 +32,11 @@ import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAgentHarness } from "@/hooks/use-agent-harness";
-import { useAgentRunsState, useTokenUsageEventsState } from "@/hooks/use-agent-telemetry";
+import {
+  useAgentRunsState,
+  useTaskTraceEntriesState,
+  useTokenUsageEventsState,
+} from "@/hooks/use-agent-telemetry";
 import { useCodingTool } from "@/hooks/use-coding-tool";
 import {
   haveAgentRunLinksChanged,
@@ -53,6 +65,17 @@ import {
   type AgentProductivityInsights,
   type AgentProductivityRunInsight,
 } from "@/lib/agent-productivity-insights";
+import {
+  buildAgentRunHandoffSteps,
+  buildTaskTraceContractText,
+  getTaskTraceEntriesForRun,
+  mergeTaskTraceEntries,
+  parseTaskTraceImportPayload,
+  serializeTaskTraceEntriesCsv,
+  summarizeWorkflowHandoffHealth,
+  type AgentRunHandoffStep,
+  type WorkflowHandoffHealthSummary,
+} from "@/lib/task-trace";
 import { cn } from "@/lib/utils";
 import type {
   AgentDefinition,
@@ -186,6 +209,28 @@ function buildRunDiagnosticsText(runInsight: AgentProductivityRunInsight) {
   ].join("\n");
 }
 
+function formatTraceList(values: string[]) {
+  if (values.length === 0) {
+    return "None";
+  }
+
+  return values.join(" | ");
+}
+
+function getHandoffStepTone(step: AgentRunHandoffStep) {
+  if (step.status === "current") {
+    return "green";
+  }
+  if (step.status === "handoff-target") {
+    return "amber";
+  }
+  if (step.status === "traced") {
+    return "blue";
+  }
+
+  return "neutral";
+}
+
 function getProjectLabel(projectName: string | null) {
   return projectName ?? "Workspace";
 }
@@ -269,8 +314,10 @@ function EmptyInsight({ children }: { children: ReactNode }) {
 }
 
 function ProductivityInsightsSection({
+  handoffHealth,
   insights,
 }: {
+  handoffHealth: WorkflowHandoffHealthSummary[];
   insights: AgentProductivityInsights;
 }) {
   const topWorkflows = insights.workflowSummaries.slice(0, 6);
@@ -454,7 +501,7 @@ function ProductivityInsightsSection({
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-4">
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-primary" />
@@ -499,6 +546,73 @@ function ProductivityInsightsSection({
             </div>
           ) : (
             <EmptyInsight>No budget or linking issues detected.</EmptyInsight>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Workflow className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">Handoff Health</h3>
+          </div>
+          {handoffHealth.length > 0 ? (
+            <div className="space-y-2">
+              {handoffHealth.slice(0, 5).map((health) => (
+                <div
+                  key={health.workflowId ?? health.workflowName}
+                  className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 truncate font-semibold text-foreground">
+                      {health.workflowName}
+                    </p>
+                    <AgentPill
+                      tone={
+                        health.stuckHandoffCount > 0 || health.errorTraceCount > 0
+                          ? "amber"
+                          : "green"
+                      }
+                    >
+                      {`${health.traceCount} traces`}
+                    </AgentPill>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <div>
+                      <p className="text-[10px] uppercase text-muted-foreground">Stuck</p>
+                      <p className="font-semibold text-foreground">
+                        {health.stuckHandoffCount}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-muted-foreground">Missing</p>
+                      <p className="font-semibold text-foreground">
+                        {health.missingNextActionCount}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-muted-foreground">Errors</p>
+                      <p className="font-semibold text-foreground">
+                        {health.errorTraceCount}
+                      </p>
+                    </div>
+                  </div>
+                  {health.repeatedFailurePoints.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {health.repeatedFailurePoints.map((failure) => (
+                        <AgentPill key={failure.label} tone="red">
+                          {`${failure.label} x${failure.count}`}
+                        </AgentPill>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      {health.missingTraceRunCount} runs without trace entries
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyInsight>No workflow handoff health yet.</EmptyInsight>
           )}
         </div>
 
@@ -844,18 +958,24 @@ function AgentRunRow({
 
 function AgentRunDetail({
   agents,
+  handoffSteps,
   onCopyValue,
   onCopyDiagnostics,
+  onCopyTraceContract,
   onStatusChange,
   run,
+  traceEntries,
   usage,
   workflows,
 }: {
   agents: AgentDefinition[];
+  handoffSteps: AgentRunHandoffStep[];
   onCopyDiagnostics: (runId: string) => void;
+  onCopyTraceContract: (runId: string) => void;
   onCopyValue: (value: string, title: string) => void;
   onStatusChange: (runId: string, status: AgentRunStatus) => void;
   run: AgentRun | null;
+  traceEntries: TaskTraceEntry[];
   usage: AgentRunUsageSummary | null;
   workflows: WorkflowDefinition[];
 }) {
@@ -969,6 +1089,111 @@ function AgentRunDetail({
         </div>
       </div>
 
+      <div className="mt-4 border-t border-black/10 pt-3 dark:border-white/10">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-[11px] font-semibold uppercase text-muted-foreground">
+            Handoff Trace
+          </h4>
+          <AgentPill>{`${handoffSteps.length} steps`}</AgentPill>
+        </div>
+        {handoffSteps.length > 0 ? (
+          <div className="mt-2 space-y-2">
+            {handoffSteps.map((step) => (
+              <div
+                key={step.id}
+                className="rounded-md border border-black/10 bg-secondary/35 p-2 dark:border-white/10"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-foreground">{step.name}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                      {step.agentName}
+                    </p>
+                  </div>
+                  <AgentPill tone={getHandoffStepTone(step)}>{step.status}</AgentPill>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {step.lastTraceAt ? (
+                    <AgentPill>{formatDateTime(step.lastTraceAt)}</AgentPill>
+                  ) : null}
+                  {step.errorCount > 0 ? (
+                    <AgentPill tone="red">{`${step.errorCount} errors`}</AgentPill>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            No workflow steps or trace handoffs were found for this run.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4 border-t border-black/10 pt-3 dark:border-white/10">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-[11px] font-semibold uppercase text-muted-foreground">
+            Task Timeline
+          </h4>
+          <AgentPill>{`${traceEntries.length} traces`}</AgentPill>
+        </div>
+        {traceEntries.length > 0 ? (
+          <div className="mt-2 space-y-2">
+            {traceEntries.map((entry) => {
+              const handoffTarget = entry.handoffTargetAgentId
+                ? agents.find((candidate) => candidate.id === entry.handoffTargetAgentId)
+                : null;
+              return (
+                <div
+                  key={entry.id}
+                  className="rounded-md border border-black/10 bg-white/70 p-2 dark:border-white/10 dark:bg-background"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 font-semibold leading-5 text-foreground">
+                      {entry.summary}
+                    </p>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {entry.createdAt.slice(11, 16)}
+                    </span>
+                  </div>
+                  <dl className="mt-2 space-y-2 text-[11px]">
+                    {[
+                      ["Commands", formatTraceList(entry.commandsRun)],
+                      ["Tests", formatTraceList(entry.testsRun)],
+                      ["Files", formatTraceList(entry.filesTouched)],
+                      ["Next", entry.nextAction ?? "Missing next action"],
+                    ].map(([label, value]) => (
+                      <div key={label} className="min-w-0">
+                        <dt className="font-semibold uppercase text-muted-foreground">
+                          {label}
+                        </dt>
+                        <dd className="mt-0.5 break-words text-foreground">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {handoffTarget || entry.handoffTargetAgentId ? (
+                      <AgentPill tone="amber">
+                        {`Hand off: ${handoffTarget?.name ?? entry.handoffTargetAgentId}`}
+                      </AgentPill>
+                    ) : null}
+                    {entry.errors.map((error) => (
+                      <AgentPill key={error} tone="red">
+                        {error}
+                      </AgentPill>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-2 rounded-md border border-dashed border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200">
+            Missing trace entries. Import task trace JSON or copy the trace contract for this run.
+          </div>
+        )}
+      </div>
+
       <div className="mt-4 flex flex-wrap gap-1.5">
         {(["active", "blocked", "paused", "completed", "failed"] as AgentRunStatus[]).map(
           (status) => (
@@ -1012,6 +1237,16 @@ function AgentRunDetail({
         <Copy className="h-3.5 w-3.5" />
         Copy Diagnostics
       </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-2 h-8 w-full gap-2 text-xs"
+        onClick={() => onCopyTraceContract(run.id)}
+      >
+        <Copy className="h-3.5 w-3.5" />
+        Copy Trace Contract
+      </Button>
     </aside>
   );
 }
@@ -1028,13 +1263,20 @@ export default function Agents() {
     setTokenUsageEvents,
     { error: tokenUsageStorageError },
   ] = useTokenUsageEventsState();
+  const [
+    taskTraceEntries,
+    setTaskTraceEntries,
+    { error: taskTraceStorageError },
+  ] = useTaskTraceEntriesState();
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [usageIngestionError, setUsageIngestionError] = useState<string | null>(null);
   const [usageSyncedAt, setUsageSyncedAt] = useState<string | null>(null);
+  const traceImportInputRef = useRef<HTMLInputElement | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
-  const telemetryStorageError = agentRunStorageError ?? tokenUsageStorageError;
+  const telemetryStorageError =
+    agentRunStorageError ?? tokenUsageStorageError ?? taskTraceStorageError;
 
   const agents = data?.agents ?? [];
   const workflows = data?.workflows ?? [];
@@ -1102,10 +1344,20 @@ export default function Agents() {
       buildAgentProductivityInsights({
         agents,
         agentRuns,
+        taskTraceEntries,
         tokenUsageEvents,
         workflows,
       }),
-    [agents, agentRuns, tokenUsageEvents, workflows],
+    [agents, agentRuns, taskTraceEntries, tokenUsageEvents, workflows],
+  );
+  const handoffHealth = useMemo(
+    () =>
+      summarizeWorkflowHandoffHealth({
+        agentRuns,
+        taskTraceEntries,
+        workflows,
+      }),
+    [agentRuns, taskTraceEntries, workflows],
   );
   const projectOptions = useMemo(
     () => uniqueValues(agents.map((agent) => agent.projectName)),
@@ -1243,12 +1495,10 @@ export default function Agents() {
   };
 
   const buildTelemetryExportPayload = async () => {
-    let taskTraceEntries: TaskTraceEntry[] = [];
     let storeUpdatedAt: string | null = null;
 
     if (desktopApi?.getAgentTelemetry) {
       const snapshot = await desktopApi.getAgentTelemetry();
-      taskTraceEntries = snapshot.taskTraceEntries;
       storeUpdatedAt = snapshot.updatedAt;
     }
 
@@ -1314,6 +1564,66 @@ export default function Agents() {
     }
   };
 
+  const handleExportTraceCsv = () => {
+    try {
+      const csv = serializeTaskTraceEntriesCsv({
+        agentRuns,
+        agents,
+        taskTraceEntries,
+      });
+      downloadTextFile(
+        `devdeck-agent-traces-${getExportTimestamp()}.csv`,
+        `${csv}\n`,
+        "text/csv;charset=utf-8",
+      );
+      toast({
+        title: "Trace CSV exported",
+        description: `${taskTraceEntries.length} trace entries included`,
+      });
+    } catch (nextError) {
+      toast({
+        title: "Trace CSV export failed",
+        description:
+          nextError instanceof Error ? nextError.message : String(nextError),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleImportTraceJson = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0] ?? null;
+    event.currentTarget.value = "";
+    if (!file) {
+      return;
+    }
+
+    try {
+      const rawPayload = JSON.parse(await file.text());
+      const result = parseTaskTraceImportPayload(rawPayload);
+      if (result.entries.length === 0) {
+        throw new Error("No valid task trace entries were found in the selected file.");
+      }
+
+      setTaskTraceEntries((currentEntries) =>
+        mergeTaskTraceEntries(currentEntries, result.entries),
+      );
+      toast({
+        title: "Trace JSON imported",
+        description:
+          result.rejectedCount > 0
+            ? `${result.entries.length} imported, ${result.rejectedCount} rejected`
+            : `${result.entries.length} trace entries imported`,
+      });
+    } catch (nextError) {
+      toast({
+        title: "Trace import failed",
+        description:
+          nextError instanceof Error ? nextError.message : String(nextError),
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleResetTelemetry = async () => {
     const confirmed = window.confirm(
       "Reset agent telemetry history? This clears agent runs, token usage, and task traces.",
@@ -1330,12 +1640,13 @@ export default function Agents() {
       ]);
       setAgentRuns([]);
       setTokenUsageEvents([]);
+      setTaskTraceEntries([]);
       setSelectedRunId(null);
       setUsageSyncedAt(null);
       setUsageIngestionError(null);
       toast({
         title: "Telemetry reset",
-        description: "Agent runs and token usage were cleared",
+        description: "Agent runs, token usage, and task traces were cleared",
       });
     } catch (nextError) {
       toast({
@@ -1362,6 +1673,26 @@ export default function Agents() {
     );
   };
 
+  const handleCopyTraceContract = async (runId: string) => {
+    const run = agentRuns.find((candidate) => candidate.id === runId) ?? null;
+    if (!run) {
+      return;
+    }
+
+    const agent = run.agentId
+      ? agents.find((candidate) => candidate.id === run.agentId) ?? null
+      : null;
+    const workflow = run.workflowRunId
+      ? workflows.find((candidate) => candidate.id === run.workflowRunId) ?? null
+      : null;
+
+    await handleCopyValue(
+      buildTaskTraceContractText({ agent, run, workflow }),
+      "Trace contract copied",
+      `${run.taskTitle} trace contract is on the clipboard`,
+    );
+  };
+
   const handleRunStatusChange = (runId: string, status: AgentRunStatus) => {
     setAgentRuns((currentRuns) =>
       updateAgentRunStatus(normalizeAgentRuns(currentRuns), runId, status),
@@ -1372,6 +1703,20 @@ export default function Agents() {
   const selectedRunUsage = selectedRun
     ? tokenUsageByRunId.get(selectedRun.id) ?? null
     : null;
+  const selectedRunTraceEntries = selectedRun
+    ? getTaskTraceEntriesForRun(taskTraceEntries, selectedRun.id)
+    : [];
+  const selectedRunWorkflow = selectedRun?.workflowRunId
+    ? workflows.find((workflow) => workflow.id === selectedRun.workflowRunId) ?? null
+    : null;
+  const selectedRunHandoffSteps = selectedRun
+    ? buildAgentRunHandoffSteps({
+        agents,
+        run: selectedRun,
+        taskTraceEntries,
+        workflow: selectedRunWorkflow,
+      })
+    : [];
 
   return (
     <AppLayout>
@@ -1407,15 +1752,46 @@ export default function Agents() {
               onClick={handleExportTelemetryCsv}
             >
               <Download className="h-3.5 w-3.5" />
-              Export CSV
+              Runs CSV
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="gap-2"
+              onClick={handleExportTraceCsv}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Traces CSV
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => traceImportInputRef.current?.click()}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Import Trace
+            </Button>
+            <input
+              ref={traceImportInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(event) => void handleImportTraceJson(event)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
               onClick={() => void handleResetTelemetry()}
-              disabled={agentRuns.length === 0 && tokenUsageEvents.length === 0}
+              disabled={
+                agentRuns.length === 0 &&
+                tokenUsageEvents.length === 0 &&
+                taskTraceEntries.length === 0
+              }
             >
               <RotateCcw className="h-3.5 w-3.5" />
               Reset
@@ -1520,7 +1896,10 @@ export default function Agents() {
           </section>
         ) : null}
 
-        <ProductivityInsightsSection insights={productivityInsights} />
+        <ProductivityInsightsSection
+          handoffHealth={handoffHealth}
+          insights={productivityInsights}
+        />
 
         {isLoading ? (
           <div className="rounded-lg border border-dashed border-black/10 p-10 text-center text-sm text-muted-foreground dark:border-white/10">
@@ -1574,10 +1953,13 @@ export default function Agents() {
               </div>
               <AgentRunDetail
                 agents={agents}
+                handoffSteps={selectedRunHandoffSteps}
                 workflows={workflows}
                 run={selectedRun}
+                traceEntries={selectedRunTraceEntries}
                 usage={selectedRunUsage}
                 onCopyDiagnostics={handleCopyRunDiagnostics}
+                onCopyTraceContract={handleCopyTraceContract}
                 onCopyValue={handleCopyValue}
                 onStatusChange={handleRunStatusChange}
               />

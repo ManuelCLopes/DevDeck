@@ -362,6 +362,20 @@ test("agent productivity insights summarize persisted telemetry", async () => {
           workflowRunId: "feature",
         },
       ]);
+      await desktopApi.saveTaskTraceEntries([
+        {
+          agentRunId: "run-insights",
+          commandsRun: ["npm test"],
+          createdAt: "2026-08-01T10:40:00.000Z",
+          errors: ["Type check failed once"],
+          filesTouched: ["client/src/pages/Agents.tsx"],
+          handoffTargetAgentId: "builder",
+          id: "trace-insights",
+          nextAction: "Continue implementation",
+          summary: "Captured trace timeline",
+          testsRun: ["npm run check"],
+        },
+      ]);
     });
 
     await page.getByRole("button", { name: "Agents", exact: true }).click();
@@ -378,12 +392,25 @@ test("agent productivity insights summarize persisted telemetry", async () => {
     await expect(insights).toContainText("Feature Build");
     await expect(insights).toContainText("openai / gpt-5-codex");
     await expect(insights).toContainText("Budget & Linking Attention");
+    await expect(insights).toContainText("Handoff Health");
+    await expect(insights).toContainText("1 traces");
+    await expect(insights).toContainText("Errors");
     await expect(page.getByRole("button", { name: "Export JSON" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Export CSV" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Runs CSV" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Traces CSV" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Import Trace" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Reset" })).toBeEnabled();
     await expect(
       page.getByRole("button", { name: "Copy Diagnostics" }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Copy Trace Contract" }),
+    ).toBeVisible();
+    await expect(page.getByText("Handoff Trace")).toBeVisible();
+    await expect(page.getByText("Task Timeline")).toBeVisible();
+    await expect(page.getByText("Captured trace timeline")).toBeVisible();
+    await expect(page.getByText("npm run check")).toBeVisible();
+    await expect(page.getByText("client/src/pages/Agents.tsx")).toBeVisible();
   } finally {
     await electronApp.close();
     rmSync(workspace.tempDir, { force: true, recursive: true });

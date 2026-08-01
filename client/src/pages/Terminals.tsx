@@ -562,6 +562,7 @@ export default function Terminals() {
       };
       const launchSummary = buildAgentLaunchSummary({
         agent: agentForRun,
+        agentRunId: runId,
         branchName: result.branchName,
         projectName: selectedRepoForLaunch.name,
         taskTitle,

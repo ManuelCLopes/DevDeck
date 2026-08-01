@@ -159,6 +159,7 @@ test("buildAgentRunEnvironment exports agent and workflow identifiers", () => {
 test("buildAgentLaunchSummary includes responsibilities and boundaries", () => {
   const summary = buildAgentLaunchSummary({
     agent,
+    agentRunId: "run-1",
     branchName: "feature/agent-launch",
     projectName: "Repo",
     taskTitle: "Improve launch",
@@ -167,6 +168,8 @@ test("buildAgentLaunchSummary includes responsibilities and boundaries", () => {
   });
 
   assert.match(summary, /Task: Improve launch/);
+  assert.match(summary, /Agent Run ID: run-1/);
+  assert.match(summary, /DEVDECK_AGENT_RUN_ID=run-1/);
   assert.match(summary, /Token Budget: 90,000 tokens/);
   assert.match(summary, /Responsibilities: Implement changes; Run tests/);
   assert.match(summary, /Boundaries: Do not merge without review/);

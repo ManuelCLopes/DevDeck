@@ -1,14 +1,18 @@
 import { Dispatch, SetStateAction, useEffect, useMemo, useRef, useState } from "react";
-import type { AgentRun, TokenUsageEvent } from "@shared/agents";
+import type { AgentRun, TaskTraceEntry, TokenUsageEvent } from "@shared/agents";
 import {
   DEFAULT_AGENT_RUN_HISTORY_LIMIT,
+  DEFAULT_TASK_TRACE_HISTORY_LIMIT,
   DEFAULT_TOKEN_USAGE_HISTORY_LIMIT,
   mergeAgentRuns,
+  mergeTaskTraceEntries,
   mergeTokenUsageEvents,
   normalizeAgentRuns,
+  normalizeTaskTraceEntries,
   normalizeTokenUsageEvents,
 } from "@shared/agent-telemetry";
 import { AGENT_RUNS_STORAGE_KEY } from "@/lib/agent-runs";
+import { TASK_TRACE_ENTRIES_STORAGE_KEY } from "@/lib/task-trace";
 import { TOKEN_USAGE_EVENTS_STORAGE_KEY } from "@/lib/token-usage";
 import { getDesktopApi } from "@/lib/desktop";
 import { usePersistentState } from "./use-persistent-state";
@@ -204,4 +208,95 @@ export function useTokenUsageEventsState(): [
   );
 
   return [tokenUsageEvents, setTokenUsageEvents, state];
+}
+
+export function useTaskTraceEntriesState(): [
+  TaskTraceEntry[],
+  Dispatch<SetStateAction<TaskTraceEntry[]>>,
+  DurableTelemetryState,
+] {
+  const desktopApi = getDesktopApi();
+  const [taskTraceEntries, setTaskTraceEntries] = usePersistentState<
+    TaskTraceEntry[]
+  >(TASK_TRACE_ENTRIES_STORAGE_KEY, [], {
+    deserialize: (value) => normalizeTaskTraceEntries(JSON.parse(value)),
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const hasLoadedDesktopStore = useRef(false);
+  const isDesktopBacked = Boolean(
+    desktopApi?.getAgentTelemetry && desktopApi?.saveTaskTraceEntries,
+  );
+
+  useEffect(() => {
+    if (!isDesktopBacked || !desktopApi?.getAgentTelemetry) {
+      hasLoadedDesktopStore.current = true;
+      setHydrated(true);
+      return;
+    }
+
+    let cancelled = false;
+    void desktopApi
+      .getAgentTelemetry()
+      .then((snapshot) => {
+        if (cancelled) {
+          return;
+        }
+
+        setTaskTraceEntries((currentEntries) =>
+          mergeTaskTraceEntries(
+            snapshot.taskTraceEntries,
+            currentEntries,
+            DEFAULT_TASK_TRACE_HISTORY_LIMIT,
+          ),
+        );
+        setError(null);
+      })
+      .catch((nextError) => {
+        if (!cancelled) {
+          setError(getErrorMessage(nextError));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          hasLoadedDesktopStore.current = true;
+          setHydrated(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [desktopApi, isDesktopBacked, setTaskTraceEntries]);
+
+  useEffect(() => {
+    if (
+      !isDesktopBacked ||
+      !desktopApi?.saveTaskTraceEntries ||
+      !hasLoadedDesktopStore.current
+    ) {
+      return;
+    }
+
+    void desktopApi
+      .saveTaskTraceEntries(
+        normalizeTaskTraceEntries(taskTraceEntries).slice(
+          0,
+          DEFAULT_TASK_TRACE_HISTORY_LIMIT,
+        ),
+      )
+      .then(() => setError(null))
+      .catch((nextError) => setError(getErrorMessage(nextError)));
+  }, [desktopApi, isDesktopBacked, taskTraceEntries]);
+
+  const state = useMemo(
+    () => ({
+      error,
+      hydrated,
+      isDesktopBacked,
+    }),
+    [error, hydrated, isDesktopBacked],
+  );
+
+  return [taskTraceEntries, setTaskTraceEntries, state];
 }

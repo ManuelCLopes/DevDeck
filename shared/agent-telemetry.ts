@@ -293,6 +293,7 @@ export function buildAgentRunEnvironment(options: {
 
 export function buildAgentLaunchSummary(options: {
   agent: AgentDefinition | null;
+  agentRunId?: string | null;
   branchName: string;
   projectName: string;
   taskTitle: string;
@@ -305,6 +306,10 @@ export function buildAgentLaunchSummary(options: {
     `Branch: ${options.branchName}`,
     `Agent: ${options.agent?.name ?? "Unassigned"}`,
     `Workflow: ${options.workflow?.name ?? "None"}`,
+    options.agentRunId ? `Agent Run ID: ${options.agentRunId}` : null,
+    options.agentRunId
+      ? `Trace: use DEVDECK_AGENT_RUN_ID=${options.agentRunId} in imported taskTraceEntries JSON.`
+      : null,
     options.tokenBudget
       ? `Token Budget: ${options.tokenBudget.toLocaleString()} tokens`
       : null,
