@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildEmptyWorkspaceSelection,
   buildWorkspaceSelectionFromImport,
   getManagedProjectCollections,
   getHiddenManagedProjects,
+  hasValidWorkspaceSelection,
   mergeWorkspaceSelection,
   moveManagedProject,
   moveManagedProjectCollection,
@@ -36,6 +38,41 @@ test("buildWorkspaceSelectionFromImport attaches collection and workspace metada
   assert.equal(selection.projects[0]?.workspaceName, "Desktop");
   assert.equal(selection.projects[0]?.workspacePath, "/Users/manuellopes/Desktop");
   assert.equal(selection.projects[0]?.localPath, "/Users/manuellopes/Desktop/client");
+});
+
+test("buildEmptyWorkspaceSelection creates a valid no-project workspace", () => {
+  const selection = buildEmptyWorkspaceSelection({
+    rootName: "No Projects",
+  });
+
+  assert.equal(selection.rootName, "No Projects");
+  assert.equal(selection.rootPath, undefined);
+  assert.deepEqual(selection.projects, []);
+  assert.equal(hasValidWorkspaceSelection(selection), true);
+});
+
+test("buildWorkspaceSelectionFromImport can preserve an intentionally empty project selection", () => {
+  const selection = buildWorkspaceSelectionFromImport({
+    allowEmptyProjectSelection: true,
+    candidates: [
+      {
+        id: "Desktop/client",
+        localPath: "/Users/manuellopes/Desktop/client",
+        name: "client",
+        relativePath: "client",
+        repositoryCount: 1,
+      },
+    ],
+    collectionName: "Frontend",
+    rootName: "Desktop",
+    rootPath: "/Users/manuellopes/Desktop",
+    selectedProjectIds: [],
+  });
+
+  assert.equal(selection.rootName, "Desktop");
+  assert.equal(selection.rootPath, "/Users/manuellopes/Desktop");
+  assert.deepEqual(selection.projects, []);
+  assert.equal(hasValidWorkspaceSelection(selection), true);
 });
 
 test("mergeWorkspaceSelection preserves existing collection names and appends new projects", () => {
@@ -292,7 +329,7 @@ test("reorderManagedProjects reorders within the dragged collection", () => {
   );
 });
 
-test("removeManagedProject returns null when the last project is removed", () => {
+test("removeManagedProject preserves workspace metadata when the last project is removed", () => {
   const selection = buildWorkspaceSelectionFromImport({
     candidates: [
       {
@@ -309,7 +346,12 @@ test("removeManagedProject returns null when the last project is removed", () =>
     selectedProjectIds: ["Desktop/client"],
   });
 
-  assert.equal(removeManagedProject(selection, "Desktop/client"), null);
+  const nextSelection = removeManagedProject(selection, "Desktop/client");
+
+  assert.deepEqual(nextSelection?.projects, []);
+  assert.equal(nextSelection?.rootName, "Desktop");
+  assert.equal(nextSelection?.rootPath, "/Users/manuellopes/Desktop");
+  assert.equal(hasValidWorkspaceSelection(nextSelection), true);
 });
 
 test("removeManagedProjects removes multiple selections at once", () => {

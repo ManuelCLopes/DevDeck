@@ -1,7 +1,8 @@
-import type { MouseEvent } from "react";
+import { useState, type MouseEvent } from "react";
 import { FolderOpen, Trash2 } from "lucide-react";
 import { useProjectActions } from "@/hooks/use-project-actions";
 import { getCodingToolLabel } from "@/lib/coding-tool";
+import ProjectRemovalDialog from "@/components/projects/ProjectRemovalDialog";
 import vsCodeLogo from "@/assets/vscode.svg";
 import openCodeLogo from "@/assets/opencode.svg";
 
@@ -21,6 +22,7 @@ export default function ProjectQuickActions({
   projectPath,
 }: ProjectQuickActionsProps) {
   const { codingTool, openInCode, removeProject, revealInFinder } = useProjectActions();
+  const [isRemovalDialogOpen, setIsRemovalDialogOpen] = useState(false);
   const { preferredTool, preferredToolShortLabel } = codingTool;
   const brandLogo = preferredTool === "opencode" ? openCodeLogo : vsCodeLogo;
   const toolLabel = getCodingToolLabel(preferredTool);
@@ -38,53 +40,66 @@ export default function ProjectQuickActions({
     };
 
   return (
-    <div
-      className={`no-drag flex items-center overflow-hidden transition-[max-width,opacity,transform] duration-200 ${
-        compact
-          ? "max-w-0 gap-1 opacity-0 -translate-x-1 pointer-events-none group-hover:max-w-32 group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto focus-within:max-w-32 focus-within:opacity-100 focus-within:translate-x-0 focus-within:pointer-events-auto"
-          : "max-w-0 gap-1 opacity-0 translate-x-1 pointer-events-none group-hover:max-w-72 group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto focus-within:max-w-72 focus-within:opacity-100 focus-within:translate-x-0 focus-within:pointer-events-auto"
-      } ${className}`}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      }}
-    >
-      <button
-        type="button"
-        onClick={handleAction(() => openInCode(projectPath))}
-        className={buttonClassName}
-        aria-label={`Open ${projectName} in ${toolLabel}`}
-        title={`Open in ${toolLabel}`}
+    <>
+      <div
+        className={`no-drag flex items-center overflow-hidden transition-[max-width,opacity,transform] duration-200 ${
+          compact
+            ? "max-w-0 gap-1 opacity-0 -translate-x-1 pointer-events-none group-hover:max-w-32 group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto focus-within:max-w-32 focus-within:opacity-100 focus-within:translate-x-0 focus-within:pointer-events-auto"
+            : "max-w-0 gap-1 opacity-0 translate-x-1 pointer-events-none group-hover:max-w-72 group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto focus-within:max-w-72 focus-within:opacity-100 focus-within:translate-x-0 focus-within:pointer-events-auto"
+        } ${className}`}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
       >
-        {compact ? (
-          <img
-            src={brandLogo}
-            alt=""
-            aria-hidden="true"
-            className="h-3.5 w-3.5 object-contain"
-          />
-        ) : (
-          preferredToolShortLabel
-        )}
-      </button>
-      <button
-        type="button"
-        onClick={handleAction(() => revealInFinder(projectPath))}
-        className={buttonClassName}
-        aria-label={`Reveal ${projectName} in Finder`}
-        title="Reveal in Finder"
-      >
-        {compact ? <FolderOpen className="h-3.5 w-3.5" /> : "Finder"}
-      </button>
-      <button
-        type="button"
-        onClick={handleAction(() => removeProject(projectId))}
-        className={`${buttonClassName} hover:bg-red-50 hover:text-red-600`}
-        aria-label={`Remove ${projectName}`}
-        title="Remove project"
-      >
-        {compact ? <Trash2 className="h-3.5 w-3.5" /> : "Remove"}
-      </button>
-    </div>
+        <button
+          type="button"
+          onClick={handleAction(() => openInCode(projectPath))}
+          className={buttonClassName}
+          aria-label={`Open ${projectName} in ${toolLabel}`}
+          title={`Open in ${toolLabel}`}
+        >
+          {compact ? (
+            <img
+              src={brandLogo}
+              alt=""
+              aria-hidden="true"
+              className="h-3.5 w-3.5 object-contain"
+            />
+          ) : (
+            preferredToolShortLabel
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={handleAction(() => revealInFinder(projectPath))}
+          className={buttonClassName}
+          aria-label={`Reveal ${projectName} in Finder`}
+          title="Reveal in Finder"
+        >
+          {compact ? <FolderOpen className="h-3.5 w-3.5" /> : "Finder"}
+        </button>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setIsRemovalDialogOpen(true);
+          }}
+          className={`${buttonClassName} hover:bg-red-50 hover:text-red-600`}
+          aria-label={`Remove ${projectName}`}
+          title="Remove project"
+        >
+          {compact ? <Trash2 className="h-3.5 w-3.5" /> : "Remove"}
+        </button>
+      </div>
+      <ProjectRemovalDialog
+        itemName={projectName}
+        onConfirm={() => void removeProject(projectId)}
+        onOpenChange={setIsRemovalDialogOpen}
+        open={isRemovalDialogOpen}
+        projectCount={1}
+      />
+    </>
   );
 }

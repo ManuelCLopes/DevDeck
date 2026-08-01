@@ -213,7 +213,7 @@ test("desktop app loads overview for a prepared local workspace", async () => {
   }
 });
 
-test("preferences supports hide and restore curation", async () => {
+test("preferences supports hide, restore, and confirmed removal curation", async () => {
   const workspace = createTestWorkspace();
   const selection = createWorkspaceSelection(workspace.rootDir);
   const { electronApp, page } = await launchDesktopApp(
@@ -226,8 +226,11 @@ test("preferences supports hide and restore curation", async () => {
     await expect(
       page.getByRole("heading", { name: "Preferences", exact: true }),
     ).toBeVisible();
+    const preferences = page.locator("main").filter({
+      has: page.getByRole("heading", { name: "Preferences", exact: true }),
+    });
 
-    const collectionInputs = page.locator('input[id^="collection-"]');
+    const collectionInputs = preferences.locator('input[id^="collection-"]');
     await expect
       .poll(() =>
         collectionInputs.evaluateAll((inputs) =>
@@ -236,16 +239,41 @@ test("preferences supports hide and restore curation", async () => {
       )
       .toEqual(["Alpha Collection", "Beta Collection"]);
 
-    await expect(page.getByTitle("Drag to reorder collection")).toHaveCount(2);
+    await expect(preferences.getByTitle("Drag to reorder collection")).toHaveCount(2);
 
-    await page.getByRole("button", { name: "Hide alpha", exact: true }).click();
+    await preferences.getByRole("button", { name: "Hide alpha", exact: true }).click();
     await expect(
       page.getByText("Hidden Projects", { exact: true }),
     ).toBeVisible();
     await expect(page.locator("aside")).not.toContainText("alpha");
 
-    await page.getByRole("button", { name: "Restore", exact: true }).click();
+    await preferences.getByRole("button", { name: "Restore", exact: true }).click();
     await expect(page.locator("aside")).toContainText("alpha");
+
+    await preferences.getByRole("button", { name: "Remove beta", exact: true }).click();
+    const removalDialog = page.getByRole("alertdialog");
+    await expect(
+      removalDialog.getByRole("heading", { name: "Remove project?" }),
+    ).toBeVisible();
+    await expect(
+      removalDialog.getByText(/Local files, Git branches, and remote repositories stay untouched/),
+    ).toBeVisible();
+    await removalDialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.locator("aside")).toContainText("beta");
+
+    await preferences.getByRole("button", { name: "Remove beta", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
+    await expect(page.locator("aside")).not.toContainText("beta");
+
+    await preferences.getByRole("button", { name: "Remove alpha", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Preferences", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("No projects are configured.")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Welcome to DevDeck", exact: true }),
+    ).toHaveCount(0);
   } finally {
     await electronApp.close();
     rmSync(workspace.tempDir, { force: true, recursive: true });

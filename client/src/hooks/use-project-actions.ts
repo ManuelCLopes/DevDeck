@@ -2,9 +2,7 @@ import { useLocation } from "wouter";
 import { navigateInApp } from "@/lib/app-navigation";
 import { getDesktopApi } from "@/lib/desktop";
 import { queryClient } from "@/lib/queryClient";
-import { clearWorkspaceHandle } from "@/lib/workspace-handle";
 import {
-  clearWorkspaceSelection,
   removeManagedProject,
   setWorkspaceSelection,
 } from "@/lib/workspace-selection";
@@ -38,10 +36,6 @@ export function useProjectActions() {
   const removeProject = async (projectId: string) => {
     const nextSelection = removeManagedProject(workspaceSelection, projectId);
     if (!nextSelection) {
-      clearWorkspaceSelection();
-      await clearWorkspaceHandle();
-      void queryClient.removeQueries({ queryKey: ["workspace", "snapshot"] });
-      navigateInApp("/onboarding", setLocation);
       return;
     }
 

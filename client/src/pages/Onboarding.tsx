@@ -5,6 +5,7 @@ import { setCompletedOnboarding } from "@/lib/onboarding-state";
 import { queryClient } from "@/lib/queryClient";
 import { getDesktopApi } from "@/lib/desktop";
 import {
+  buildEmptyWorkspaceSelection,
   buildWorkspaceSelectionFromImport,
   getWorkspaceSelection,
   mergeWorkspaceSelection,
@@ -196,6 +197,7 @@ export default function Onboarding() {
   const [selectedRootPath, setSelectedRootPath] = useState<string | null>(null);
   const [discoveredRepositoryCount, setDiscoveredRepositoryCount] = useState(0);
   const [discoveredProjectCandidates, setDiscoveredProjectCandidates] = useState<ProjectCandidate[]>([]);
+  const [isProjectSetupSkipped, setIsProjectSetupSkipped] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -218,6 +220,7 @@ export default function Onboarding() {
     setDiscoveredRepositoryCount(discoveredRepositoryCount);
     setDiscoveredProjectCandidates(candidates);
     setSelectedProjectIds([]);
+    setIsProjectSetupSkipped(false);
   };
 
   const handleNext = () => {
@@ -231,12 +234,13 @@ export default function Onboarding() {
       return;
     }
 
-    if (!selectedDir) {
+    if (!selectedDir && !isProjectSetupSkipped) {
       setSelectionError("Choose a local clone folder to continue.");
       return;
     }
 
     if (
+      !isProjectSetupSkipped &&
       selectedGitHubRepositorySlugs.length > 0 &&
       linkedProjectCandidates.length === 0
     ) {
@@ -246,25 +250,23 @@ export default function Onboarding() {
       return;
     }
 
-    if (linkedProjectCandidates.length > 1 && selectedProjectIds.length === 0) {
-      setSelectionError("Choose at least one project to monitor.");
-      return;
-    }
-
     setStep(5);
   };
 
   const handleComplete = () => {
-    if (!selectedDir) {
+    if (!selectedDir && !isProjectSetupSkipped) {
       return;
     }
 
-    const nextSelection = buildWorkspaceSelectionFromImport({
-      candidates: linkedProjectCandidates,
-      rootName: selectedRootName ?? selectedDir,
-      rootPath: selectedRootPath ?? selectedDir ?? selectedRootName ?? undefined,
-      selectedProjectIds,
-    });
+    const nextSelection = isProjectSetupSkipped
+      ? buildEmptyWorkspaceSelection()
+      : buildWorkspaceSelectionFromImport({
+          allowEmptyProjectSelection: true,
+          candidates: linkedProjectCandidates,
+          rootName: selectedRootName ?? selectedDir ?? "DevDeck",
+          rootPath: selectedRootPath ?? selectedDir ?? selectedRootName ?? undefined,
+          selectedProjectIds,
+        });
     setWorkspaceSelection(
       isAppendMode
         ? mergeWorkspaceSelection(getWorkspaceSelection(), nextSelection)
@@ -353,6 +355,7 @@ export default function Onboarding() {
     setDiscoveredRepositoryCount(0);
     setDiscoveredProjectCandidates([]);
     setSelectedProjectIds([]);
+    setIsProjectSetupSkipped(false);
     const directoryWindow = window as DirectoryPickerWindow;
 
     if (desktopApi) {
@@ -458,6 +461,18 @@ export default function Onboarding() {
         ? currentProjectIds.filter((currentId) => currentId !== projectId)
         : [...currentProjectIds, projectId],
     );
+  };
+
+  const handleSkipProjectSetup = () => {
+    setSelectionError(null);
+    setSelectedDir(null);
+    setSelectedRootName(null);
+    setSelectedRootPath(null);
+    setDiscoveredRepositoryCount(0);
+    setDiscoveredProjectCandidates([]);
+    setSelectedProjectIds([]);
+    setIsProjectSetupSkipped(true);
+    setStep(5);
   };
 
   const toggleGitHubRepositorySelection = (repositorySlug: string) => {
@@ -730,6 +745,14 @@ export default function Onboarding() {
                 >
                   {isScanning ? "Analyzing Local Clones..." : selectedDir ? "Change Folder..." : "Choose Folder..."}
                 </button>
+                <button
+                  type="button"
+                  onClick={handleSkipProjectSetup}
+                  disabled={isScanning}
+                  className="mt-3 w-full rounded-lg border border-border bg-white px-4 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-secondary disabled:opacity-50"
+                >
+                  Skip Project Setup
+                </button>
 
                 <input
                   ref={fileInputRef}
@@ -871,7 +894,7 @@ export default function Onboarding() {
                               Choose Projects
                             </p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              DevDeck found multiple Git projects inside {selectedDir}. Choose the ones you want to monitor.
+                              DevDeck found multiple Git projects inside {selectedDir}. Choose the ones you want to monitor, or leave all unchecked and add projects later.
                             </p>
                           </div>
                           <div className="flex items-center gap-2 text-[11px]">
@@ -981,6 +1004,17 @@ export default function Onboarding() {
                     <br/>
                     You can adjust linked projects later from Preferences.
                   </>
+                ) : isProjectSetupSkipped ? (
+                  <>
+                    DevDeck will start without configured projects. You can use
+                    agent and terminal workflows now, then add projects later from
+                    Preferences.
+                  </>
+                ) : linkedProjectCandidates.length > 1 && selectedProjects.length === 0 ? (
+                  <>
+                    DevDeck will start without monitoring any projects inside <strong>{selectedDir}</strong>. <br/>
+                    You can add projects later from Preferences.
+                  </>
                 ) : linkedProjectCandidates.length > 1 ? (
                   <>
                     DevDeck will monitor {selectedProjects.length} {selectedProjects.length === 1 ? "project" : "projects"} inside <strong>{selectedDir}</strong>.
@@ -1040,8 +1074,7 @@ export default function Onboarding() {
                 (step === 4 &&
                   (!selectedDir ||
                     (selectedGitHubRepositorySlugs.length > 0 &&
-                      linkedProjectCandidates.length === 0) ||
-                    (linkedProjectCandidates.length > 1 && selectedProjectIds.length === 0)))
+                      linkedProjectCandidates.length === 0)))
               }
               className="px-5 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
             >

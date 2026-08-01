@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
+import ProjectRemovalDialog from "@/components/projects/ProjectRemovalDialog";
 import GitHubConnectDialog from "@/components/settings/GitHubConnectDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
@@ -44,8 +45,6 @@ import {
   clearWorkspaceSelection,
   getManagedProjectCollections,
   getHiddenManagedProjects,
-  removeManagedProject,
-  removeManagedProjectCollection,
   removeManagedProjects,
   reorderManagedProjectCollections,
   reorderManagedProjects,
@@ -56,11 +55,19 @@ import {
 } from "@/lib/workspace-selection";
 import type { WorkspaceSelection } from "@shared/workspace";
 
+interface PendingProjectRemoval {
+  itemName: string;
+  itemType: "collection" | "project" | "selection";
+  projectIds: string[];
+}
+
 export default function Settings() {
   const [, setLocation] = useLocation();
   const { data: snapshot, refetch } = useWorkspaceSnapshot();
   const { preferences, setPreference } = useAppPreferences();
   const [isGitHubConnectOpen, setIsGitHubConnectOpen] = useState(false);
+  const [pendingProjectRemoval, setPendingProjectRemoval] =
+    useState<PendingProjectRemoval | null>(null);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [draggedCollectionId, setDraggedCollectionId] = useState<string | null>(null);
   const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
@@ -70,6 +77,7 @@ export default function Settings() {
   const hiddenProjectCount = hiddenProjects.length;
   const visibleProjectCount =
     workspaceSelection?.projects.filter((project) => !project.hidden).length ?? 0;
+  const configuredProjectCount = workspaceSelection?.projects.length ?? 0;
   const hiddenCollections = getManagedProjectCollections(workspaceSelection, {
     includeHidden: true,
   })
@@ -84,6 +92,13 @@ export default function Settings() {
   const githubState = githubStatus?.state ?? "unsupported";
   const desktopApi = getDesktopApi();
   const { availability, preferredTool } = useCodingTool();
+  const pendingProjectRemovalCount =
+    pendingProjectRemoval?.projectIds.length ?? 0;
+  const pendingProjectRemovalRemovesAllProjects = Boolean(
+    pendingProjectRemoval &&
+      configuredProjectCount > 0 &&
+      new Set(pendingProjectRemoval.projectIds).size >= configuredProjectCount,
+  );
 
   const persistWorkspaceSelection = async (
     nextSelection: WorkspaceSelection | null,
@@ -92,7 +107,6 @@ export default function Settings() {
       clearWorkspaceSelection();
       await clearWorkspaceHandle();
       void queryClient.removeQueries({ queryKey: ["workspace", "snapshot"] });
-      navigateInApp("/onboarding", setLocation);
       return;
     }
 
@@ -154,11 +168,15 @@ export default function Settings() {
     );
   };
 
-  const handleRemoveProject = async (projectId: string) => {
-    setSelectedProjectIds((currentSelection) =>
-      currentSelection.filter((selectedProjectId) => selectedProjectId !== projectId),
+  const requestRemoveProject = (projectId: string) => {
+    const project = workspaceSelection?.projects.find(
+      (candidate) => candidate.id === projectId,
     );
-    await persistWorkspaceSelection(removeManagedProject(workspaceSelection, projectId));
+    setPendingProjectRemoval({
+      itemName: project?.name ?? "this project",
+      itemType: "project",
+      projectIds: [projectId],
+    });
   };
 
   const handleToggleProjectSelection = (projectId: string, checked: boolean) => {
@@ -196,15 +214,16 @@ export default function Settings() {
     });
   };
 
-  const handleRemoveSelectedProjects = async () => {
+  const requestRemoveSelectedProjects = () => {
     if (selectedProjectIds.length === 0) {
       return;
     }
 
-    await persistWorkspaceSelection(
-      removeManagedProjects(workspaceSelection, selectedProjectIds),
-    );
-    setSelectedProjectIds([]);
+    setPendingProjectRemoval({
+      itemName: "selected projects",
+      itemType: "selection",
+      projectIds: selectedProjectIds,
+    });
   };
 
   const handleHideSelectedProjects = async () => {
@@ -265,7 +284,7 @@ export default function Settings() {
     );
   };
 
-  const handleRemoveCollection = async (collectionId: string) => {
+  const requestRemoveCollection = (collectionId: string) => {
     const collection = managedCollections.find(
       (managedCollection) => managedCollection.id === collectionId,
     );
@@ -273,13 +292,26 @@ export default function Settings() {
       return;
     }
 
-    await persistWorkspaceSelection(
-      removeManagedProjectCollection(workspaceSelection, collectionId),
-    );
-    const collectionProjectIds = new Set(collection.projects.map((project) => project.id));
+    setPendingProjectRemoval({
+      itemName: collection.name,
+      itemType: "collection",
+      projectIds: collection.projects.map((project) => project.id),
+    });
+  };
+
+  const handleConfirmProjectRemoval = async () => {
+    if (!pendingProjectRemoval) {
+      return;
+    }
+
+    const projectIdsToRemove = new Set(pendingProjectRemoval.projectIds);
     setSelectedProjectIds((currentSelection) =>
-      currentSelection.filter((projectId) => !collectionProjectIds.has(projectId)),
+      currentSelection.filter((projectId) => !projectIdsToRemove.has(projectId)),
     );
+    await persistWorkspaceSelection(
+      removeManagedProjects(workspaceSelection, pendingProjectRemoval.projectIds),
+    );
+    setPendingProjectRemoval(null);
   };
 
   const lastWorkspaceSyncLabel = snapshot
@@ -435,7 +467,7 @@ export default function Settings() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => void handleRemoveSelectedProjects()}
+                        onClick={requestRemoveSelectedProjects}
                         disabled={selectedProjectIds.length === 0}
                         className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                       >
@@ -542,7 +574,7 @@ export default function Settings() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => void handleRemoveCollection(collection.id)}
+                              onClick={() => requestRemoveCollection(collection.id)}
                               className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-red-50 hover:text-red-600"
                               aria-label={`Remove ${collection.name}`}
                             >
@@ -627,7 +659,7 @@ export default function Settings() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => void handleRemoveProject(project.id)}
+                                onClick={() => requestRemoveProject(project.id)}
                                 className="rounded-md border border-border bg-white p-2 text-muted-foreground shadow-sm transition-colors hover:bg-red-50 hover:text-red-600"
                                 aria-label={`Remove ${project.name}`}
                               >
@@ -639,6 +671,14 @@ export default function Settings() {
                       </div>
                     </div>
                   ))}
+
+                  {managedCollections.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border/60 bg-white px-4 py-6 text-sm text-muted-foreground">
+                      No projects are configured. DevDeck will stay available for
+                      agents, terminals, and settings; add projects when you want
+                      local Git monitoring again.
+                    </div>
+                  ) : null}
 
                   {hiddenCollections.length > 0 ? (
                     <div className="space-y-3 pt-2">
@@ -712,7 +752,7 @@ export default function Settings() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => void handleRemoveProject(project.id)}
+                                    onClick={() => requestRemoveProject(project.id)}
                                     className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-red-50 hover:text-red-600"
                                   >
                                     Remove
@@ -1016,6 +1056,19 @@ export default function Settings() {
         onConnected={() => {
           void refetch();
         }}
+      />
+      <ProjectRemovalDialog
+        itemName={pendingProjectRemoval?.itemName ?? "selected projects"}
+        itemType={pendingProjectRemoval?.itemType ?? "selection"}
+        onConfirm={() => void handleConfirmProjectRemoval()}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingProjectRemoval(null);
+          }
+        }}
+        open={Boolean(pendingProjectRemoval)}
+        projectCount={pendingProjectRemovalCount}
+        removesAllProjects={pendingProjectRemovalRemovesAllProjects}
       />
     </AppLayout>
   );

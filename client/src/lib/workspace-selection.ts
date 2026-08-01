@@ -145,7 +145,7 @@ function deriveSelectionMetadata(
 }
 
 function normalizeWorkspaceSelection(selection: WorkspaceSelection | null) {
-  if (!selection || !Array.isArray(selection.projects) || selection.projects.length === 0) {
+  if (!selection || !Array.isArray(selection.projects)) {
     return null;
   }
 
@@ -167,7 +167,13 @@ function normalizeWorkspaceSelection(selection: WorkspaceSelection | null) {
       ...project,
       order: index,
     }));
-  const metadata = deriveSelectionMetadata(projects, fallbackRootName, fallbackRootPath);
+  const metadata =
+    projects.length > 0
+      ? deriveSelectionMetadata(projects, fallbackRootName, fallbackRootPath)
+      : {
+          rootName: fallbackRootName,
+          rootPath: fallbackRootPath,
+        };
 
   return {
     projects,
@@ -192,11 +198,17 @@ function buildSelectionFromOrderedProjects(
     ...project,
     order: index,
   }));
-  const metadata = deriveSelectionMetadata(
-    normalizedProjects,
-    currentSelection.rootName,
-    currentSelection.rootPath,
-  );
+  const metadata =
+    normalizedProjects.length > 0
+      ? deriveSelectionMetadata(
+          normalizedProjects,
+          currentSelection.rootName,
+          currentSelection.rootPath,
+        )
+      : {
+          rootName: currentSelection.rootName,
+          rootPath: currentSelection.rootPath,
+        };
 
   return {
     projects: normalizedProjects,
@@ -423,8 +435,12 @@ export function getHiddenManagedProjects(selection: WorkspaceSelection | null) {
 }
 
 export function hasValidWorkspaceSelection(selection: WorkspaceSelection | null) {
-  if (!selection || selection.projects.length === 0) {
+  if (!selection) {
     return false;
+  }
+
+  if (selection.projects.length === 0) {
+    return true;
   }
 
   return (
@@ -436,12 +452,14 @@ export function hasValidWorkspaceSelection(selection: WorkspaceSelection | null)
 }
 
 export function buildWorkspaceSelectionFromImport({
+  allowEmptyProjectSelection = false,
   candidates,
   collectionName,
   rootName,
   rootPath,
   selectedProjectIds,
 }: {
+  allowEmptyProjectSelection?: boolean;
   candidates: MonitoredProject[];
   collectionName?: string | null;
   rootName: string;
@@ -458,6 +476,8 @@ export function buildWorkspaceSelectionFromImport({
   const projects =
     selectedProjects.length > 0
       ? selectedProjects
+      : allowEmptyProjectSelection
+        ? []
       : [
           {
             id: `${rootName}/.`,
@@ -478,6 +498,17 @@ export function buildWorkspaceSelectionFromImport({
     })),
     rootName,
     rootPath: effectiveRootPath,
+  }) as WorkspaceSelection;
+}
+
+export function buildEmptyWorkspaceSelection(options?: {
+  rootName?: string | null;
+  rootPath?: string | null;
+}) {
+  return normalizeWorkspaceSelection({
+    projects: [],
+    rootName: options?.rootName?.trim() || "DevDeck",
+    rootPath: options?.rootPath?.trim() || undefined,
   }) as WorkspaceSelection;
 }
 
@@ -716,9 +747,6 @@ export function removeManagedProjects(
   const remainingProjects = normalizedSelection.projects.filter(
     (project) => !projectIdsToRemove.has(project.id),
   );
-  if (remainingProjects.length === 0) {
-    return null;
-  }
 
   return buildSelectionFromOrderedProjects(normalizedSelection, remainingProjects);
 }
