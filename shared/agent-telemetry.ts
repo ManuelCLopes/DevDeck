@@ -465,6 +465,135 @@ export function getTokenUsageSummaryTotal(summaries: TokenUsageSummary[]) {
   );
 }
 
+function matchAgentByOpenCodeName(
+  opencodeAgent: string | null,
+  agents: AgentDefinition[],
+  projectId: string | null,
+) {
+  if (!opencodeAgent) {
+    return null;
+  }
+
+  const normalized = opencodeAgent.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  const projectMatches = agents.filter((agent) =>
+    projectId ? agent.projectId === projectId : true,
+  );
+  const candidates = projectMatches.length > 0 ? projectMatches : agents;
+
+  return (
+    candidates.find(
+      (agent) =>
+        agent.name.toLowerCase() === normalized ||
+        agent.id.toLowerCase().endsWith(`:${normalized}`) ||
+        agent.id.toLowerCase() === normalized,
+    ) ?? null
+  );
+}
+
+function normalizeDirectoryPath(value: string | null) {
+  return value ? value.replace(/\/+$/, "") : null;
+}
+
+function findProjectIdForDirectory(
+  directory: string | null,
+  projects: Array<{ id: string; localPath: string | null }>,
+) {
+  const normalizedDir = normalizeDirectoryPath(directory);
+  if (!normalizedDir) {
+    return null;
+  }
+
+  let bestMatch: { id: string; length: number } | null = null;
+  for (const project of projects) {
+    const projectPath = normalizeDirectoryPath(project.localPath ?? null);
+    if (!projectPath) {
+      continue;
+    }
+    if (
+      normalizedDir === projectPath ||
+      normalizedDir.startsWith(`${projectPath}/`)
+    ) {
+      if (!bestMatch || projectPath.length > bestMatch.length) {
+        bestMatch = { id: project.id, length: projectPath.length };
+      }
+    }
+  }
+
+  return bestMatch?.id ?? null;
+}
+
+const OPENCODE_RUN_ACTIVE_WINDOW_MS = 30 * 60 * 1000;
+
+export function synthesizeAgentRunsFromOpenCodeRecords(
+  records: OpenCodeUsageRecord[],
+  options: {
+    agents: AgentDefinition[];
+    existingRuns: AgentRun[];
+    now?: Date | string;
+    projects?: Array<{ id: string; localPath: string | null }>;
+  },
+) {
+  const nowMs = options.now ? new Date(options.now).getTime() : Date.now();
+  const projects = options.projects ?? [];
+  const existingBySession = new Map<string, AgentRun>();
+  const existingById = new Map<string, AgentRun>();
+  for (const run of options.existingRuns) {
+    existingById.set(run.id, run);
+    if (run.opencodeSessionId) {
+      existingBySession.set(run.opencodeSessionId, run);
+    }
+  }
+
+  const synthesized: AgentRun[] = [];
+  for (const record of records) {
+    const syntheticId = `opencode:${record.sessionId}`;
+    if (
+      existingBySession.has(record.sessionId) ||
+      existingById.has(syntheticId)
+    ) {
+      continue;
+    }
+
+    const startedAt =
+      normalizeString(record.createdAt) ??
+      normalizeString(record.updatedAt) ??
+      new Date(nowMs).toISOString();
+    const updatedAt = normalizeString(record.updatedAt);
+    const updatedAtMs = updatedAt ? new Date(updatedAt).getTime() : nowMs;
+    const isRecent = nowMs - updatedAtMs < OPENCODE_RUN_ACTIVE_WINDOW_MS;
+    const projectId =
+      normalizeString(record.projectId) ??
+      findProjectIdForDirectory(record.directory, projects);
+    const matchedAgent = matchAgentByOpenCodeName(
+      record.opencodeAgent,
+      options.agents,
+      projectId,
+    );
+
+    synthesized.push({
+      agentId: matchedAgent?.id ?? null,
+      branchName: null,
+      endedAt: isRecent ? null : updatedAt,
+      id: syntheticId,
+      opencodeSessionId: record.sessionId,
+      projectId: projectId ?? matchedAgent?.projectId ?? null,
+      startedAt,
+      status: isRecent ? "active" : "completed",
+      taskTitle: normalizeString(record.title) ?? "OpenCode session",
+      terminalPaneId: null,
+      tokenBudget: matchedAgent?.tokenBudget ?? null,
+      workflowRunId: null,
+      worktreePath: normalizeString(record.directory),
+    });
+  }
+
+  return synthesized;
+}
+
 export function buildTokenUsageEventsFromOpenCodeRecords(
   records: OpenCodeUsageRecord[],
   agentRuns: AgentRun[],
