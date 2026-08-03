@@ -1,5 +1,6 @@
 import { existsSync, statSync } from "fs";
 import { readFile, readdir } from "fs/promises";
+import { homedir, platform } from "os";
 import path from "path";
 import type {
   AgentDefinition,
@@ -38,6 +39,41 @@ const HARNESS_SCAN_DIRECTORIES = [
   ".opencode",
   ".codex",
 ];
+
+function getGlobalHarnessDirectories(): string[] {
+  const home = homedir();
+  if (!home) {
+    return [];
+  }
+
+  const xdgConfigHome =
+    process.env.XDG_CONFIG_HOME && process.env.XDG_CONFIG_HOME.trim()
+      ? process.env.XDG_CONFIG_HOME
+      : path.join(home, ".config");
+
+  const directories = new Set<string>([
+    path.join(xdgConfigHome, "opencode"),
+    path.join(home, ".opencode"),
+    path.join(xdgConfigHome, "codex"),
+    path.join(home, ".codex"),
+    path.join(home, ".claude"),
+  ]);
+
+  if (platform() === "darwin") {
+    directories.add(path.join(home, "Library", "Application Support", "opencode"));
+    directories.add(path.join(home, "Library", "Application Support", "codex"));
+  }
+
+  if (platform() === "win32") {
+    const appData = process.env.APPDATA;
+    if (appData) {
+      directories.add(path.join(appData, "opencode"));
+      directories.add(path.join(appData, "codex"));
+    }
+  }
+
+  return Array.from(directories);
+}
 
 const HARNESS_DIRECTORY_MAX_DEPTH = 4;
 
@@ -476,12 +512,236 @@ function getMarkdownDescription(body: string) {
   return paragraphLines.join(" ").trim() || null;
 }
 
+function extractFrontmatter(content: string): {
+  body: string;
+  frontmatter: Record<string, unknown> | null;
+} {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (!match) {
+    return { body: content, frontmatter: null };
+  }
+
+  const frontmatter = parseSimpleYaml(match[1] ?? "");
+  const body = content.slice(match[0].length);
+  return { body, frontmatter };
+}
+
+function parseSimpleYaml(text: string): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  const lines = text.split(/\r?\n/);
+  let currentKey: string | null = null;
+  let currentList: string[] | null = null;
+  let currentMap: Record<string, unknown> | null = null;
+
+  const flush = () => {
+    if (currentKey === null) {
+      return;
+    }
+    if (currentList !== null) {
+      result[currentKey] = currentList;
+    } else if (currentMap !== null) {
+      result[currentKey] = currentMap;
+    }
+    currentKey = null;
+    currentList = null;
+    currentMap = null;
+  };
+
+  const stripQuotes = (raw: string) => {
+    const trimmed = raw.trim();
+    if (
+      (trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+      return trimmed.slice(1, -1);
+    }
+    return trimmed;
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\s+$/, "");
+    if (!line.trim() || line.trim().startsWith("#")) {
+      continue;
+    }
+
+    const indentMatch = line.match(/^(\s*)/);
+    const indent = indentMatch ? indentMatch[1].length : 0;
+
+    if (indent === 0) {
+      flush();
+      const bulletTop = line.match(/^-\s+(.*)$/);
+      if (bulletTop) {
+        continue;
+      }
+      const keyValue = line.match(/^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/);
+      if (!keyValue) {
+        continue;
+      }
+      currentKey = keyValue[1];
+      const value = keyValue[2] ?? "";
+      if (!value.trim()) {
+        currentList = [];
+        currentMap = {};
+        continue;
+      }
+      result[currentKey] = stripQuotes(value);
+      currentKey = null;
+      currentList = null;
+      currentMap = null;
+      continue;
+    }
+
+    if (!currentKey) {
+      continue;
+    }
+
+    const bullet = line.match(/^\s+-\s+(.*)$/);
+    if (bullet) {
+      currentList = currentList ?? [];
+      currentList.push(stripQuotes(bullet[1] ?? ""));
+      currentMap = null;
+      continue;
+    }
+
+    const nested = line.match(/^\s+([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/);
+    if (nested) {
+      currentMap = currentMap ?? {};
+      const nestedValue = (nested[2] ?? "").trim();
+      currentMap[nested[1]] = nestedValue ? stripQuotes(nestedValue) : "";
+      currentList = null;
+      continue;
+    }
+  }
+  flush();
+
+  return result;
+}
+
+function frontmatterToolsToList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return normalizeStringArray(value);
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([, enabled]) => enabled !== false && enabled !== "false")
+      .map(([name]) => name);
+  }
+  return normalizeStringArray(value);
+}
+
 export function parseMarkdownAgentHarness(
   content: string,
   context: HarnessSourceContext,
 ): ParsedHarnessFile {
   const fallbackName = path.basename(context.sourcePath).replace(/\.[^.]+$/, "");
-  const sections = splitMarkdownSections(content, fallbackName);
+  const { body: bodyAfterFrontmatter, frontmatter } = extractFrontmatter(content);
+
+  const parentDirName = path.basename(path.dirname(context.sourcePath)).toLowerCase();
+  const isSingleAgentFile =
+    frontmatter !== null ||
+    parentDirName === "agent" ||
+    parentDirName === "agents" ||
+    parentDirName === "prompts" ||
+    parentDirName === "commands";
+
+  if (isSingleAgentFile) {
+    const firstHeadingMatch = bodyAfterFrontmatter.match(/^\s*#\s+(.+)$/m);
+    const firstHeadingName = firstHeadingMatch
+      ? stripMarkdownFormatting(firstHeadingMatch[1] ?? "")
+      : null;
+    const sectionName =
+      normalizeString(
+        frontmatter ? getRecordValue(frontmatter, ["name", "title"]) : null,
+      ) ??
+      normalizeString(firstHeadingName) ??
+      fallbackName;
+    const bodyResponsibilities = getMarkdownListForLabels(bodyAfterFrontmatter, [
+      "responsibilities",
+      "responsibility",
+      "owns",
+      "tasks",
+    ]);
+    const bodyBoundaries = getMarkdownListForLabels(bodyAfterFrontmatter, [
+      "boundaries",
+      "constraints",
+      "do not",
+      "non goals",
+    ]);
+    const bodyHandoffs = getMarkdownListForLabels(bodyAfterFrontmatter, [
+      "handoff",
+      "handoffs",
+      "next agents",
+    ]);
+    const bodyDescription = getMarkdownDescription(bodyAfterFrontmatter);
+
+    const frontmatterDescription = normalizeString(
+      frontmatter
+        ? getRecordValue(frontmatter, ["description", "summary", "role"])
+        : null,
+    );
+    const frontmatterModel = normalizeString(
+      frontmatter
+        ? getRecordValue(frontmatter, ["model", "defaultModel", "model_id"])
+        : null,
+    );
+    const frontmatterProvider = normalizeString(
+      frontmatter
+        ? getRecordValue(frontmatter, ["provider", "defaultProvider"])
+        : null,
+    );
+    const frontmatterTools = frontmatter
+      ? frontmatterToolsToList(getRecordValue(frontmatter, ["tools", "allowedTools"]))
+      : [];
+    const frontmatterSkills = frontmatter
+      ? normalizeStringArray(getRecordValue(frontmatter, ["skills", "defaultSkills"]))
+      : [];
+    const frontmatterBudget = normalizeNumber(
+      frontmatter
+        ? getRecordValue(frontmatter, [
+            "tokenBudget",
+            "token_budget",
+            "maxTokens",
+            "max_tokens",
+          ])
+        : null,
+    );
+    const frontmatterHandoffs = frontmatter
+      ? normalizeStringArray(
+          getRecordValue(frontmatter, ["handoffs", "handoffTargets", "handoff"]),
+        )
+      : [];
+
+    const agent: AgentDefinition = {
+      boundaries: uniqueStrings(bodyBoundaries),
+      defaultModel: frontmatterModel ?? null,
+      defaultProvider: frontmatterProvider ?? null,
+      defaultSkills: uniqueStrings(frontmatterSkills),
+      defaultTools: uniqueStrings(frontmatterTools),
+      description: frontmatterDescription ?? bodyDescription,
+      handoffTargets: uniqueStrings([...frontmatterHandoffs, ...bodyHandoffs]),
+      id: [
+        context.projectId ?? context.projectName ?? "workspace",
+        slugify(path.basename(path.dirname(context.sourcePath))),
+        slugify(path.basename(context.sourcePath)),
+      ].join(":"),
+      name: sectionName,
+      projectId: context.projectId,
+      projectName: context.projectName,
+      responsibilities: uniqueStrings(bodyResponsibilities),
+      sourceFormat: "markdown",
+      sourcePath: context.sourcePath,
+      tokenBudget: frontmatterBudget,
+    };
+
+    return {
+      agents: [agent],
+      errors: [],
+      format: "markdown",
+      workflows: [],
+    };
+  }
+
+  const sections = splitMarkdownSections(bodyAfterFrontmatter, fallbackName);
   const agents = sections.map((section, index) => {
     const markdownContext = {
       ...context,
@@ -753,18 +1013,62 @@ function appendSourceValidationErrors(
   }));
 }
 
+async function collectGlobalHarnessTargets(): Promise<ProjectHarnessTarget[]> {
+  const targets: ProjectHarnessTarget[] = [];
+  for (const directory of getGlobalHarnessDirectories()) {
+    try {
+      if (!existsSync(directory) || !statSync(directory).isDirectory()) {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+
+    const label = /opencode/i.test(directory)
+      ? "Global (opencode)"
+      : /codex/i.test(directory)
+        ? "Global (codex)"
+        : /claude/i.test(directory)
+          ? "Global (claude)"
+          : "Global";
+
+    targets.push({ id: null, localPath: directory, name: label });
+  }
+  return targets;
+}
+
+async function listExistingHarnessFilesInGlobalDirectory(
+  globalDirectory: string,
+): Promise<string[]> {
+  return collectHarnessFilesInDirectory(globalDirectory, 1);
+}
+
 export async function discoverAgentHarness(
   request: AgentHarnessDiscoveryRequest,
 ): Promise<AgentHarnessDiscoveryResult> {
-  const targets = normalizeProjectTargets(request);
+  const projectTargets = normalizeProjectTargets(request);
+  const globalTargets = await collectGlobalHarnessTargets();
   const agents: AgentDefinition[] = [];
   const workflows: WorkflowDefinition[] = [];
   const sources: AgentHarnessSource[] = [];
 
-  for (const project of targets) {
+  const seenProjectPaths = new Set(
+    projectTargets.map((project) => path.resolve(project.localPath)),
+  );
+  const filteredGlobalTargets = globalTargets.filter(
+    (target) => !seenProjectPaths.has(path.resolve(target.localPath)),
+  );
+
+  const allTargets = [...projectTargets, ...filteredGlobalTargets];
+
+  for (const project of allTargets) {
+    const isGlobalTarget = project.id === null && filteredGlobalTargets.includes(project);
+
     let sourcePaths: string[] = [];
     try {
-      sourcePaths = await listExistingHarnessFiles(project.localPath);
+      sourcePaths = isGlobalTarget
+        ? await listExistingHarnessFilesInGlobalDirectory(project.localPath)
+        : await listExistingHarnessFiles(project.localPath);
     } catch (error) {
       sources.push({
         agentCount: 0,
