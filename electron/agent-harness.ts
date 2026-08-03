@@ -20,14 +20,37 @@ const HARNESS_CANDIDATE_FILES = [
   "harness.json",
   "agents.yaml",
   "agents.yml",
+  "opencode.json",
+  "opencode.jsonc",
   ".opencode/agents.json",
   ".opencode/agents.md",
   ".opencode/harness.json",
   ".opencode/workflows.json",
+  ".opencode/opencode.json",
+  ".opencode/opencode.jsonc",
+  ".opencode/config.json",
   ".codex/AGENTS.md",
   ".codex/agents.json",
   ".codex/harness.json",
 ];
+
+const HARNESS_SCAN_DIRECTORIES = [
+  ".opencode",
+  ".codex",
+];
+
+const HARNESS_DIRECTORY_MAX_DEPTH = 4;
+
+const HARNESS_DIRECTORY_SKIP_NAMES = new Set([
+  "node_modules",
+  ".git",
+  "cache",
+  "logs",
+  "sessions",
+  "history",
+  "state",
+  "tmp",
+]);
 
 interface ProjectHarnessTarget {
   id: string | null;
@@ -580,6 +603,51 @@ function normalizeProjectTargets(
   });
 }
 
+async function collectHarnessFilesInDirectory(
+  directoryPath: string,
+  depth: number,
+): Promise<string[]> {
+  if (depth > HARNESS_DIRECTORY_MAX_DEPTH) {
+    return [];
+  }
+
+  let entries;
+  try {
+    entries = await readdir(directoryPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const collected: string[] = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith(".") && entry.name !== "." && entry.name !== "..") {
+      // Skip hidden entries nested inside harness directories (e.g. `.cache`).
+      continue;
+    }
+
+    const entryPath = path.join(directoryPath, entry.name);
+
+    if (entry.isDirectory()) {
+      if (HARNESS_DIRECTORY_SKIP_NAMES.has(entry.name.toLowerCase())) {
+        continue;
+      }
+      const nested = await collectHarnessFilesInDirectory(entryPath, depth + 1);
+      collected.push(...nested);
+      continue;
+    }
+
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    if (["json", "markdown"].includes(getSourceFormat(entryPath))) {
+      collected.push(entryPath);
+    }
+  }
+
+  return collected;
+}
+
 async function listExistingHarnessFiles(projectPath: string) {
   const files = HARNESS_CANDIDATE_FILES.map((candidatePath) =>
     path.join(projectPath, candidatePath),
@@ -591,22 +659,10 @@ async function listExistingHarnessFiles(projectPath: string) {
     }
   });
 
-  const customDirectories = [".opencode/agents", ".codex/agents"];
-  for (const relativeDirectory of customDirectories) {
+  for (const relativeDirectory of HARNESS_SCAN_DIRECTORIES) {
     const directoryPath = path.join(projectPath, relativeDirectory);
-    try {
-      const entries = await readdir(directoryPath, { withFileTypes: true });
-      files.push(
-        ...entries
-          .filter((entry) => entry.isFile())
-          .map((entry) => path.join(directoryPath, entry.name))
-          .filter((entryPath) =>
-            ["json", "markdown"].includes(getSourceFormat(entryPath)),
-          ),
-      );
-    } catch {
-      // Optional harness directories are absent in most repositories.
-    }
+    const nested = await collectHarnessFilesInDirectory(directoryPath, 1);
+    files.push(...nested);
   }
 
   return uniqueStrings(files);
