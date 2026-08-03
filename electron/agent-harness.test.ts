@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path, { join } from "node:path";
 import {
   discoverAgentHarness,
   parseJsonAgentHarness,
@@ -124,6 +124,112 @@ test("discoverAgentHarness scans configured project paths", async () => {
     assert.equal(result.sources[0]?.agentCount, 1);
     assert.equal(result.agents[0]?.id, "reviewer");
     assert.equal(result.agents[0]?.projectName, "Repo");
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("discoverAgentHarness picks up opencode agent folder markdown files", async () => {
+  const root = mkdtempSync(join(tmpdir(), "devdeck-opencode-agents-"));
+  const repoPath = join(root, "repo");
+  const agentDir = join(repoPath, ".opencode", "agent");
+  const nestedAgentDir = join(agentDir, "reviewers");
+  mkdirSync(nestedAgentDir, { recursive: true });
+
+  writeFileSync(
+    join(agentDir, "builder.md"),
+    [
+      "# Builder",
+      "Owns implementation.",
+      "",
+      "Responsibilities:",
+      "- Implement scoped changes",
+      "",
+      "Token Budget: 80000",
+    ].join("\n"),
+    "utf8",
+  );
+  writeFileSync(
+    join(nestedAgentDir, "senior.md"),
+    [
+      "# Senior Reviewer",
+      "Reviews diffs from the builder.",
+      "",
+      "Responsibilities:",
+      "- Inspect diffs",
+      "",
+      "Token Budget: 60000",
+    ].join("\n"),
+    "utf8",
+  );
+  writeFileSync(
+    join(repoPath, "opencode.json"),
+    JSON.stringify({
+      agents: [
+        {
+          id: "planner",
+          name: "Planner",
+          responsibilities: ["Break down the task"],
+          tokenBudget: 40000,
+        },
+      ],
+    }),
+    "utf8",
+  );
+
+  try {
+    const result = await discoverAgentHarness({
+      projects: [{ id: "repo", localPath: repoPath, name: "Repo" }],
+    });
+
+    const sourcePaths = result.sources.map((source) => source.sourcePath);
+    assert.ok(
+      sourcePaths.some((p) => p.endsWith(join(".opencode", "agent", "builder.md"))),
+      `expected builder.md to be discovered, got ${sourcePaths.join(", ")}`,
+    );
+    assert.ok(
+      sourcePaths.some((p) =>
+        p.endsWith(join(".opencode", "agent", "reviewers", "senior.md")),
+      ),
+      "expected nested senior.md to be discovered",
+    );
+    assert.ok(
+      sourcePaths.some((p) => p.endsWith("opencode.json")),
+      "expected opencode.json to be discovered",
+    );
+
+    const agentNames = result.agents.map((agent) => agent.name).sort();
+    assert.deepEqual(agentNames, ["Builder", "Planner", "Senior Reviewer"]);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("discoverAgentHarness skips volatile opencode subdirectories", async () => {
+  const root = mkdtempSync(join(tmpdir(), "devdeck-opencode-skip-"));
+  const repoPath = join(root, "repo");
+  const cacheDir = join(repoPath, ".opencode", "cache");
+  const sessionsDir = join(repoPath, ".opencode", "sessions");
+  mkdirSync(cacheDir, { recursive: true });
+  mkdirSync(sessionsDir, { recursive: true });
+
+  writeFileSync(join(cacheDir, "leftover.json"), "{}", "utf8");
+  writeFileSync(join(sessionsDir, "history.md"), "# history", "utf8");
+
+  try {
+    const result = await discoverAgentHarness({
+      projects: [{ id: "repo", localPath: repoPath, name: "Repo" }],
+    });
+
+    const sourcePaths = result.sources.map((source) => source.sourcePath);
+    assert.equal(
+      sourcePaths.filter(
+        (p) => p.includes(`${path.sep}cache${path.sep}`) ||
+          p.includes(`${path.sep}sessions${path.sep}`),
+      ).length,
+      0,
+      `expected cache/sessions to be skipped, got ${sourcePaths.join(", ")}`,
+    );
   } finally {
     rmSync(root, { force: true, recursive: true });
   }
