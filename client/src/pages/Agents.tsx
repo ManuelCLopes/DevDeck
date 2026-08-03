@@ -2256,6 +2256,19 @@ export default function Agents() {
     void runTaskTraceIngestion();
   }, [runOpenCodeUsageSync, runTaskTraceIngestion]);
 
+  // Keep task-trace ingestion running periodically so long-lived Agents
+  // pages pick up new JSONL entries appended by active agents without
+  // requiring a manual refresh (the "Watching" banner would otherwise lie).
+  useEffect(() => {
+    if (!desktopApi?.ingestAgentTaskTraces) {
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      void runTaskTraceIngestion();
+    }, 15_000);
+    return () => window.clearInterval(intervalId);
+  }, [desktopApi, runTaskTraceIngestion]);
+
   useEffect(() => {
     if (visibleAgentRuns.length === 0) {
       if (selectedRunId) {

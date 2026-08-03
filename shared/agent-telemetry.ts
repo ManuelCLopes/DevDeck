@@ -528,6 +528,10 @@ function findProjectIdForDirectory(
 
 const OPENCODE_RUN_ACTIVE_WINDOW_MS = 30 * 60 * 1000;
 
+function isSyntheticOpenCodeRunId(id: string) {
+  return id.startsWith("opencode:");
+}
+
 export function synthesizeAgentRunsFromOpenCodeRecords(
   records: OpenCodeUsageRecord[],
   options: {
@@ -551,23 +555,31 @@ export function synthesizeAgentRunsFromOpenCodeRecords(
   const synthesized: AgentRun[] = [];
   for (const record of records) {
     const syntheticId = `opencode:${record.sessionId}`;
-    if (
-      existingBySession.has(record.sessionId) ||
-      existingById.has(syntheticId)
-    ) {
+    const existingRun =
+      existingBySession.get(record.sessionId) ??
+      existingById.get(syntheticId) ??
+      null;
+    // A pre-existing DevDeck-managed run for this session — user-owned; skip.
+    if (existingRun && !isSyntheticOpenCodeRunId(existingRun.id)) {
       continue;
     }
 
     const startedAt =
+      existingRun?.startedAt ??
       normalizeString(record.createdAt) ??
       normalizeString(record.updatedAt) ??
       new Date(nowMs).toISOString();
     const updatedAt = normalizeString(record.updatedAt);
     const updatedAtMs = updatedAt ? new Date(updatedAt).getTime() : nowMs;
     const isRecent = nowMs - updatedAtMs < OPENCODE_RUN_ACTIVE_WINDOW_MS;
+    // Prefer the DevDeck workspace project resolved from the directory over
+    // OpenCode's opaque projectId so same-named agents in different projects
+    // resolve to the correct DevDeck agent.
     const projectId =
+      findProjectIdForDirectory(record.directory, projects) ??
       normalizeString(record.projectId) ??
-      findProjectIdForDirectory(record.directory, projects);
+      existingRun?.projectId ??
+      null;
     const matchedAgent = matchAgentByOpenCodeName(
       record.opencodeAgent,
       options.agents,
@@ -575,19 +587,23 @@ export function synthesizeAgentRunsFromOpenCodeRecords(
     );
 
     synthesized.push({
-      agentId: matchedAgent?.id ?? null,
-      branchName: null,
+      agentId: matchedAgent?.id ?? existingRun?.agentId ?? null,
+      branchName: existingRun?.branchName ?? null,
       endedAt: isRecent ? null : updatedAt,
       id: syntheticId,
       opencodeSessionId: record.sessionId,
       projectId: projectId ?? matchedAgent?.projectId ?? null,
       startedAt,
       status: isRecent ? "active" : "completed",
-      taskTitle: normalizeString(record.title) ?? "OpenCode session",
-      terminalPaneId: null,
-      tokenBudget: matchedAgent?.tokenBudget ?? null,
-      workflowRunId: null,
-      worktreePath: normalizeString(record.directory),
+      taskTitle:
+        normalizeString(record.title) ??
+        existingRun?.taskTitle ??
+        "OpenCode session",
+      terminalPaneId: existingRun?.terminalPaneId ?? null,
+      tokenBudget: matchedAgent?.tokenBudget ?? existingRun?.tokenBudget ?? null,
+      workflowRunId: existingRun?.workflowRunId ?? null,
+      worktreePath:
+        normalizeString(record.directory) ?? existingRun?.worktreePath ?? null,
     });
   }
 
