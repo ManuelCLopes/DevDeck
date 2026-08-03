@@ -205,6 +205,85 @@ test("discoverAgentHarness picks up opencode agent folder markdown files", async
   }
 });
 
+test("parseMarkdownAgentHarness reads opencode-style YAML frontmatter", () => {
+  const result = parseMarkdownAgentHarness(
+    [
+      "---",
+      "description: Reviews code changes for correctness.",
+      "mode: subagent",
+      "model: anthropic/claude-sonnet-4-5",
+      "tools:",
+      "  write: false",
+      "  edit: false",
+      "  read: true",
+      "  bash: true",
+      "---",
+      "System prompt content here.",
+    ].join("\n"),
+    {
+      projectId: "project-1",
+      projectName: "DevDeck",
+      sourceFormat: "markdown",
+      sourcePath: "/tmp/repo/.opencode/agent/reviewer.md",
+    },
+  );
+
+  assert.equal(result.agents.length, 1);
+  const agent = result.agents[0];
+  assert.equal(agent?.name, "reviewer");
+  assert.equal(agent?.description, "Reviews code changes for correctness.");
+  assert.equal(agent?.defaultModel, "anthropic/claude-sonnet-4-5");
+  assert.deepEqual(agent?.defaultTools.sort(), ["bash", "read"]);
+});
+
+test("discoverAgentHarness scans the global opencode config directory", async () => {
+  const home = mkdtempSync(join(tmpdir(), "devdeck-global-home-"));
+  const xdg = join(home, ".config");
+  const globalAgentDir = join(xdg, "opencode", "agent");
+  mkdirSync(globalAgentDir, { recursive: true });
+  writeFileSync(
+    join(globalAgentDir, "planner.md"),
+    [
+      "---",
+      "description: Breaks the task into steps.",
+      "model: anthropic/claude-opus-4-5",
+      "---",
+      "You are a planner.",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const previousHome = process.env.HOME;
+  const previousXdg = process.env.XDG_CONFIG_HOME;
+  process.env.HOME = home;
+  process.env.XDG_CONFIG_HOME = xdg;
+
+  try {
+    const result = await discoverAgentHarness({ projects: [] });
+
+    const globalAgents = result.agents.filter(
+      (agent) => agent.sourcePath === join(globalAgentDir, "planner.md"),
+    );
+    assert.equal(globalAgents.length, 1, "expected the global planner agent");
+    assert.equal(globalAgents[0]?.name, "planner");
+    assert.equal(globalAgents[0]?.description, "Breaks the task into steps.");
+    assert.equal(globalAgents[0]?.defaultModel, "anthropic/claude-opus-4-5");
+    assert.equal(globalAgents[0]?.projectName, "Global (opencode)");
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    if (previousXdg === undefined) {
+      delete process.env.XDG_CONFIG_HOME;
+    } else {
+      process.env.XDG_CONFIG_HOME = previousXdg;
+    }
+    rmSync(home, { force: true, recursive: true });
+  }
+});
+
 test("discoverAgentHarness skips volatile opencode subdirectories", async () => {
   const root = mkdtempSync(join(tmpdir(), "devdeck-opencode-skip-"));
   const repoPath = join(root, "repo");
