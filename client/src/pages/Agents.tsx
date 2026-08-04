@@ -1,6 +1,8 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -23,9 +25,11 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Star,
   Timer,
   TrendingUp,
   Workflow,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
@@ -36,8 +40,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import PaginationControls from "@/components/ui/pagination-controls";
 import { useToast } from "@/hooks/use-toast";
 import { useAgentHarness } from "@/hooks/use-agent-harness";
+import { usePagination } from "@/hooks/use-pagination";
+import { usePersistentState } from "@/hooks/use-persistent-state";
+import { useWorkspaceSnapshot } from "@/hooks/use-workspace-snapshot";
 import {
   useAgentRunsState,
   useTaskTraceEntriesState,
@@ -50,8 +58,10 @@ import {
   buildDefaultHandoffBranchName,
   haveAgentRunLinksChanged,
   linkAgentRunsToOpenCodeUsageRecords,
+  mergeAgentRuns,
   normalizeAgentRuns,
   summarizeAgentRunsByStatus,
+  synthesizeAgentRunsFromOpenCodeRecords,
   updateAgentRunStatus,
 } from "@/lib/agent-runs";
 import { getDesktopApi } from "@/lib/desktop";
@@ -102,8 +112,19 @@ import type {
   WorkflowDefinition,
 } from "@shared/agents";
 
+const FAVOURITE_AGENTS_STORAGE_KEY = "devdeck:agents:favourite-ids";
+const DISMISSED_SOURCE_ERRORS_STORAGE_KEY =
+  "devdeck:agents:dismissed-source-errors";
+const AGENTS_PAGE_SIZE = 8;
+const HARNESS_SOURCES_PAGE_SIZE = 6;
+const AGENT_RUNS_PAGE_SIZE = 8;
+
 function formatSourceName(sourcePath: string) {
   return sourcePath.split("/").filter(Boolean).slice(-2).join("/");
+}
+
+function buildSourceErrorKey(sourcePath: string, errors: string[]) {
+  return `${sourcePath}::${errors.join("\n")}`;
 }
 
 function formatTokenBudget(tokenBudget: number | null) {
@@ -1169,15 +1190,19 @@ function ProductivityInsightsSection({
 
 function AgentCard({
   agent,
+  isFavourite,
   onCopyBrief,
   onOpenSource,
   onRevealSource,
+  onToggleFavourite,
   tokenUsage,
 }: {
   agent: AgentDefinition;
+  isFavourite: boolean;
   onCopyBrief: (agent: AgentDefinition) => void;
   onOpenSource: (sourcePath: string) => void;
   onRevealSource: (sourcePath: string) => void;
+  onToggleFavourite: (agentId: string) => void;
   tokenUsage: TokenUsageSummary | null;
 }) {
   const primaryResponsibilities =
@@ -1200,6 +1225,24 @@ function AgentCard({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => onToggleFavourite(agent.id)}
+            title={isFavourite ? "Remove from favourites" : "Mark as favourite"}
+            aria-pressed={isFavourite}
+          >
+            <Star
+              className={cn(
+                "h-3.5 w-3.5",
+                isFavourite
+                  ? "fill-amber-400 text-amber-500"
+                  : "text-muted-foreground",
+              )}
+            />
+          </Button>
           <Button
             type="button"
             variant="ghost"
@@ -1790,7 +1833,22 @@ export default function Agents() {
     preferredToolShortLabel,
   } = useCodingTool();
   const workspaceSelection = useWorkspaceSelection();
+  const { data: workspaceSnapshot } = useWorkspaceSnapshot();
   const { data, error, isFetching, isLoading, refetch } = useAgentHarness();
+  const [favouriteAgentIds, setFavouriteAgentIds] = usePersistentState<string[]>(
+    FAVOURITE_AGENTS_STORAGE_KEY,
+    [],
+  );
+  const favouriteAgentIdSet = useMemo(
+    () => new Set(favouriteAgentIds),
+    [favouriteAgentIds],
+  );
+  const [dismissedSourceErrorKeys, setDismissedSourceErrorKeys] =
+    usePersistentState<string[]>(DISMISSED_SOURCE_ERRORS_STORAGE_KEY, []);
+  const dismissedSourceErrorKeySet = useMemo(
+    () => new Set(dismissedSourceErrorKeys),
+    [dismissedSourceErrorKeys],
+  );
   const [agentRuns, setAgentRuns, { error: agentRunStorageError }] =
     useAgentRunsState();
   const [
@@ -1823,6 +1881,41 @@ export default function Agents() {
   const workflows = data?.workflows ?? [];
   const sources = data?.sources ?? [];
   const sourceErrors = sources.filter((source) => source.errors.length > 0);
+  const visibleSourceErrors = useMemo(
+    () =>
+      sourceErrors.filter(
+        (source) =>
+          !dismissedSourceErrorKeySet.has(
+            buildSourceErrorKey(source.sourcePath, source.errors),
+          ),
+      ),
+    [dismissedSourceErrorKeySet, sourceErrors],
+  );
+
+  const agentRunsRef = useRef(agentRuns);
+  const agentsRef = useRef(agents);
+  const workspaceProjectsRefInit = useMemo(
+    () =>
+      (workspaceSnapshot?.projects ?? []).map((project) => ({
+        id: project.id,
+        localPath: project.localPath ?? null,
+      })),
+    [workspaceSnapshot?.projects],
+  );
+  const workspaceProjectsRef = useRef(workspaceProjectsRefInit);
+  const workspaceSelectionRef = useRef(workspaceSelection);
+  useEffect(() => {
+    agentRunsRef.current = agentRuns;
+  }, [agentRuns]);
+  useEffect(() => {
+    agentsRef.current = agents;
+  }, [agents]);
+  useEffect(() => {
+    workspaceProjectsRef.current = workspaceProjectsRefInit;
+  }, [workspaceProjectsRefInit]);
+  useEffect(() => {
+    workspaceSelectionRef.current = workspaceSelection;
+  }, [workspaceSelection]);
   const runStatusSummary = useMemo(
     () => summarizeAgentRunsByStatus(agentRuns),
     [agentRuns],
@@ -1848,10 +1941,21 @@ export default function Agents() {
               .includes(normalizedQuery);
 
           return matchesProject && matchesQuery;
-        })
-        .slice(0, 8),
+        }),
     [agentRuns, agents, normalizedQuery, projectFilter],
   );
+  const agentRunsPagination = usePagination(
+    visibleAgentRuns,
+    AGENT_RUNS_PAGE_SIZE,
+    {
+      resetKey: `${projectFilter}:${normalizedQuery}`,
+      storageKey: "devdeck:agents:runs-pagination",
+    },
+  );
+  const sourcesPagination = usePagination(sources, HARNESS_SOURCES_PAGE_SIZE, {
+    resetKey: sources.length,
+    storageKey: "devdeck:agents:sources-pagination",
+  });
   const tokenUsageSummaries = useMemo(
     () => summarizeTokenUsageByAgent(tokenUsageEvents),
     [tokenUsageEvents],
@@ -2021,112 +2125,149 @@ export default function Agents() {
       }),
     [agents, normalizedQuery, projectFilter],
   );
+  const sortedAgents = useMemo(
+    () =>
+      [...filteredAgents].sort((left, right) => {
+        const leftFavourite = favouriteAgentIdSet.has(left.id) ? 0 : 1;
+        const rightFavourite = favouriteAgentIdSet.has(right.id) ? 0 : 1;
+        if (leftFavourite !== rightFavourite) {
+          return leftFavourite - rightFavourite;
+        }
+        return left.name.localeCompare(right.name);
+      }),
+    [favouriteAgentIdSet, filteredAgents],
+  );
+  const agentsPagination = usePagination(sortedAgents, AGENTS_PAGE_SIZE, {
+    resetKey: `${projectFilter}:${normalizedQuery}`,
+    storageKey: "devdeck:agents:list-pagination",
+  });
+  const toggleFavouriteAgent = useCallback(
+    (agentId: string) => {
+      setFavouriteAgentIds((current) =>
+        current.includes(agentId)
+          ? current.filter((id) => id !== agentId)
+          : [...current, agentId],
+      );
+    },
+    [setFavouriteAgentIds],
+  );
 
-  useEffect(() => {
+  const runOpenCodeUsageSync = useCallback(async () => {
     if (!desktopApi?.listOpenCodeUsageRecords) {
       return;
     }
 
-    let cancelled = false;
-    void desktopApi
-      .listOpenCodeUsageRecords()
-      .then((records) => {
-        if (cancelled) {
-          return;
-        }
-
-        const normalizedRuns = normalizeAgentRuns(agentRuns);
-        const linkedRuns = linkAgentRunsToOpenCodeUsageRecords(
-          normalizedRuns,
-          records,
-        );
-        if (haveAgentRunLinksChanged(normalizedRuns, linkedRuns)) {
-          setAgentRuns(linkedRuns);
-        }
-
-        const events = buildTokenUsageEventsFromOpenCodeRecords(records, linkedRuns);
-        if (events.length > 0) {
-          setTokenUsageEvents((currentEvents) =>
-            mergeTokenUsageEvents(currentEvents, events).slice(0, 10_000),
-          );
-        }
-        setUsageIngestionError(null);
-        setUsageSyncedAt(new Date().toISOString());
-      })
-      .catch((nextError) => {
-        if (cancelled) {
-          return;
-        }
-        setUsageIngestionError(
-          nextError instanceof Error ? nextError.message : String(nextError),
-        );
+    try {
+      const records = await desktopApi.listOpenCodeUsageRecords();
+      const currentRuns = normalizeAgentRuns(agentRunsRef.current);
+      const linkedRuns = linkAgentRunsToOpenCodeUsageRecords(
+        currentRuns,
+        records,
+      );
+      const synthesized = synthesizeAgentRunsFromOpenCodeRecords(records, {
+        agents: agentsRef.current,
+        existingRuns: linkedRuns,
+        projects: workspaceProjectsRef.current,
       });
+      const nextRuns = mergeAgentRuns(linkedRuns, synthesized);
+      const linksChanged = haveAgentRunLinksChanged(currentRuns, linkedRuns);
+      if (linksChanged || synthesized.length > 0) {
+        setAgentRuns(nextRuns);
+      }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [agentRuns, desktopApi, setAgentRuns, setTokenUsageEvents]);
+      const events = buildTokenUsageEventsFromOpenCodeRecords(records, nextRuns);
+      if (events.length > 0) {
+        setTokenUsageEvents((currentEvents) =>
+          mergeTokenUsageEvents(currentEvents, events).slice(0, 10_000),
+        );
+      }
+      setUsageIngestionError(null);
+      setUsageSyncedAt(new Date().toISOString());
+    } catch (nextError) {
+      setUsageIngestionError(
+        nextError instanceof Error ? nextError.message : String(nextError),
+      );
+    }
+  }, [desktopApi, setAgentRuns, setTokenUsageEvents]);
 
-  useEffect(() => {
+  const runTaskTraceIngestion = useCallback(async () => {
     if (!desktopApi?.ingestAgentTaskTraces) {
       return;
     }
 
-    let cancelled = false;
-    const ingestTaskTraceFiles = async () => {
-      try {
-        const result = await desktopApi.ingestAgentTaskTraces({
-          selection: workspaceSelection,
-        });
-        if (cancelled) {
-          return;
+    try {
+      const result = await desktopApi.ingestAgentTaskTraces({
+        selection: workspaceSelectionRef.current,
+      });
+      setTaskTraceEntries((currentEntries) => {
+        if (
+          result.newEntryCount === 0 &&
+          result.taskTraceEntries.length === currentEntries.length
+        ) {
+          return currentEntries;
         }
 
-        setTaskTraceEntries((currentEntries) => {
-          if (
-            result.newEntryCount === 0 &&
-            result.taskTraceEntries.length === currentEntries.length
-          ) {
-            return currentEntries;
-          }
+        return result.taskTraceEntries;
+      });
+      const firstFileError =
+        result.fileResults.find((fileResult) => fileResult.error)?.error ?? null;
+      setTraceIngestionError(
+        firstFileError
+          ? `${result.errorCount} trace file issue${
+              result.errorCount === 1 ? "" : "s"
+            }: ${firstFileError}`
+          : null,
+      );
+      setTraceIngestionSummary({
+        filesScanned: result.filesScanned,
+        newEntryCount: result.newEntryCount,
+        rejectedCount: result.rejectedCount,
+      });
+      setTraceIngestionSyncedAt(new Date().toISOString());
+    } catch (nextError) {
+      setTraceIngestionError(
+        nextError instanceof Error ? nextError.message : String(nextError),
+      );
+    }
+  }, [desktopApi, setTaskTraceEntries]);
 
-          return result.taskTraceEntries;
-        });
-        const firstFileError =
-          result.fileResults.find((fileResult) => fileResult.error)?.error ?? null;
-        setTraceIngestionError(
-          firstFileError
-            ? `${result.errorCount} trace file issue${
-                result.errorCount === 1 ? "" : "s"
-              }: ${firstFileError}`
-            : null,
-        );
-        setTraceIngestionSummary({
-          filesScanned: result.filesScanned,
-          newEntryCount: result.newEntryCount,
-          rejectedCount: result.rejectedCount,
-        });
-        setTraceIngestionSyncedAt(new Date().toISOString());
-      } catch (nextError) {
-        if (cancelled) {
-          return;
-        }
-        setTraceIngestionError(
-          nextError instanceof Error ? nextError.message : String(nextError),
-        );
-      }
-    };
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-    void ingestTaskTraceFiles();
+  const handleRefreshAll = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        refetch(),
+        runOpenCodeUsageSync(),
+        runTaskTraceIngestion(),
+      ]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refetch, runOpenCodeUsageSync, runTaskTraceIngestion]);
+
+  const hasRunMountRefreshRef = useRef(false);
+  useEffect(() => {
+    if (hasRunMountRefreshRef.current) {
+      return;
+    }
+    hasRunMountRefreshRef.current = true;
+    void runOpenCodeUsageSync();
+    void runTaskTraceIngestion();
+  }, [runOpenCodeUsageSync, runTaskTraceIngestion]);
+
+  // Keep task-trace ingestion running periodically so long-lived Agents
+  // pages pick up new JSONL entries appended by active agents without
+  // requiring a manual refresh (the "Watching" banner would otherwise lie).
+  useEffect(() => {
+    if (!desktopApi?.ingestAgentTaskTraces) {
+      return;
+    }
     const intervalId = window.setInterval(() => {
-      void ingestTaskTraceFiles();
+      void runTaskTraceIngestion();
     }, 15_000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [desktopApi, setTaskTraceEntries, workspaceSelection]);
+    return () => window.clearInterval(intervalId);
+  }, [desktopApi, runTaskTraceIngestion]);
 
   useEffect(() => {
     if (visibleAgentRuns.length === 0) {
@@ -2472,10 +2613,15 @@ export default function Agents() {
               variant="outline"
               size="sm"
               className="gap-2"
-              onClick={() => void refetch()}
-              disabled={isFetching}
+              onClick={() => void handleRefreshAll()}
+              disabled={isFetching || isRefreshing}
             >
-              <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
+              <RefreshCw
+                className={cn(
+                  "h-3.5 w-3.5",
+                  (isFetching || isRefreshing) && "animate-spin",
+                )}
+              />
               Refresh
             </Button>
             <DropdownMenu>
@@ -2611,20 +2757,43 @@ export default function Agents() {
           </div>
         ) : null}
 
-        {sourceErrors.length > 0 ? (
+        {visibleSourceErrors.length > 0 ? (
           <section className="space-y-2">
-            {sourceErrors.map((source) => (
-              <div
-                key={source.sourcePath}
-                className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200"
-              >
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div className="min-w-0">
-                  <p className="font-semibold">{formatSourceName(source.sourcePath)}</p>
-                  <p className="mt-1 break-words">{source.errors.join(" ")}</p>
+            {visibleSourceErrors.map((source) => {
+              const dismissKey = buildSourceErrorKey(
+                source.sourcePath,
+                source.errors,
+              );
+              return (
+                <div
+                  key={source.sourcePath}
+                  className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200"
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">{formatSourceName(source.sourcePath)}</p>
+                    <p className="mt-1 break-words">{source.errors.join(" ")}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0 text-amber-900 hover:text-amber-950 dark:text-amber-200"
+                    onClick={() =>
+                      setDismissedSourceErrorKeys((current) =>
+                        current.includes(dismissKey)
+                          ? current
+                          : [...current, dismissKey],
+                      )
+                    }
+                    title="Dismiss warning"
+                    aria-label="Dismiss warning"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </section>
         ) : null}
 
@@ -2639,7 +2808,7 @@ export default function Agents() {
           <div className="rounded-lg border border-dashed border-black/10 p-10 text-center text-sm text-muted-foreground dark:border-white/10">
             Scanning local harness files...
           </div>
-        ) : filteredAgents.length === 0 ? (
+        ) : sortedAgents.length === 0 ? (
           <div className="rounded-lg border border-dashed border-black/10 bg-white/45 p-10 text-center dark:border-white/10 dark:bg-white/5">
             <Bot className="mx-auto h-8 w-8 text-muted-foreground" />
             <h2 className="mt-3 text-sm font-semibold text-foreground">No agents found</h2>
@@ -2648,18 +2817,29 @@ export default function Agents() {
             </p>
           </div>
         ) : (
-          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {filteredAgents.map((agent) => (
-              <AgentCard
-                key={`${agent.sourcePath}:${agent.id}`}
-                agent={agent}
-                onCopyBrief={handleCopyAgentBrief}
-                onOpenSource={handleOpenSource}
-                onRevealSource={handleRevealSource}
-                tokenUsage={tokenUsageByAgent.get(agent.id) ?? null}
-              />
-            ))}
-          </section>
+          <>
+            <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {agentsPagination.paginatedItems.map((agent) => (
+                <AgentCard
+                  key={`${agent.sourcePath}:${agent.id}`}
+                  agent={agent}
+                  isFavourite={favouriteAgentIdSet.has(agent.id)}
+                  onCopyBrief={handleCopyAgentBrief}
+                  onOpenSource={handleOpenSource}
+                  onRevealSource={handleRevealSource}
+                  onToggleFavourite={toggleFavouriteAgent}
+                  tokenUsage={tokenUsageByAgent.get(agent.id) ?? null}
+                />
+              ))}
+            </section>
+            <PaginationControls
+              currentPage={agentsPagination.currentPage}
+              onPageChange={agentsPagination.setCurrentPage}
+              pageSize={agentsPagination.pageSize}
+              totalItems={agentsPagination.totalItems}
+              label="agents"
+            />
+          </>
         )}
 
         <section className="space-y-3">
@@ -2687,7 +2867,7 @@ export default function Agents() {
           {visibleAgentRuns.length > 0 ? (
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
               <div className="space-y-2">
-                {visibleAgentRuns.map((run) => (
+                {agentRunsPagination.paginatedItems.map((run) => (
                   <AgentRunRow
                     key={run.id}
                     agents={agents}
@@ -2702,6 +2882,13 @@ export default function Agents() {
                     onStatusChange={handleRunStatusChange}
                   />
                 ))}
+                <PaginationControls
+                  currentPage={agentRunsPagination.currentPage}
+                  onPageChange={agentRunsPagination.setCurrentPage}
+                  pageSize={agentRunsPagination.pageSize}
+                  totalItems={agentRunsPagination.totalItems}
+                  label="runs"
+                />
               </div>
               <AgentRunDetail
                 agents={agents}
@@ -2815,8 +3002,69 @@ export default function Agents() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-black/10 p-5 text-sm text-muted-foreground dark:border-white/10">
-                No workflow definitions were imported yet.
+              <div className="space-y-3 rounded-lg border border-dashed border-black/10 p-5 text-sm text-muted-foreground dark:border-white/10">
+                <p className="text-foreground">
+                  No workflow definitions were imported yet.
+                </p>
+                <p className="leading-6">
+                  Workflows describe the ordered agent handoffs a task should
+                  follow (for example, <em>planner → coder → reviewer</em>).
+                  DevDeck reads them from harness files inside each project.
+                </p>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase text-foreground/80">
+                    Where to add one
+                  </p>
+                  <ul className="mt-1 list-disc space-y-1 pl-5 text-xs leading-6">
+                    <li>
+                      <code className="rounded bg-secondary px-1 py-0.5 text-[11px]">
+                        .opencode/workflows.json
+                      </code>{" "}
+                      or{" "}
+                      <code className="rounded bg-secondary px-1 py-0.5 text-[11px]">
+                        .opencode/harness.json
+                      </code>{" "}
+                      with a{" "}
+                      <code className="rounded bg-secondary px-1 py-0.5 text-[11px]">
+                        workflows
+                      </code>{" "}
+                      array
+                    </li>
+                    <li>
+                      <code className="rounded bg-secondary px-1 py-0.5 text-[11px]">
+                        agents.json
+                      </code>{" "}
+                      with a top-level{" "}
+                      <code className="rounded bg-secondary px-1 py-0.5 text-[11px]">
+                        workflows
+                      </code>{" "}
+                      field
+                    </li>
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase text-foreground/80">
+                    Minimal shape
+                  </p>
+                  <pre className="mt-1 overflow-x-auto rounded-md bg-secondary/60 p-2 text-[11px] leading-5 text-foreground">
+{`{
+  "workflows": [
+    {
+      "id": "review-loop",
+      "name": "Review Loop",
+      "steps": [
+        { "id": "plan",   "name": "Plan",   "agentId": "planner",  "nextStepIds": ["build"] },
+        { "id": "build",  "name": "Build",  "agentId": "coder",    "nextStepIds": ["review"] },
+        { "id": "review", "name": "Review", "agentId": "reviewer" }
+      ]
+    }
+  ]
+}`}
+                  </pre>
+                </div>
+                <p className="text-xs">
+                  After saving, click Refresh to re-scan.
+                </p>
               </div>
             )}
           </div>
@@ -2827,7 +3075,7 @@ export default function Agents() {
               <h2 className="text-sm font-semibold text-foreground">Harness Sources</h2>
             </div>
             <div className="space-y-2">
-              {sources.map((source) => (
+              {sourcesPagination.paginatedItems.map((source) => (
                 <div
                   key={source.sourcePath}
                   className="rounded-lg border border-black/10 bg-white/70 p-3 text-xs dark:border-white/10 dark:bg-white/5"
@@ -2862,6 +3110,13 @@ export default function Agents() {
                   No harness source files found.
                 </div>
               ) : null}
+              <PaginationControls
+                currentPage={sourcesPagination.currentPage}
+                onPageChange={sourcesPagination.setCurrentPage}
+                pageSize={sourcesPagination.pageSize}
+                totalItems={sourcesPagination.totalItems}
+                label="sources"
+              />
             </div>
             <p className="text-[11px] leading-5 text-muted-foreground">
               Source definitions open with {preferredToolShortLabel}; reveal uses Finder.

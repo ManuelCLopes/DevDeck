@@ -55,5 +55,6 @@ export {
   normalizeAgentRuns,
   sortAgentRuns,
   summarizeAgentRunsByStatus,
+  synthesizeAgentRunsFromOpenCodeRecords,
   updateAgentRunStatus,
 } from "@shared/agent-telemetry";
