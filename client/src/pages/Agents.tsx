@@ -1401,31 +1401,29 @@ function WorkflowRow({
   workflow: WorkflowDefinition;
   onSelect: (workflow: WorkflowDefinition) => void;
 }) {
+  // Row is intentionally minimal: name, description, project, and a
+  // step count. The click-through modal is the source of truth for
+  // step names, agents, and models, so we don't duplicate them here.
+  const stepCountLabel = `${workflow.steps.length} step${workflow.steps.length === 1 ? "" : "s"}`;
   return (
     <button
       type="button"
       onClick={() => onSelect(workflow)}
-      className="w-full rounded-lg border border-black/10 bg-white/70 p-3 text-left transition hover:border-primary/50 hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+      className="flex w-full items-start justify-between gap-3 rounded-lg border border-black/10 bg-white/70 p-3 text-left transition hover:border-primary/50 hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
       title="Open workflow diagram"
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-foreground">{workflow.name}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {workflow.description ?? `${workflow.steps.length} workflow steps imported`}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-foreground">{workflow.name}</p>
+        {workflow.description ? (
+          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+            {workflow.description}
           </p>
-        </div>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <AgentPill>{stepCountLabel}</AgentPill>
         <AgentPill tone="green">{getProjectLabel(workflow.projectName)}</AgentPill>
       </div>
-      {workflow.steps.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {workflow.steps.slice(0, 6).map((step) => (
-            <AgentPill key={step.id} tone="blue">
-              {step.name}
-            </AgentPill>
-          ))}
-        </div>
-      ) : null}
     </button>
   );
 }
