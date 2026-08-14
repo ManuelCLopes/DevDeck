@@ -35,11 +35,25 @@ import {
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import PaginationControls from "@/components/ui/pagination-controls";
 import { useToast } from "@/hooks/use-toast";
 import { useAgentHarness } from "@/hooks/use-agent-harness";
@@ -115,9 +129,37 @@ import type {
 const FAVOURITE_AGENTS_STORAGE_KEY = "devdeck:agents:favourite-ids";
 const DISMISSED_SOURCE_ERRORS_STORAGE_KEY =
   "devdeck:agents:dismissed-source-errors";
+const TIME_RANGE_STORAGE_KEY = "devdeck:agents:time-range";
 const AGENTS_PAGE_SIZE = 8;
 const HARNESS_SOURCES_PAGE_SIZE = 6;
 const AGENT_RUNS_PAGE_SIZE = 8;
+
+const TIME_RANGE_OPTIONS = [
+  { value: "24h", label: "Last 24 hours", days: 1 },
+  { value: "7d", label: "Last 7 days", days: 7 },
+  { value: "30d", label: "Last 30 days", days: 30 },
+  { value: "90d", label: "Last 90 days", days: 90 },
+  { value: "all", label: "All time", days: null },
+] as const;
+
+type TimeRangeValue = (typeof TIME_RANGE_OPTIONS)[number]["value"];
+
+const DEFAULT_TIME_RANGE: TimeRangeValue = "30d";
+
+function getTimeRangeCutoffMs(range: TimeRangeValue): number | null {
+  const option = TIME_RANGE_OPTIONS.find((entry) => entry.value === range);
+  if (!option || option.days === null) {
+    return null;
+  }
+  return Date.now() - option.days * 24 * 60 * 60 * 1000;
+}
+
+function isValidTimeRange(value: unknown): value is TimeRangeValue {
+  return (
+    typeof value === "string" &&
+    TIME_RANGE_OPTIONS.some((option) => option.value === value)
+  );
+}
 
 function formatSourceName(sourcePath: string) {
   return sourcePath.split("/").filter(Boolean).slice(-2).join("/");
@@ -1332,19 +1374,18 @@ function AgentCard({
         ) : null}
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-1.5 border-t border-black/10 pt-3 dark:border-white/10">
-        {agent.defaultTools.slice(0, 4).map((tool) => (
-          <AgentPill key={`tool:${tool}`}>{tool}</AgentPill>
-        ))}
-        {agent.defaultSkills.slice(0, 4).map((skill) => (
-          <AgentPill key={`skill:${skill}`} tone="blue">
-            {skill}
-          </AgentPill>
-        ))}
-        {agent.defaultTools.length === 0 && agent.defaultSkills.length === 0 ? (
-          <AgentPill>No tools parsed</AgentPill>
-        ) : null}
-      </div>
+      {agent.defaultTools.length > 0 || agent.defaultSkills.length > 0 ? (
+        <div className="mt-4 flex flex-wrap gap-1.5 border-t border-black/10 pt-3 dark:border-white/10">
+          {agent.defaultTools.slice(0, 4).map((tool) => (
+            <AgentPill key={`tool:${tool}`}>{tool}</AgentPill>
+          ))}
+          {agent.defaultSkills.slice(0, 4).map((skill) => (
+            <AgentPill key={`skill:${skill}`} tone="blue">
+              {skill}
+            </AgentPill>
+          ))}
+        </div>
+      ) : null}
 
       <p className="mt-3 truncate text-[10px] text-muted-foreground">
         Source: {formatSourceName(agent.sourcePath)}
@@ -1353,9 +1394,20 @@ function AgentCard({
   );
 }
 
-function WorkflowRow({ workflow }: { workflow: WorkflowDefinition }) {
+function WorkflowRow({
+  workflow,
+  onSelect,
+}: {
+  workflow: WorkflowDefinition;
+  onSelect: (workflow: WorkflowDefinition) => void;
+}) {
   return (
-    <div className="rounded-lg border border-black/10 bg-white/70 p-3 dark:border-white/10 dark:bg-white/5">
+    <button
+      type="button"
+      onClick={() => onSelect(workflow)}
+      className="w-full rounded-lg border border-black/10 bg-white/70 p-3 text-left transition hover:border-primary/50 hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+      title="Open workflow diagram"
+    >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-foreground">{workflow.name}</p>
@@ -1374,8 +1426,328 @@ function WorkflowRow({ workflow }: { workflow: WorkflowDefinition }) {
           ))}
         </div>
       ) : null}
-    </div>
+    </button>
   );
+}
+
+// --- Workflow diagram helpers ---
+
+interface WorkflowLayoutNode {
+  step: WorkflowDefinition["steps"][number];
+  col: number;
+  row: number;
+  x: number;
+  y: number;
+}
+
+const WORKFLOW_NODE_WIDTH = 220;
+const WORKFLOW_NODE_HEIGHT = 96;
+const WORKFLOW_COLUMN_GAP = 60;
+const WORKFLOW_ROW_GAP = 24;
+const WORKFLOW_DIAGRAM_PADDING = 24;
+
+function computeWorkflowLayout(workflow: WorkflowDefinition): {
+  nodes: WorkflowLayoutNode[];
+  width: number;
+  height: number;
+} {
+  const steps = workflow.steps;
+  if (steps.length === 0) {
+    return { nodes: [], width: 0, height: 0 };
+  }
+
+  const stepById = new Map(steps.map((step) => [step.id, step]));
+  // Longest-path level assignment: level(step) = 1 + max(level(pred)).
+  // Steps with no predecessor start at level 0. Cycles are broken by the
+  // memoized visitor guard.
+  const predecessorsById = new Map<string, string[]>();
+  for (const step of steps) {
+    predecessorsById.set(step.id, []);
+  }
+  for (const step of steps) {
+    for (const nextId of step.nextStepIds) {
+      if (!stepById.has(nextId)) {
+        continue;
+      }
+      predecessorsById.get(nextId)!.push(step.id);
+    }
+  }
+
+  const levelById = new Map<string, number>();
+  const visiting = new Set<string>();
+  const resolveLevel = (id: string): number => {
+    if (levelById.has(id)) {
+      return levelById.get(id)!;
+    }
+    if (visiting.has(id)) {
+      // Cycle guard: treat as root to avoid infinite recursion.
+      levelById.set(id, 0);
+      return 0;
+    }
+    visiting.add(id);
+    const preds = predecessorsById.get(id) ?? [];
+    const level = preds.length === 0
+      ? 0
+      : Math.max(...preds.map((predId) => resolveLevel(predId))) + 1;
+    visiting.delete(id);
+    levelById.set(id, level);
+    return level;
+  };
+  for (const step of steps) {
+    resolveLevel(step.id);
+  }
+
+  const columns = new Map<number, WorkflowDefinition["steps"]>();
+  for (const step of steps) {
+    const level = levelById.get(step.id) ?? 0;
+    const list = columns.get(level) ?? [];
+    list.push(step);
+    columns.set(level, list);
+  }
+
+  const sortedLevels = Array.from(columns.keys()).sort((a, b) => a - b);
+  const nodes: WorkflowLayoutNode[] = [];
+  let maxRows = 0;
+  sortedLevels.forEach((level, colIndex) => {
+    const stepsInColumn = columns.get(level)!;
+    if (stepsInColumn.length > maxRows) {
+      maxRows = stepsInColumn.length;
+    }
+    stepsInColumn.forEach((step, rowIndex) => {
+      nodes.push({
+        step,
+        col: colIndex,
+        row: rowIndex,
+        x: WORKFLOW_DIAGRAM_PADDING + colIndex * (WORKFLOW_NODE_WIDTH + WORKFLOW_COLUMN_GAP),
+        y: WORKFLOW_DIAGRAM_PADDING + rowIndex * (WORKFLOW_NODE_HEIGHT + WORKFLOW_ROW_GAP),
+      });
+    });
+  });
+
+  const width =
+    WORKFLOW_DIAGRAM_PADDING * 2 +
+    sortedLevels.length * WORKFLOW_NODE_WIDTH +
+    Math.max(0, sortedLevels.length - 1) * WORKFLOW_COLUMN_GAP;
+  const height =
+    WORKFLOW_DIAGRAM_PADDING * 2 +
+    Math.max(1, maxRows) * WORKFLOW_NODE_HEIGHT +
+    Math.max(0, maxRows - 1) * WORKFLOW_ROW_GAP;
+  return { nodes, width, height };
+}
+
+function WorkflowDiagramDialog({
+  agents,
+  onOpenChange,
+  workflow,
+}: {
+  agents: AgentDefinition[];
+  onOpenChange: (open: boolean) => void;
+  workflow: WorkflowDefinition | null;
+}) {
+  const layout = useMemo(
+    () => (workflow ? computeWorkflowLayout(workflow) : null),
+    [workflow],
+  );
+  const nodesById = useMemo(
+    () => new Map((layout?.nodes ?? []).map((node) => [node.step.id, node])),
+    [layout],
+  );
+  const agentsById = useMemo(
+    () => new Map(agents.map((agent) => [agent.id, agent])),
+    [agents],
+  );
+
+  if (!workflow || !layout) {
+    return null;
+  }
+
+  return (
+    <Dialog open={workflow !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl border-black/10 bg-white/95 backdrop-blur-2xl dark:border-white/10 dark:bg-neutral-900/95">
+        <DialogHeader className="text-left">
+          <DialogTitle className="text-base font-semibold">
+            {workflow.name}
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            {workflow.description ??
+              `${workflow.steps.length} step${workflow.steps.length === 1 ? "" : "s"} · ${getProjectLabel(workflow.projectName)}`}
+          </DialogDescription>
+        </DialogHeader>
+
+        {layout.nodes.length > 0 ? (
+          <div className="max-h-[60vh] overflow-auto rounded-lg border border-black/10 bg-secondary/30 dark:border-white/10">
+            <svg
+              width={layout.width}
+              height={layout.height}
+              viewBox={`0 0 ${layout.width} ${layout.height}`}
+              className="block"
+              role="img"
+              aria-label={`Diagram for ${workflow.name}`}
+            >
+              <defs>
+                <marker
+                  id="workflow-arrow"
+                  markerWidth={8}
+                  markerHeight={8}
+                  refX={7}
+                  refY={4}
+                  orient="auto"
+                  markerUnits="userSpaceOnUse"
+                >
+                  <path d="M 0 0 L 8 4 L 0 8 z" fill="currentColor" />
+                </marker>
+              </defs>
+              <g className="text-muted-foreground/60">
+                {layout.nodes.flatMap((node) =>
+                  node.step.nextStepIds
+                    .map((nextId) => nodesById.get(nextId))
+                    .filter((target): target is WorkflowLayoutNode => Boolean(target))
+                    .map((target, index) => {
+                      const startX = node.x + WORKFLOW_NODE_WIDTH;
+                      const startY = node.y + WORKFLOW_NODE_HEIGHT / 2;
+                      const endX = target.x;
+                      const endY = target.y + WORKFLOW_NODE_HEIGHT / 2;
+                      // Cubic bezier for a nicer arc when rows differ.
+                      const midX = (startX + endX) / 2;
+                      const path = `M ${startX} ${startY} C ${midX} ${startY} ${midX} ${endY} ${endX} ${endY}`;
+                      return (
+                        <path
+                          key={`${node.step.id}->${target.step.id}:${index}`}
+                          d={path}
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={1.5}
+                          markerEnd="url(#workflow-arrow)"
+                        />
+                      );
+                    }),
+                )}
+              </g>
+              {layout.nodes.map((node) => {
+                const agent = node.step.agentId
+                  ? agentsById.get(node.step.agentId)
+                  : null;
+                const modelLabel = agent?.defaultModel ?? agent?.defaultProvider ?? null;
+                return (
+                  <g key={node.step.id} transform={`translate(${node.x}, ${node.y})`}>
+                    <rect
+                      width={WORKFLOW_NODE_WIDTH}
+                      height={WORKFLOW_NODE_HEIGHT}
+                      rx={10}
+                      ry={10}
+                      className="fill-white stroke-black/20 dark:fill-white/10 dark:stroke-white/20"
+                    />
+                    <text
+                      x={12}
+                      y={22}
+                      className="fill-foreground"
+                      style={{ fontSize: 12, fontWeight: 600 }}
+                    >
+                      {truncateForSvg(node.step.name, 26)}
+                    </text>
+                    <text
+                      x={12}
+                      y={42}
+                      className="fill-muted-foreground"
+                      style={{ fontSize: 11 }}
+                    >
+                      {agent ? `Agent: ${truncateForSvg(agent.name, 22)}` : "No agent bound"}
+                    </text>
+                    <text
+                      x={12}
+                      y={60}
+                      className="fill-muted-foreground"
+                      style={{ fontSize: 10 }}
+                    >
+                      {modelLabel
+                        ? `Model: ${truncateForSvg(modelLabel, 24)}`
+                        : "Model: unspecified"}
+                    </text>
+                    {node.step.expectedOutput ? (
+                      <text
+                        x={12}
+                        y={80}
+                        className="fill-muted-foreground/80"
+                        style={{ fontSize: 10, fontStyle: "italic" }}
+                      >
+                        → {truncateForSvg(node.step.expectedOutput, 26)}
+                      </text>
+                    ) : null}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-black/10 p-6 text-center text-sm text-muted-foreground dark:border-white/10">
+            This workflow has no steps to diagram.
+          </div>
+        )}
+
+        {workflow.steps.length > 0 ? (
+          <div className="max-h-56 overflow-auto rounded-lg border border-black/10 dark:border-white/10">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-black/10 bg-secondary/50 text-[10px] uppercase text-muted-foreground dark:border-white/10">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">#</th>
+                  <th className="px-3 py-2 font-semibold">Step</th>
+                  <th className="px-3 py-2 font-semibold">Agent</th>
+                  <th className="px-3 py-2 font-semibold">Model</th>
+                  <th className="px-3 py-2 font-semibold">Next</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/10 dark:divide-white/10">
+                {workflow.steps.map((step, index) => {
+                  const agent = step.agentId ? agentsById.get(step.agentId) : null;
+                  const model = agent?.defaultModel ?? agent?.defaultProvider ?? null;
+                  return (
+                    <tr key={step.id}>
+                      <td className="px-3 py-2 text-muted-foreground">{index + 1}</td>
+                      <td className="px-3 py-2 font-medium text-foreground">
+                        <div className="flex flex-col">
+                          <span>{step.name}</span>
+                          {step.expectedOutput ? (
+                            <span className="text-[10px] text-muted-foreground">
+                              expects: {step.expectedOutput}
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {agent?.name ?? (
+                          <span className="text-muted-foreground">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {model ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {step.nextStepIds.length > 0
+                          ? step.nextStepIds
+                              .map((nextId) =>
+                                workflow.steps.find((candidate) => candidate.id === nextId)?.name ??
+                                nextId,
+                              )
+                              .join(", ")
+                          : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function truncateForSvg(value: string, maxLength: number) {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, Math.max(0, maxLength - 1))}…`;
 }
 
 function AgentRunRow({
@@ -1863,7 +2235,16 @@ export default function Agents() {
   ] = useTaskTraceEntriesState();
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [timeRangeRaw, setTimeRange] = usePersistentState<TimeRangeValue>(
+    TIME_RANGE_STORAGE_KEY,
+    DEFAULT_TIME_RANGE,
+  );
+  const timeRange: TimeRangeValue = isValidTimeRange(timeRangeRaw)
+    ? timeRangeRaw
+    : DEFAULT_TIME_RANGE;
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [selectedWorkflow, setSelectedWorkflow] =
+    useState<WorkflowDefinition | null>(null);
   const [usageIngestionError, setUsageIngestionError] = useState<string | null>(null);
   const [usageSyncedAt, setUsageSyncedAt] = useState<string | null>(null);
   const [traceIngestionError, setTraceIngestionError] = useState<string | null>(null);
@@ -1916,13 +2297,49 @@ export default function Agents() {
   useEffect(() => {
     workspaceSelectionRef.current = workspaceSelection;
   }, [workspaceSelection]);
+  // Time-range filter. The cutoff is recomputed on every render so that
+  // "Last 24 hours" tracks wall clock as the user leaves the page open;
+  // downstream memos still cache correctly since the same array
+  // identities are only produced when the input identities change.
+  const timeRangeCutoffMs = getTimeRangeCutoffMs(timeRange);
+  const timeFilteredAgentRuns = useMemo(() => {
+    if (timeRangeCutoffMs === null) {
+      return agentRuns;
+    }
+    return agentRuns.filter((run) => {
+      // Runs that are still open or ended within the window are kept.
+      // For completed runs we prefer endedAt when present, otherwise
+      // startedAt.
+      const anchor = run.endedAt ?? run.startedAt;
+      const parsed = new Date(anchor).getTime();
+      return Number.isFinite(parsed) && parsed >= timeRangeCutoffMs;
+    });
+  }, [agentRuns, timeRangeCutoffMs]);
+  const timeFilteredTokenUsageEvents = useMemo(() => {
+    if (timeRangeCutoffMs === null) {
+      return tokenUsageEvents;
+    }
+    return tokenUsageEvents.filter((event) => {
+      const parsed = new Date(event.createdAt).getTime();
+      return Number.isFinite(parsed) && parsed >= timeRangeCutoffMs;
+    });
+  }, [tokenUsageEvents, timeRangeCutoffMs]);
+  const timeFilteredTaskTraceEntries = useMemo(() => {
+    if (timeRangeCutoffMs === null) {
+      return taskTraceEntries;
+    }
+    return taskTraceEntries.filter((entry) => {
+      const parsed = new Date(entry.createdAt).getTime();
+      return Number.isFinite(parsed) && parsed >= timeRangeCutoffMs;
+    });
+  }, [taskTraceEntries, timeRangeCutoffMs]);
   const runStatusSummary = useMemo(
-    () => summarizeAgentRunsByStatus(agentRuns),
-    [agentRuns],
+    () => summarizeAgentRunsByStatus(timeFilteredAgentRuns),
+    [timeFilteredAgentRuns],
   );
   const visibleAgentRuns = useMemo(
     () =>
-      agentRuns
+      timeFilteredAgentRuns
         .filter((run) => {
           const matchesProject =
             projectFilter === "all" ||
@@ -1942,13 +2359,13 @@ export default function Agents() {
 
           return matchesProject && matchesQuery;
         }),
-    [agentRuns, agents, normalizedQuery, projectFilter],
+    [timeFilteredAgentRuns, agents, normalizedQuery, projectFilter],
   );
   const agentRunsPagination = usePagination(
     visibleAgentRuns,
     AGENT_RUNS_PAGE_SIZE,
     {
-      resetKey: `${projectFilter}:${normalizedQuery}`,
+      resetKey: `${projectFilter}:${normalizedQuery}:${timeRange}`,
       storageKey: "devdeck:agents:runs-pagination",
     },
   );
@@ -1957,8 +2374,8 @@ export default function Agents() {
     storageKey: "devdeck:agents:sources-pagination",
   });
   const tokenUsageSummaries = useMemo(
-    () => summarizeTokenUsageByAgent(tokenUsageEvents),
-    [tokenUsageEvents],
+    () => summarizeTokenUsageByAgent(timeFilteredTokenUsageEvents),
+    [timeFilteredTokenUsageEvents],
   );
   const tokenUsageByAgent = useMemo(
     () =>
@@ -1977,23 +2394,29 @@ export default function Agents() {
   const tokenUsageByRunId = useMemo(
     () =>
       new Map(
-        agentRuns.map((run) => [
+        timeFilteredAgentRuns.map((run) => [
           run.id,
-          summarizeTokenUsageForAgentRun(tokenUsageEvents, run),
+          summarizeTokenUsageForAgentRun(timeFilteredTokenUsageEvents, run),
         ]),
       ),
-    [agentRuns, tokenUsageEvents],
+    [timeFilteredAgentRuns, timeFilteredTokenUsageEvents],
   );
   const productivityInsights = useMemo(
     () =>
       buildAgentProductivityInsights({
         agents,
-        agentRuns,
-        taskTraceEntries,
-        tokenUsageEvents,
+        agentRuns: timeFilteredAgentRuns,
+        taskTraceEntries: timeFilteredTaskTraceEntries,
+        tokenUsageEvents: timeFilteredTokenUsageEvents,
         workflows,
       }),
-    [agents, agentRuns, taskTraceEntries, tokenUsageEvents, workflows],
+    [
+      agents,
+      timeFilteredAgentRuns,
+      timeFilteredTaskTraceEntries,
+      timeFilteredTokenUsageEvents,
+      workflows,
+    ],
   );
   const harnessQualityReport = useMemo(
     () =>
@@ -2007,11 +2430,11 @@ export default function Agents() {
   const handoffHealth = useMemo(
     () =>
       summarizeWorkflowHandoffHealth({
-        agentRuns,
-        taskTraceEntries,
+        agentRuns: timeFilteredAgentRuns,
+        taskTraceEntries: timeFilteredTaskTraceEntries,
         workflows,
       }),
-    [agentRuns, taskTraceEntries, workflows],
+    [timeFilteredAgentRuns, timeFilteredTaskTraceEntries, workflows],
   );
   const projectOptions = useMemo(
     () => uniqueValues(agents.map((agent) => agent.projectName)),
@@ -2175,7 +2598,11 @@ export default function Agents() {
         setAgentRuns(nextRuns);
       }
 
-      const events = buildTokenUsageEventsFromOpenCodeRecords(records, nextRuns);
+      const events = buildTokenUsageEventsFromOpenCodeRecords(
+        records,
+        nextRuns,
+        agentsRef.current,
+      );
       if (events.length > 0) {
         setTokenUsageEvents((currentEvents) =>
           mergeTokenUsageEvents(currentEvents, events).slice(0, 10_000),
@@ -2729,6 +3156,35 @@ export default function Agents() {
               className="h-9 w-full rounded-md border border-black/10 bg-white pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary/50 dark:border-white/10 dark:bg-background"
             />
           </div>
+          <div className="flex items-center gap-2">
+            <Timer className="h-3.5 w-3.5 text-muted-foreground" />
+            <Select
+              value={timeRange}
+              onValueChange={(value) => {
+                if (isValidTimeRange(value)) {
+                  setTimeRange(value);
+                }
+              }}
+            >
+              <SelectTrigger
+                className="h-9 w-[160px] border-black/10 bg-white text-xs dark:border-white/10 dark:bg-background"
+                aria-label="Time range"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIME_RANGE_OPTIONS.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    className="text-xs"
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex flex-wrap gap-2">
             {["all", ...projectOptions].map((projectName) => {
               const selected = projectFilter === projectName;
@@ -2949,10 +3405,27 @@ export default function Agents() {
                     const agent = summary.agentId
                       ? agents.find((candidate) => candidate.id === summary.agentId)
                       : null;
+                    // Prefer the resolved agent name; when the summary
+                    // couldn't be matched to a DevDeck agent, show the
+                    // model name (bucketed per model by the summarizer)
+                    // instead of collapsing every model into "Unassigned".
+                    const label =
+                      agent?.name ??
+                      (summary.model ? summary.model : "Unassigned");
+                    const rowKey =
+                      summary.agentId ??
+                      (summary.model ? `model:${summary.model}` : "unassigned");
                     return (
-                      <tr key={summary.agentId ?? "unassigned"}>
+                      <tr key={rowKey}>
                         <td className="px-3 py-2 font-medium text-foreground">
-                          {agent?.name ?? "Unassigned"}
+                          <div className="flex flex-col">
+                            <span>{label}</span>
+                            {!agent && summary.model ? (
+                              <span className="text-[10px] font-normal text-muted-foreground">
+                                model
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">{summary.eventCount}</td>
                         <td className="px-3 py-2 text-muted-foreground">
@@ -2998,7 +3471,11 @@ export default function Agents() {
             {workflows.length > 0 ? (
               <div className="space-y-2">
                 {workflows.map((workflow) => (
-                  <WorkflowRow key={`${workflow.sourcePath}:${workflow.id}`} workflow={workflow} />
+                  <WorkflowRow
+                    key={`${workflow.sourcePath}:${workflow.id}`}
+                    workflow={workflow}
+                    onSelect={setSelectedWorkflow}
+                  />
                 ))}
               </div>
             ) : (
@@ -3124,6 +3601,16 @@ export default function Agents() {
           </div>
         </section>
       </div>
+
+      <WorkflowDiagramDialog
+        agents={agents}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedWorkflow(null);
+          }
+        }}
+        workflow={selectedWorkflow}
+      />
     </AppLayout>
   );
 }
