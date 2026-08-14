@@ -422,11 +422,18 @@ export function summarizeTokenUsageByAgent(events: TokenUsageEvent[]) {
     // Bucket by agentId when we have one. When we don't, split the
     // unassigned events by model so different models don't all collapse
     // into a single "Unassigned" row. Events with no agentId and no model
-    // still share a single "unassigned" bucket.
+    // still share a single "unassigned" bucket. Prefix agent buckets with
+    // `agent:` so a user-defined agent id that happens to look like
+    // `model:foo` can never collide with the model fallback bucket for
+    // model `foo`.
     const eventModel = event.model && event.model.trim().length > 0
       ? event.model.trim()
       : null;
-    const key = event.agentId ?? (eventModel ? `model:${eventModel}` : "unassigned");
+    const key = event.agentId
+      ? `agent:${event.agentId}`
+      : eventModel
+        ? `model:${eventModel}`
+        : "unassigned";
     const summary =
       summaries.get(key) ?? createEmptySummary(event.agentId, eventModel);
 

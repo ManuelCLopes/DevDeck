@@ -97,6 +97,35 @@ test("summarizeTokenUsageByAgent groups usage and preserves unassigned events", 
   assert.equal(summaries[1]?.model, "gpt-5-codex");
 });
 
+test("summarizeTokenUsageByAgent keeps agent buckets separate from model fallback buckets", () => {
+  // Regression: an agent whose id happens to look like a model fallback
+  // key (e.g. "model:gpt-5-codex") must not collide with the fallback
+  // bucket for unassigned events on model "gpt-5-codex".
+  const summaries = summarizeTokenUsageByAgent([
+    {
+      ...baseEvent,
+      agentId: "model:gpt-5-codex",
+      id: "e-agent",
+      model: "gpt-5-codex",
+    },
+    {
+      ...baseEvent,
+      agentId: null,
+      id: "e-fallback",
+      model: "gpt-5-codex",
+    },
+  ]);
+
+  assert.equal(summaries.length, 2, "agent and model buckets must not merge");
+  const agentBucket = summaries.find(
+    (summary) => summary.agentId === "model:gpt-5-codex",
+  );
+  const fallbackBucket = summaries.find((summary) => summary.agentId === null);
+  assert.equal(agentBucket?.eventCount, 1);
+  assert.equal(fallbackBucket?.eventCount, 1);
+  assert.equal(fallbackBucket?.model, "gpt-5-codex");
+});
+
 test("summarizeTokenUsageByAgent splits unassigned events by model", () => {
   const summaries = summarizeTokenUsageByAgent([
     { ...baseEvent, agentId: null, id: "u-1", model: "model-a" },

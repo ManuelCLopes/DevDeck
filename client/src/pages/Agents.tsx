@@ -2295,19 +2295,44 @@ export default function Agents() {
   useEffect(() => {
     workspaceSelectionRef.current = workspaceSelection;
   }, [workspaceSelection]);
-  // Time-range filter. The cutoff is recomputed on every render so that
-  // "Last 24 hours" tracks wall clock as the user leaves the page open;
-  // downstream memos still cache correctly since the same array
-  // identities are only produced when the input identities change.
-  const timeRangeCutoffMs = getTimeRangeCutoffMs(timeRange);
+  // Time-range filter. Recomputing the cutoff on every render would
+  // invalidate the filter memos and every downstream memo (productivity
+  // insights, handoff health, run rollups) even when telemetry inputs
+  // are unchanged. Cache the cutoff in state and refresh it on the
+  // range change plus a 60s tick, so "Last 24 hours" still tracks the
+  // clock without churning memos on unrelated rerenders.
+  const [timeRangeCutoffMs, setTimeRangeCutoffMs] = useState<number | null>(
+    () => getTimeRangeCutoffMs(timeRange),
+  );
+  useEffect(() => {
+    setTimeRangeCutoffMs(getTimeRangeCutoffMs(timeRange));
+    if (timeRange === "all") {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      setTimeRangeCutoffMs(getTimeRangeCutoffMs(timeRange));
+    }, 60_000);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [timeRange]);
   const timeFilteredAgentRuns = useMemo(() => {
     if (timeRangeCutoffMs === null) {
       return agentRuns;
     }
     return agentRuns.filter((run) => {
-      // Runs that are still open or ended within the window are kept.
-      // For completed runs we prefer endedAt when present, otherwise
-      // startedAt.
+      // Unfinished runs (active/blocked/paused) bypass the cutoff so a
+      // long-running job that started before the window doesn't vanish
+      // from the list and status totals as time passes.
+      if (
+        !run.endedAt &&
+        (run.status === "active" ||
+          run.status === "blocked" ||
+          run.status === "paused")
+      ) {
+        return true;
+      }
+      // For finished runs prefer endedAt; fall back to startedAt.
       const anchor = run.endedAt ?? run.startedAt;
       const parsed = new Date(anchor).getTime();
       return Number.isFinite(parsed) && parsed >= timeRangeCutoffMs;
