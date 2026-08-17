@@ -385,13 +385,20 @@ export interface TokenUsageSummary {
   eventCount: number;
   inputTokens: number;
   lastUsedAt: string | null;
+  // Model captured from the underlying events. Populated when agentId is null
+  // so the UI can distinguish per-model usage instead of collapsing every
+  // unmatched event into a single "Unassigned" row.
+  model: string | null;
   outputTokens: number;
   reasoningTokens: number;
   toolCallTokens: number;
   totalTokens: number;
 }
 
-function createEmptySummary(agentId: string | null): TokenUsageSummary {
+function createEmptySummary(
+  agentId: string | null,
+  model: string | null,
+): TokenUsageSummary {
   return {
     agentId,
     cacheReadTokens: 0,
@@ -400,6 +407,7 @@ function createEmptySummary(agentId: string | null): TokenUsageSummary {
     eventCount: 0,
     inputTokens: 0,
     lastUsedAt: null,
+    model,
     outputTokens: 0,
     reasoningTokens: 0,
     toolCallTokens: 0,
@@ -411,8 +419,23 @@ export function summarizeTokenUsageByAgent(events: TokenUsageEvent[]) {
   const summaries = new Map<string, TokenUsageSummary>();
 
   for (const event of events) {
-    const key = event.agentId ?? "unassigned";
-    const summary = summaries.get(key) ?? createEmptySummary(event.agentId);
+    // Bucket by agentId when we have one. When we don't, split the
+    // unassigned events by model so different models don't all collapse
+    // into a single "Unassigned" row. Events with no agentId and no model
+    // still share a single "unassigned" bucket. Prefix agent buckets with
+    // `agent:` so a user-defined agent id that happens to look like
+    // `model:foo` can never collide with the model fallback bucket for
+    // model `foo`.
+    const eventModel = event.model && event.model.trim().length > 0
+      ? event.model.trim()
+      : null;
+    const key = event.agentId
+      ? `agent:${event.agentId}`
+      : eventModel
+        ? `model:${eventModel}`
+        : "unassigned";
+    const summary =
+      summaries.get(key) ?? createEmptySummary(event.agentId, eventModel);
 
     summary.cacheReadTokens += event.cacheReadTokens;
     summary.cacheWriteTokens += event.cacheWriteTokens;
@@ -613,11 +636,22 @@ export function synthesizeAgentRunsFromOpenCodeRecords(
 export function buildTokenUsageEventsFromOpenCodeRecords(
   records: OpenCodeUsageRecord[],
   agentRuns: AgentRun[],
+  agents: AgentDefinition[] = [],
 ) {
   return records.map((record) => {
     const matchingRun = findAgentRunForOpenCodeUsage(record, agentRuns);
+    const projectId = matchingRun?.projectId ?? record.projectId ?? null;
+    // Fall back to matching the OpenCode agent name against known
+    // agent definitions when no run resolved an agentId. Without this,
+    // OpenCode sessions that DevDeck never observed as an agent run all
+    // collapse into a single "Unassigned" bucket in the by-agent view.
+    const fallbackAgent =
+      !matchingRun?.agentId && agents.length > 0
+        ? matchAgentByOpenCodeName(record.opencodeAgent, agents, projectId)
+        : null;
+    const agentId = matchingRun?.agentId ?? fallbackAgent?.id ?? null;
     return {
-      agentId: matchingRun?.agentId ?? null,
+      agentId,
       agentRunId: matchingRun?.id ?? null,
       cacheReadTokens: record.cacheReadTokens,
       cacheWriteTokens: record.cacheWriteTokens,
@@ -627,7 +661,7 @@ export function buildTokenUsageEventsFromOpenCodeRecords(
       inputTokens: record.inputTokens,
       model: record.model,
       outputTokens: record.outputTokens,
-      projectId: matchingRun?.projectId ?? null,
+      projectId: projectId ?? fallbackAgent?.projectId ?? null,
       provider: record.provider,
       reasoningTokens: record.reasoningTokens,
       toolCallTokens: 0,

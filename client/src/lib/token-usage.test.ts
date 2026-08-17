@@ -92,6 +92,56 @@ test("summarizeTokenUsageByAgent groups usage and preserves unassigned events", 
   assert.equal(summaries[0]?.lastUsedAt, "2026-08-01T11:00:00.000Z");
   assert.equal(summaries[0]?.reasoningTokens, 30);
   assert.equal(summaries[1]?.agentId, null);
+  // Unassigned events surface their model so multiple models don't
+  // collapse into a single row in the by-agent view.
+  assert.equal(summaries[1]?.model, "gpt-5-codex");
+});
+
+test("summarizeTokenUsageByAgent keeps agent buckets separate from model fallback buckets", () => {
+  // Regression: an agent whose id happens to look like a model fallback
+  // key (e.g. "model:gpt-5-codex") must not collide with the fallback
+  // bucket for unassigned events on model "gpt-5-codex".
+  const summaries = summarizeTokenUsageByAgent([
+    {
+      ...baseEvent,
+      agentId: "model:gpt-5-codex",
+      id: "e-agent",
+      model: "gpt-5-codex",
+    },
+    {
+      ...baseEvent,
+      agentId: null,
+      id: "e-fallback",
+      model: "gpt-5-codex",
+    },
+  ]);
+
+  assert.equal(summaries.length, 2, "agent and model buckets must not merge");
+  const agentBucket = summaries.find(
+    (summary) => summary.agentId === "model:gpt-5-codex",
+  );
+  const fallbackBucket = summaries.find((summary) => summary.agentId === null);
+  assert.equal(agentBucket?.eventCount, 1);
+  assert.equal(fallbackBucket?.eventCount, 1);
+  assert.equal(fallbackBucket?.model, "gpt-5-codex");
+});
+
+test("summarizeTokenUsageByAgent splits unassigned events by model", () => {
+  const summaries = summarizeTokenUsageByAgent([
+    { ...baseEvent, agentId: null, id: "u-1", model: "model-a" },
+    { ...baseEvent, agentId: null, id: "u-2", model: "model-b" },
+    { ...baseEvent, agentId: null, id: "u-3", model: "model-b" },
+    { ...baseEvent, agentId: null, id: "u-4", model: null },
+  ]);
+
+  const modelSummaries = summaries.filter((summary) => summary.agentId === null);
+  assert.equal(modelSummaries.length, 3, "expected one row per distinct model plus one for no-model");
+  const modelA = modelSummaries.find((summary) => summary.model === "model-a");
+  const modelB = modelSummaries.find((summary) => summary.model === "model-b");
+  const noModel = modelSummaries.find((summary) => summary.model === null);
+  assert.equal(modelA?.eventCount, 1);
+  assert.equal(modelB?.eventCount, 2);
+  assert.equal(noModel?.eventCount, 1);
 });
 
 test("getTokenUsageSummaryTotal rolls up summary rows", () => {
@@ -135,6 +185,60 @@ test("buildTokenUsageEventsFromOpenCodeRecords maps worktree usage to agent runs
   assert.equal(events[0]?.agentId, "builder");
   assert.equal(events[0]?.agentRunId, "run-1");
   assert.equal(events[0]?.reasoningTokens, 10);
+});
+
+test("buildTokenUsageEventsFromOpenCodeRecords falls back to agents when no run matches", () => {
+  // Session that DevDeck never tracked as a run: worktree path does not
+  // match any AgentRun, and no direct opencodeSessionId link exists.
+  // Without the agents fallback the event would be Unassigned; with it,
+  // matchAgentByOpenCodeName resolves "builder" from the opencodeAgent
+  // name.
+  const events = buildTokenUsageEventsFromOpenCodeRecords(
+    [
+      {
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        cost: 0.05,
+        createdAt: "2026-08-01T10:00:00.000Z",
+        directory: "/somewhere/else",
+        inputTokens: 5,
+        model: "gpt-5-codex",
+        opencodeAgent: "Builder",
+        outputTokens: 10,
+        projectId: "repo",
+        provider: "opencode",
+        reasoningTokens: 0,
+        sessionId: "ses_new",
+        title: null,
+        totalTokens: 15,
+        updatedAt: "2026-08-01T10:01:00.000Z",
+      },
+    ],
+    [],
+    [
+      {
+        boundaries: [],
+        defaultModel: null,
+        defaultProvider: null,
+        defaultSkills: [],
+        defaultTools: [],
+        description: null,
+        handoffTargets: [],
+        id: "builder",
+        name: "Builder",
+        projectId: "repo",
+        projectName: "Repo",
+        responsibilities: [],
+        sourceFormat: "json",
+        sourcePath: "/tmp/repo/agents.json",
+        tokenBudget: null,
+      },
+    ],
+  );
+
+  assert.equal(events[0]?.agentId, "builder");
+  assert.equal(events[0]?.agentRunId, null);
+  assert.equal(events[0]?.projectId, "repo");
 });
 
 test("mergeTokenUsageEvents replaces incoming events with the same id", () => {

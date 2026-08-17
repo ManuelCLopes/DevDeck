@@ -86,6 +86,7 @@ const HARNESS_DIRECTORY_SKIP_NAMES = new Set([
   "history",
   "state",
   "tmp",
+  "docs",
 ]);
 
 interface ProjectHarnessTarget {
@@ -1061,6 +1062,12 @@ export async function discoverAgentHarness(
 
   const allTargets = [...projectTargets, ...filteredGlobalTargets];
 
+  // Dedupe by resolved absolute sourcePath so the same file reached through
+  // two overlapping targets (e.g. a project root and a global config that
+  // walks into the same tree) is only parsed once. seenProjectPaths above
+  // only guards target ROOTS; this guards individual files.
+  const seenSourcePaths = new Set<string>();
+
   for (const project of allTargets) {
     const isGlobalTarget = project.id === null && filteredGlobalTargets.includes(project);
 
@@ -1083,6 +1090,12 @@ export async function discoverAgentHarness(
     }
 
     for (const sourcePath of sourcePaths) {
+      const resolvedPath = path.resolve(sourcePath);
+      if (seenSourcePaths.has(resolvedPath)) {
+        continue;
+      }
+      seenSourcePaths.add(resolvedPath);
+
       const sourceFormat = getSourceFormat(sourcePath);
       const context = {
         projectId: project.id,
