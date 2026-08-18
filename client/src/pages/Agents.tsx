@@ -856,13 +856,11 @@ function ProductivityInsightsSection({
           </div>
           {topWorkflows.length > 0 ? (
             <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
-              <table className="w-full min-w-[760px] text-left text-xs">
+              <table className="w-full min-w-[520px] text-left text-xs">
                 <thead className="border-b border-black/10 bg-secondary/50 text-[10px] uppercase text-muted-foreground dark:border-white/10">
                   <tr>
                     <th className="px-3 py-2 font-semibold">Workflow</th>
                     <th className="px-3 py-2 font-semibold">Runs</th>
-                    <th className="px-3 py-2 font-semibold">Tokens</th>
-                    <th className="px-3 py-2 font-semibold">Avg / Run</th>
                     <th className="px-3 py-2 font-semibold">Avg Duration</th>
                     <th className="px-3 py-2 font-semibold">Issues</th>
                   </tr>
@@ -878,12 +876,6 @@ function ProductivityInsightsSection({
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">
                         {workflow.runCount}
-                      </td>
-                      <td className="px-3 py-2 font-semibold text-foreground">
-                        {formatTokenCount(workflow.totalTokens)}
-                      </td>
-                      <td className="px-3 py-2 text-muted-foreground">
-                        {formatTokenCount(workflow.averageTokensPerRun)}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">
                         {formatDuration(workflow.averageDurationMs)}
@@ -1247,12 +1239,17 @@ function AgentCard({
   onToggleFavourite: (agentId: string) => void;
   tokenUsage: TokenUsageSummary | null;
 }) {
+  // Responsibilities fall back to the description when none are parsed,
+  // and to nothing at all when neither is present — matching the
+  // convention we now use for tools/skills. The old "No responsibilities
+  // were parsed from the harness source." fallback read like a parse
+  // error and cluttered every card that didn't happen to list them.
   const primaryResponsibilities =
     agent.responsibilities.length > 0
       ? agent.responsibilities
       : agent.description
         ? [agent.description]
-        : ["No responsibilities were parsed from the harness source."];
+        : [];
 
   return (
     <article className="flex min-h-[260px] flex-col rounded-lg border border-black/10 bg-white/80 p-4 shadow-sm transition-colors hover:border-primary/30 dark:border-white/10 dark:bg-[#1d1d1f]/80">
@@ -1346,20 +1343,22 @@ function AgentCard({
       </div>
 
       <div className="mt-4 min-h-0 flex-1 space-y-3">
-        <div>
-          <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase text-muted-foreground">
-            <ClipboardList className="h-3.5 w-3.5" />
-            Responsibilities
+        {primaryResponsibilities.length > 0 ? (
+          <div>
+            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase text-muted-foreground">
+              <ClipboardList className="h-3.5 w-3.5" />
+              Responsibilities
+            </div>
+            <ul className="space-y-1.5 text-xs leading-5 text-foreground/85">
+              {primaryResponsibilities.slice(0, 4).map((responsibility) => (
+                <li key={responsibility} className="flex gap-2">
+                  <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary" />
+                  <span>{responsibility}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-          <ul className="space-y-1.5 text-xs leading-5 text-foreground/85">
-            {primaryResponsibilities.slice(0, 4).map((responsibility) => (
-              <li key={responsibility} className="flex gap-2">
-                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary" />
-                <span>{responsibility}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        ) : null}
 
         {agent.boundaries.length > 0 ? (
           <div>
