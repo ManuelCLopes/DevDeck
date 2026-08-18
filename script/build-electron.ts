@@ -16,7 +16,7 @@ const sharedConfig = {
   // `createRequire(import.meta.url)` only when the real CJS `require` is
   // absent (i.e. never in this bundle) — esbuild still warns about
   // `import.meta` in "cjs" output even though that branch is dead here.
-  logOverride: { "empty-import-meta": "silent" },
+  logOverride: { "empty-import-meta": "silent" as const },
   outdir: path.join(root, "dist-electron"),
   outExtension: {
     ".js": ".cjs",
