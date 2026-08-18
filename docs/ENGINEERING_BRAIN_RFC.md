@@ -1018,6 +1018,8 @@ Deliver ADRs, threat model, SQLite spike, Jira mock, Git fixtures, UX wireframes
 
 ### Phase 1 — Domain and storage
 
+**Status (2026-08-18): implemented** — shared contracts and schemas, the SQLite lifecycle/migration runner/schema v1, the Engineering Brain operation service, IPC, the typed preload bridge, feature flags, and the disabled-by-default Backlog shell UI. See docs/BACKLOG_INTELLIGENCE_INTEGRATION_PLAN.md's Phase 1 section for the file-by-file breakdown and the one open item (macOS packaging/signing/notarisation validation, tracked in ADR-0003).
+
 Deliver shared contracts, schemas, SQLite, migrations, IPC, Backlog shell UI, and feature flags.
 
 ### Phase 2 — Jira read-only
