@@ -44,7 +44,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "electron:rebuild": "electron-rebuild -f -w node-pty -w better-sqlite3",
     "check": "tsc",
-    "test": "tsx --test client/src/lib/*.test.ts shared/*.test.ts electron/*.test.ts",
+    "test": "tsx --test client/src/lib/*.test.ts shared/*.test.ts electron/*.test.ts electron/persistence/*.test.ts electron/persistence/migrations/*.test.ts electron/engineering-brain/*.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:native": "DEVDECK_RUN_NATIVE_E2E=true playwright test --grep @native",
     "test:e2e:ui": "playwright test --grep-invert @native",
