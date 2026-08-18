@@ -30,6 +30,13 @@ import type {
   SpawnPtyResult,
 } from "../shared/terminals";
 import type { WorkspaceMonitorPreferences } from "../shared/workspace-monitor";
+import type {
+  EngineeringBrainEvent,
+  EngineeringBrainOperation,
+  StartEngineeringBrainOperationRequest,
+} from "../shared/engineering-brain";
+import type { BacklogFeatureFlags } from "../shared/feature-flags";
+import type { BacklogDiagnosticsSummary } from "../shared/backlog";
 
 interface WorkspaceMonitorState {
   preferences: WorkspaceMonitorPreferences & {
@@ -267,6 +274,49 @@ const devdeck = {
     selections: Record<string, "our" | "their" | "both" | "none">;
   }) {
     return ipcRenderer.invoke("devdeck:resolve-merge-conflict", payload);
+  },
+  getBacklogFeatureFlags(): Promise<BacklogFeatureFlags> {
+    return ipcRenderer.invoke("devdeck:get-backlog-feature-flags");
+  },
+  getBacklogDiagnostics(): Promise<BacklogDiagnosticsSummary> {
+    return ipcRenderer.invoke("devdeck:get-backlog-diagnostics");
+  },
+  engineeringBrain: {
+    startOperation(
+      request: StartEngineeringBrainOperationRequest,
+    ): Promise<EngineeringBrainOperation> {
+      return ipcRenderer.invoke(
+        "devdeck:engineering-brain:start-operation",
+        request,
+      );
+    },
+    getOperation(
+      operationId: string,
+    ): Promise<EngineeringBrainOperation | null> {
+      return ipcRenderer.invoke(
+        "devdeck:engineering-brain:get-operation",
+        operationId,
+      );
+    },
+    listOperations(): Promise<EngineeringBrainOperation[]> {
+      return ipcRenderer.invoke("devdeck:engineering-brain:list-operations");
+    },
+    cancelOperation(operationId: string): Promise<void> {
+      return ipcRenderer.invoke(
+        "devdeck:engineering-brain:cancel-operation",
+        operationId,
+      );
+    },
+    subscribe(listener: (event: EngineeringBrainEvent) => void) {
+      const wrapped = (
+        _event: Electron.IpcRendererEvent,
+        engineeringBrainEvent: EngineeringBrainEvent,
+      ) => listener(engineeringBrainEvent);
+      ipcRenderer.on("devdeck:engineering-brain:event", wrapped);
+      return () => {
+        ipcRenderer.removeListener("devdeck:engineering-brain:event", wrapped);
+      };
+    },
   },
   terminal: {
     available(): Promise<PtyAvailability> {

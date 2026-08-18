@@ -31,6 +31,13 @@ import type {
   SpawnPtyResult,
 } from "@shared/terminals";
 import type { WorkspaceMonitorPreferences } from "@shared/workspace-monitor";
+import type {
+  EngineeringBrainEvent,
+  EngineeringBrainOperation,
+  StartEngineeringBrainOperationRequest,
+} from "@shared/engineering-brain";
+import type { BacklogFeatureFlags } from "@shared/feature-flags";
+import type { BacklogDiagnosticsSummary } from "@shared/backlog";
 
 interface WorkspaceMonitorState {
   preferences: WorkspaceMonitorPreferences & {
@@ -187,6 +194,17 @@ interface DevDeckDesktopApi {
     verificationUri: string;
   }>;
   syncWorkspaceMonitorState(state: WorkspaceMonitorState): Promise<void>;
+  getBacklogFeatureFlags(): Promise<BacklogFeatureFlags>;
+  getBacklogDiagnostics(): Promise<BacklogDiagnosticsSummary>;
+  engineeringBrain: {
+    startOperation(
+      request: StartEngineeringBrainOperationRequest,
+    ): Promise<EngineeringBrainOperation>;
+    getOperation(operationId: string): Promise<EngineeringBrainOperation | null>;
+    listOperations(): Promise<EngineeringBrainOperation[]>;
+    cancelOperation(operationId: string): Promise<void>;
+    subscribe(listener: (event: EngineeringBrainEvent) => void): () => void;
+  };
   terminal: {
     available(): Promise<PtyAvailability>;
     spawn(request: SpawnPtyRequest): Promise<SpawnPtyResult>;
