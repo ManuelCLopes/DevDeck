@@ -34,6 +34,7 @@ import {
   useAppNavigation,
 } from "@/lib/app-navigation";
 import { useWorkspaceAlerts } from "@/hooks/use-workspace-alerts";
+import { useBacklogFeatureFlags } from "@/hooks/use-backlog-feature-flags";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { getDesktopApi } from "@/lib/desktop";
 import { useCodingTool } from "@/hooks/use-coding-tool";
@@ -61,6 +62,7 @@ import {
   ChevronDown,
   ChevronRight,
   HardDrive,
+  ListChecks,
   MessageSquare,
   RefreshCw,
   SquareTerminal,
@@ -248,6 +250,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
     };
   }, [deferredSearchQuery, hiddenProjectIds, hiddenProjectNames, snapshot]);
 
+  const { data: backlogFeatureFlags } = useBacklogFeatureFlags();
+
   const navItems = [
     { href: "/", icon: LayoutGrid, label: "Overview", collapsedLabel: "Overview" },
     { href: "/reviews", icon: MessageSquare, label: "Pull Requests", collapsedLabel: "PRs" },
@@ -255,6 +259,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { href: "/agents", icon: Bot, label: "Agents", collapsedLabel: "Agents" },
     { href: "/terminals", icon: TerminalSquare, label: "Terminals", collapsedLabel: "Terminals" },
     { href: "/activity", icon: Activity, label: "Activity Inbox", collapsedLabel: "Activity" },
+    ...(backlogFeatureFlags?.backlogIntelligenceEnabled
+      ? [{ href: "/backlog", icon: ListChecks, label: "Backlog", collapsedLabel: "Backlog" }]
+      : []),
   ];
 
   useEffect(() => {

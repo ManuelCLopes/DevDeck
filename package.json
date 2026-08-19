@@ -42,9 +42,9 @@
     "release:check:prod": "node script/release-preflight.cjs --require-signing --require-notarization --require-github-auth",
     "rc:check": "npm run check && npm test && npm run test:e2e && npm run pack:mac && npm run release:check:artifacts",
     "start": "NODE_ENV=production node dist/index.cjs",
-    "electron:rebuild": "electron-rebuild -f -w node-pty",
+    "electron:rebuild": "electron-rebuild -f -w node-pty,better-sqlite3",
     "check": "tsc",
-    "test": "tsx --test client/src/lib/*.test.ts shared/*.test.ts electron/*.test.ts",
+    "test": "tsx --test client/src/lib/*.test.ts shared/*.test.ts electron/*.test.ts electron/persistence/*.test.ts electron/persistence/migrations/*.test.ts electron/engineering-brain/*.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:native": "DEVDECK_RUN_NATIVE_E2E=true playwright test --grep @native",
     "test:e2e:ui": "playwright test --grep-invert @native",
@@ -84,6 +84,7 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",
+    "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -120,8 +121,10 @@
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.1",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/vite": "^4.1.14",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/connect-pg-simple": "^7.0.3",
     "@types/express": "^5.0.0",
     "@types/express-session": "^1.18.0",
@@ -131,7 +134,6 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@types/ws": "^8.5.13",
-    "@electron/rebuild": "^4.0.1",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.2.1",
@@ -153,7 +155,8 @@
     "appId": "com.manuelclopes.devdeck",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
     "asarUnpack": [
-      "**/node_modules/node-pty/**"
+      "**/node_modules/node-pty/**",
+      "**/node_modules/better-sqlite3/**"
     ],
     "afterSign": "script/notarize.cjs",
     "productName": "DevDeck",

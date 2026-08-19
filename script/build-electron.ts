@@ -12,6 +12,11 @@ const sharedConfig = {
   },
   format: "cjs" as const,
   logLevel: "info" as const,
+  // electron/persistence/sqlite-driver.ts falls back to
+  // `createRequire(import.meta.url)` only when the real CJS `require` is
+  // absent (i.e. never in this bundle) — esbuild still warns about
+  // `import.meta` in "cjs" output even though that branch is dead here.
+  logOverride: { "empty-import-meta": "silent" as const },
   outdir: path.join(root, "dist-electron"),
   outExtension: {
     ".js": ".cjs",
@@ -19,7 +24,7 @@ const sharedConfig = {
   platform: "node" as const,
   sourcemap: true,
   target: "node20",
-  external: ["electron", "node-pty"],
+  external: ["electron", "node-pty", "better-sqlite3"],
 };
 
 async function run() {

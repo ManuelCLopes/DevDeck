@@ -986,13 +986,23 @@ Test 10,000 issues, 100,000 evidence rows, incremental reindexing, pagination, c
 
 ## Phase 1 — Domain foundation and persistence
 
+**Status (2026-08-18): implemented.** See `shared/backlog.ts`, `shared/backlog-schemas.ts`, `shared/feature-flags.ts`, `shared/engineering-brain-schemas.ts`, `electron/persistence/`, `electron/engineering-brain/`, `electron/engineering-brain-ipc.ts`, and `client/src/pages/Backlog.tsx`.
+
 **Objective:** Create contracts and storage without real external integration.
 
 **Deliverables:** shared types, Zod schemas, SQLite, migrations, repository layer, IPC skeleton, Backlog route, and feature flag.
 
 **Acceptance criteria:** automatic database creation, idempotent migrations, typed empty states, no credential persistence, and passing type check, tests, build, and packaging.
 
-**Estimate:** 1–2 weeks.
+- automatic database creation and idempotent migrations: ✅ (`backlog-db.test.ts`, `migration-runner.test.ts`);
+- typed empty states: ✅ `EMPTY_BACKLOG_SUMMARY`, the disabled-by-default Backlog route shell;
+- no credential persistence: ✅ nothing in this phase touches Jira, GitHub, or Keychain;
+- type check, tests, build: ✅ on Linux;
+- packaging: ⚠️ `npm run build` (esbuild bundle) passes; **`electron-builder --mac` packaging, signing, and notarisation with `better-sqlite3` have not been exercised** — this repository's execution environment has no macOS. Do this before relying on the interim SQLite driver decision in ADR-0003.
+
+A repository layer over the schema v1 tables (typed query/insert helpers for `jira_issues`, `scans`, etc.) was intentionally **not** built in Phase 1: nothing writes to those tables until Jira sync (Phase 2) and evidence collection (Phase 3) exist, so a repository layer today would be speculative, untestable code. Add it alongside the feature that first needs it.
+
+**Estimate:** 1–2 weeks. Actual: implemented in one session, minus the macOS packaging validation above.
 
 ---
 
@@ -1102,20 +1112,20 @@ Proceed only after a stable baseline demonstrates meaningful lexical misses.
 
 ### Domain foundation
 
-- `BI-001` Define shared types.
-- `BI-002` Define Zod schemas.
-- `BI-003` Define error taxonomy.
-- `BI-004` Add feature flag.
-- `BI-005` Add route and navigation.
+- `BI-001` Define shared types. ✅ `shared/backlog.ts`
+- `BI-002` Define Zod schemas. ✅ `shared/backlog-schemas.ts`, `shared/engineering-brain-schemas.ts`
+- `BI-003` Define error taxonomy. ❌ deferred — `BacklogErrorCode` (section 25) covers Jira/model/index failures that don't exist yet; add it alongside Phase 2/3.
+- `BI-004` Add feature flag. ✅ `shared/feature-flags.ts`
+- `BI-005` Add route and navigation. ✅ `client/src/pages/Backlog.tsx`, gated nav item in `AppLayout.tsx`
 
 ### Persistence
 
-- `BI-010` Select SQLite driver.
-- `BI-011` Build migration runner.
-- `BI-012` Create schema v1.
-- `BI-013` Build repositories.
-- `BI-014` Add transaction helper.
-- `BI-015` Add pre-migration backup.
+- `BI-010` Select SQLite driver. ✅ interim: `better-sqlite3`, see ADR-0003
+- `BI-011` Build migration runner. ✅ `electron/persistence/migration-runner.ts`
+- `BI-012` Create schema v1. ✅ `electron/persistence/migrations/0001-init.ts`
+- `BI-013` Build repositories. ❌ intentionally deferred — see the Phase 1 status note above
+- `BI-014` Add transaction helper. ⚠️ the migration runner uses `db.transaction()` per migration; no standalone helper exists yet because nothing outside migrations writes to the database in Phase 1
+- `BI-015` Add pre-migration backup. ✅ `electron/persistence/backlog-db.ts` (skipped for a brand-new database — nothing to protect)
 
 ### Jira
 
