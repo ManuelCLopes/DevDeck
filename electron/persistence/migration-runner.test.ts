@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { openSqliteConnection } from "./sqlite-driver";
-import { getAppliedMigrationVersion, runMigrations } from "./migration-runner";
+import {
+  getAppliedMigrationVersion,
+  runMigrations,
+  UnsupportedSchemaVersionError,
+} from "./migration-runner";
 
 function createInMemoryConnection() {
   return openSqliteConnection({ path: ":memory:" });
@@ -108,6 +112,37 @@ test("runMigrations rejects a non-contiguous version sequence", () => {
         },
       },
     ]),
+  );
+
+  db.close();
+});
+
+test("runMigrations refuses a database newer than the highest known migration", () => {
+  const db = createInMemoryConnection();
+  const migrationV1 = {
+    version: 1,
+    name: "create_widgets",
+    up(connection: import("./sqlite-driver").SqliteConnection) {
+      connection.exec("CREATE TABLE widgets (id INTEGER PRIMARY KEY)");
+    },
+  };
+  const migrationV2 = {
+    version: 2,
+    name: "create_gadgets",
+    up(connection: import("./sqlite-driver").SqliteConnection) {
+      connection.exec("CREATE TABLE gadgets (id INTEGER PRIMARY KEY)");
+    },
+  };
+
+  // Simulate a database written by a newer build: it already has both
+  // migrations applied.
+  runMigrations(db, [migrationV1, migrationV2]);
+
+  // An older build only knows about migrationV1 and must refuse to open
+  // this database rather than silently reporting success.
+  assert.throws(
+    () => runMigrations(db, [migrationV1]),
+    UnsupportedSchemaVersionError,
   );
 
   db.close();

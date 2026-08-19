@@ -15,6 +15,15 @@ export interface MigrationRunResult {
   toVersion: number;
 }
 
+export class UnsupportedSchemaVersionError extends Error {
+  constructor(foundVersion: number, maxSupportedVersion: number) {
+    super(
+      `Database schema version ${foundVersion} is newer than the highest migration this build supports (${maxSupportedVersion}). Refusing to open it — install a newer DevDeck build, or restore an older database backup.`,
+    );
+    this.name = "UnsupportedSchemaVersionError";
+  }
+}
+
 const MIGRATIONS_TABLE_DDL = `
   CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
@@ -49,6 +58,12 @@ function getCurrentSchemaVersion(db: SqliteConnection): number {
  * migrations" and "startup schema-version guard").
  *
  * Safe to call on every startup: with nothing pending it is a no-op.
+ *
+ * Refuses to touch a database whose recorded schema version is newer than
+ * the highest migration this build knows about (e.g. after downgrading to
+ * an older DevDeck build) — otherwise this would silently report success
+ * with nothing applied, and the caller would treat the database as ready
+ * even though this build doesn't understand its schema.
  */
 export function runMigrations(
   db: SqliteConnection,
@@ -58,6 +73,14 @@ export function runMigrations(
   db.exec(MIGRATIONS_TABLE_DDL);
 
   const fromVersion = getCurrentSchemaVersion(db);
+  const maxSupportedVersion = migrations.reduce(
+    (max, migration) => Math.max(max, migration.version),
+    0,
+  );
+  if (fromVersion > maxSupportedVersion) {
+    throw new UnsupportedSchemaVersionError(fromVersion, maxSupportedVersion);
+  }
+
   const pending = migrations
     .filter((migration) => migration.version > fromVersion)
     .sort((a, b) => a.version - b.version);
