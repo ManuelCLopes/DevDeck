@@ -18,7 +18,14 @@ export function useBacklogFeatureFlags() {
       }
       return desktopApi.getBacklogFeatureFlags();
     },
-    initialData: DEFAULT_BACKLOG_FEATURE_FLAGS,
+    // placeholderData (not initialData): initialData would seed the cache
+    // as if it were a real, fresh fetch, so with staleTime the queryFn
+    // would never run on mount and the real flags (e.g.
+    // DEVDECK_FEATURE_BACKLOG_INTELLIGENCE=true) would stay invisible
+    // until some other refetch trigger fired. placeholderData renders the
+    // same disabled-by-default UI immediately without marking the query
+    // as already resolved.
+    placeholderData: DEFAULT_BACKLOG_FEATURE_FLAGS,
     staleTime: 60_000,
   });
 }
