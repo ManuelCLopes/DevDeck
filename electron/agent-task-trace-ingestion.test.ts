@@ -40,7 +40,6 @@ const agentRun = {
   status: "active",
   taskTitle: "Ingest task traces",
   terminalPaneId: "pane-1",
-  tokenBudget: 120000,
   workflowRunId: "workflow-1",
   worktreePath: "",
 } satisfies AgentRun;

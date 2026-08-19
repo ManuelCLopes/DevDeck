@@ -138,20 +138,6 @@ function normalizeStringArray(value: unknown) {
     .filter(Boolean);
 }
 
-function normalizeNumber(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  const normalized = normalizeString(value);
-  if (!normalized) {
-    return null;
-  }
-
-  const parsed = Number(normalized.replace(/,/g, ""));
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function slugify(value: string) {
   return (
     value
@@ -265,14 +251,6 @@ function normalizeAgentRecord(
     ),
     sourceFormat: context.sourceFormat,
     sourcePath: context.sourcePath,
-    tokenBudget: normalizeNumber(
-      getRecordValue(rawAgent, [
-        "tokenBudget",
-        "token_budget",
-        "maxTokens",
-        "max_tokens",
-      ]),
-    ),
   };
 }
 
@@ -696,16 +674,6 @@ export function parseMarkdownAgentHarness(
     const frontmatterSkills = frontmatter
       ? normalizeStringArray(getRecordValue(frontmatter, ["skills", "defaultSkills"]))
       : [];
-    const frontmatterBudget = normalizeNumber(
-      frontmatter
-        ? getRecordValue(frontmatter, [
-            "tokenBudget",
-            "token_budget",
-            "maxTokens",
-            "max_tokens",
-          ])
-        : null,
-    );
     const frontmatterHandoffs = frontmatter
       ? normalizeStringArray(
           getRecordValue(frontmatter, ["handoffs", "handoffTargets", "handoff"]),
@@ -731,7 +699,6 @@ export function parseMarkdownAgentHarness(
       responsibilities: uniqueStrings(bodyResponsibilities),
       sourceFormat: "markdown",
       sourcePath: context.sourcePath,
-      tokenBudget: frontmatterBudget,
     };
 
     return {
@@ -786,9 +753,6 @@ export function parseMarkdownAgentHarness(
       responsibilities,
       sourceFormat: markdownContext.sourceFormat,
       sourcePath: markdownContext.sourcePath,
-      tokenBudget: normalizeNumber(
-        getMarkdownListForLabels(section.body, ["token budget", "max tokens"])[0],
-      ),
     } satisfies AgentDefinition;
   });
 
@@ -952,13 +916,6 @@ function appendSourceValidationErrors(
       addError(
         agent.sourcePath,
         `Agent "${agent.name}" has no responsibilities or description; launch recommendations may be weak.`,
-      );
-    }
-
-    if (!agent.tokenBudget) {
-      addError(
-        agent.sourcePath,
-        `Agent "${agent.name}" has no token budget; DevDeck will rely on per-run launch overrides.`,
       );
     }
   }

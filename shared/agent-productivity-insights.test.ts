@@ -28,7 +28,6 @@ const builder = {
   responsibilities: ["Implement scoped changes"],
   sourceFormat: "json",
   sourcePath: "/repo/agents.json",
-  tokenBudget: 1000,
 } satisfies AgentDefinition;
 
 const reviewer = {
@@ -46,7 +45,6 @@ const reviewer = {
   responsibilities: [],
   sourceFormat: "json",
   sourcePath: "/repo/agents.json",
-  tokenBudget: null,
 } satisfies AgentDefinition;
 
 const workflow = {
@@ -88,7 +86,6 @@ const completedRun = {
   status: "completed",
   taskTitle: "Build, one",
   terminalPaneId: "pane-1",
-  tokenBudget: 1000,
   workflowRunId: "feature",
   worktreePath: "/tmp/alpha",
 } satisfies AgentRun;
@@ -102,7 +99,6 @@ const failedRun = {
   startedAt: "2026-08-01T10:15:00.000Z",
   status: "failed",
   taskTitle: "Review failing work",
-  tokenBudget: 500,
 } satisfies AgentRun;
 
 const builderUsage = {
@@ -157,7 +153,7 @@ const retryTrace = {
   summary: "Retried tests",
 } satisfies TaskTraceEntry;
 
-test("buildAgentProductivityInsights rolls up runs, usage, budgets, gaps, and handoff roles", () => {
+test("buildAgentProductivityInsights rolls up runs, usage, gaps, and handoff roles", () => {
   const insights = buildAgentProductivityInsights({
     agents: [builder, reviewer],
     agentRuns: [completedRun, failedRun],
@@ -186,8 +182,6 @@ test("buildAgentProductivityInsights rolls up runs, usage, budgets, gaps, and ha
   assert.equal(insights.totals.averageDurationMs, 2_700_000);
   assert.equal(insights.totals.runsWithUsageCount, 2);
   assert.equal(insights.totals.usageCoverageRate, 100);
-  assert.equal(insights.totals.budgetWarningCount, 2);
-  assert.equal(insights.totals.overBudgetRunCount, 1);
 
   assert.equal(insights.agentSummaries[0]?.agentName, "Builder Agent");
   assert.equal(insights.agentSummaries[0]?.totalTokens, 835);
@@ -196,12 +190,10 @@ test("buildAgentProductivityInsights rolls up runs, usage, budgets, gaps, and ha
   assert.equal(insights.workflowSummaries[0]?.totalTokens, 1550);
   assert.deepEqual(insights.workflowSummaries[0]?.metadataIssues, [
     "Missing boundaries: Reviewer Agent",
-    "Missing budget: Reviewer Agent",
     "Missing responsibilities: Reviewer Agent",
   ]);
   assert.equal(insights.modelSummaries[0]?.label, "openai / gpt-5-codex");
   assert.equal(insights.projectSummaries[0]?.projectName, "alpha");
-  assert.equal(insights.budgetWarnings[0]?.run.id, "run-2");
   assert.equal(insights.expensiveRuns[0]?.run.id, "run-2");
   assert.equal(insights.handoffRoles[0]?.agentName, "Builder Agent");
   assert.equal(insights.handoffRoles[0]?.firstRunCount, 2);
@@ -244,7 +236,6 @@ test("buildAgentProductivityInsights infers handoff latency from trace handoffs"
     opencodeSessionId: null,
     startedAt: "2026-08-01T10:55:00.000Z",
     taskTitle: "Review handoff",
-    tokenBudget: null,
   } satisfies AgentRun;
   const handoffTrace = {
     ...failedTrace,
@@ -283,7 +274,7 @@ test("serializeAgentTelemetryCsv writes escaped run rows with token rollups", ()
 
   assert.match(csv, /^run_id,task_title,status/m);
   assert.match(csv, /run-1,"Build, one",completed/);
-  assert.match(csv, /835,0\.5000,1000,84/);
+  assert.match(csv, /835,0\.5000,ses_1/);
 });
 
 test("buildAgentTelemetryExport normalizes telemetry and includes insights", () => {

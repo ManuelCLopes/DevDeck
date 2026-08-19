@@ -117,7 +117,6 @@ export function normalizeAgentRuns(rawValue: unknown): AgentRun[] {
       status: normalizeStatus(value.status),
       taskTitle: normalizeString(value.taskTitle) ?? "Agent run",
       terminalPaneId: normalizeString(value.terminalPaneId),
-      tokenBudget: normalizeNullableNumber(value.tokenBudget),
       workflowRunId: normalizeString(value.workflowRunId),
       worktreePath: normalizeString(value.worktreePath),
     }));
@@ -274,18 +273,11 @@ export function buildAgentRunEnvironment(options: {
     environment.DEVDECK_TRACE_FORMAT = "jsonl";
     environment.DEVDECK_TRACE_PATH = options.tracePath;
   }
-  if (options.run.tokenBudget) {
-    environment.DEVDECK_AGENT_RUN_TOKEN_BUDGET = String(options.run.tokenBudget);
-  }
 
   if (options.agent) {
     environment.DEVDECK_AGENT_ID = options.agent.id;
     environment.DEVDECK_AGENT_NAME = options.agent.name;
     environment.DEVDECK_AGENT_SOURCE = options.agent.sourcePath;
-    const effectiveTokenBudget = options.run.tokenBudget ?? options.agent.tokenBudget;
-    if (effectiveTokenBudget) {
-      environment.DEVDECK_AGENT_TOKEN_BUDGET = String(effectiveTokenBudget);
-    }
   }
 
   if (options.workflow) {
@@ -304,7 +296,6 @@ export function buildAgentLaunchSummary(options: {
   taskTitle: string;
   traceAppendCommand?: string | null;
   tracePath?: string | null;
-  tokenBudget?: number | null;
   workflow: WorkflowDefinition | null;
 }) {
   return [
@@ -322,9 +313,6 @@ export function buildAgentLaunchSummary(options: {
       : null,
     options.traceAppendCommand
       ? `Trace Append Command:\n${options.traceAppendCommand}`
-      : null,
-    options.tokenBudget
-      ? `Token Budget: ${options.tokenBudget.toLocaleString()} tokens`
       : null,
     options.agent?.responsibilities.length
       ? `Responsibilities: ${options.agent.responsibilities.slice(0, 4).join("; ")}`
@@ -623,7 +611,6 @@ export function synthesizeAgentRunsFromOpenCodeRecords(
         existingRun?.taskTitle ??
         "OpenCode session",
       terminalPaneId: existingRun?.terminalPaneId ?? null,
-      tokenBudget: matchedAgent?.tokenBudget ?? existingRun?.tokenBudget ?? null,
       workflowRunId: existingRun?.workflowRunId ?? null,
       worktreePath:
         normalizeString(record.directory) ?? existingRun?.worktreePath ?? null,

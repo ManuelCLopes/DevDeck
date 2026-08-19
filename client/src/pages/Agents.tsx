@@ -89,7 +89,6 @@ import {
   type TokenUsageSummary,
 } from "@/lib/token-usage";
 import {
-  getAgentRunBudgetUsagePercent,
   summarizeTokenUsageForAgentRun,
   type AgentRunUsageSummary,
 } from "@/lib/agent-run-detail";
@@ -130,6 +129,7 @@ const FAVOURITE_AGENTS_STORAGE_KEY = "devdeck:agents:favourite-ids";
 const DISMISSED_SOURCE_ERRORS_STORAGE_KEY =
   "devdeck:agents:dismissed-source-errors";
 const TIME_RANGE_STORAGE_KEY = "devdeck:agents:time-range";
+const CUSTOM_TIME_RANGE_STORAGE_KEY = "devdeck:agents:custom-time-range";
 const AGENTS_PAGE_SIZE = 8;
 const HARNESS_SOURCES_PAGE_SIZE = 6;
 const AGENT_RUNS_PAGE_SIZE = 8;
@@ -140,18 +140,53 @@ const TIME_RANGE_OPTIONS = [
   { value: "30d", label: "Last 30 days", days: 30 },
   { value: "90d", label: "Last 90 days", days: 90 },
   { value: "all", label: "All time", days: null },
+  { value: "custom", label: "Custom range", days: null },
 ] as const;
 
 type TimeRangeValue = (typeof TIME_RANGE_OPTIONS)[number]["value"];
 
 const DEFAULT_TIME_RANGE: TimeRangeValue = "30d";
 
-function getTimeRangeCutoffMs(range: TimeRangeValue): number | null {
+// Custom range dates are stored as "yyyy-mm-dd" strings (native <input
+// type="date"> format) so they persist and compare without timezone math.
+interface CustomTimeRange {
+  end: string | null;
+  start: string | null;
+}
+
+const DEFAULT_CUSTOM_TIME_RANGE: CustomTimeRange = { end: null, start: null };
+
+interface TimeRangeBounds {
+  endMs: number | null;
+  startMs: number | null;
+}
+
+function isValidDateInputValue(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function getTimeRangeBounds(
+  range: TimeRangeValue,
+  customRange: CustomTimeRange,
+): TimeRangeBounds {
+  if (range === "custom") {
+    const startMs = customRange.start
+      ? new Date(`${customRange.start}T00:00:00`).getTime()
+      : NaN;
+    const endMs = customRange.end
+      ? new Date(`${customRange.end}T23:59:59.999`).getTime()
+      : NaN;
+    return {
+      endMs: Number.isFinite(endMs) ? endMs : null,
+      startMs: Number.isFinite(startMs) ? startMs : null,
+    };
+  }
+
   const option = TIME_RANGE_OPTIONS.find((entry) => entry.value === range);
   if (!option || option.days === null) {
-    return null;
+    return { endMs: null, startMs: null };
   }
-  return Date.now() - option.days * 24 * 60 * 60 * 1000;
+  return { endMs: null, startMs: Date.now() - option.days * 24 * 60 * 60 * 1000 };
 }
 
 function isValidTimeRange(value: unknown): value is TimeRangeValue {
@@ -167,14 +202,6 @@ function formatSourceName(sourcePath: string) {
 
 function buildSourceErrorKey(sourcePath: string, errors: string[]) {
   return `${sourcePath}::${errors.join("\n")}`;
-}
-
-function formatTokenBudget(tokenBudget: number | null) {
-  if (!tokenBudget) {
-    return "No budget";
-  }
-
-  return new Intl.NumberFormat().format(tokenBudget);
 }
 
 function formatTokenCount(tokens: number) {
@@ -275,16 +302,6 @@ function buildRunDiagnosticsText(runInsight: AgentProductivityRunInsight) {
     `Ended: ${formatDateTime(runInsight.run.endedAt)}`,
     `Duration: ${formatDuration(runInsight.durationMs)}`,
     `Tokens: ${runInsight.totalTokens.toLocaleString()}`,
-    `Budget: ${
-      runInsight.run.tokenBudget
-        ? runInsight.run.tokenBudget.toLocaleString()
-        : "No budget"
-    }`,
-    `Budget Usage: ${
-      runInsight.budgetPercent === null
-        ? "No budget"
-        : formatPercent(runInsight.budgetPercent)
-    }`,
     `Estimated Cost: ${formatEstimatedCost(runInsight.estimatedCost)}`,
     `Usage Events: ${runInsight.eventCount}`,
     `Branch: ${runInsight.run.branchName ?? "No branch"}`,
@@ -341,7 +358,6 @@ function buildAgentBriefText(agent: AgentDefinition) {
     agent.handoffTargets.length
       ? `Handoff Targets: ${agent.handoffTargets.join(", ")}`
       : null,
-    agent.tokenBudget ? `Token Budget: ${agent.tokenBudget}` : null,
     `Source: ${agent.sourcePath}`,
   ]
     .filter((line): line is string => Boolean(line))
@@ -636,7 +652,7 @@ function ProductivityInsightsSection({
         <h2 className="text-sm font-semibold text-foreground">Productivity Insights</h2>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-6">
         <InsightMetric
           icon={Gauge}
           label="Completion"
@@ -672,12 +688,6 @@ function ProductivityInsightsSection({
           label="Unlinked"
           value={insights.totals.unlinkedOpenCodeRunCount.toLocaleString()}
           detail={`${insights.totals.linkedOpenCodeRunCount} OpenCode links`}
-        />
-        <InsightMetric
-          icon={ShieldCheck}
-          label="Budget Risk"
-          value={insights.totals.budgetWarningCount.toLocaleString()}
-          detail={`${insights.totals.overBudgetRunCount} over budget`}
         />
       </div>
 
@@ -1040,26 +1050,10 @@ function ProductivityInsightsSection({
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold text-foreground">Budget & Linking Attention</h3>
+            <h3 className="text-sm font-semibold text-foreground">Linking Attention</h3>
           </div>
-          {insights.budgetWarnings.length > 0 || insights.telemetryGaps.length > 0 ? (
+          {insights.telemetryGaps.length > 0 ? (
             <div className="space-y-2">
-              {insights.budgetWarnings.slice(0, 4).map((runInsight) => (
-                <div
-                  key={`budget:${runInsight.run.id}`}
-                  className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="min-w-0 truncate font-semibold">{runInsight.run.taskTitle}</p>
-                    <AgentPill tone={runInsight.budgetPercent && runInsight.budgetPercent > 100 ? "red" : "amber"}>
-                      {runInsight.budgetPercent}% budget
-                    </AgentPill>
-                  </div>
-                  <p className="mt-1 text-[11px] opacity-85">
-                    {runInsight.agentName} · {formatTokenCount(runInsight.totalTokens)}
-                  </p>
-                </div>
-              ))}
               {insights.telemetryGaps.slice(0, 4).map((gap) => (
                 <div
                   key={`gap:${gap.runId ?? gap.taskTitle}:${gap.createdAt}`}
@@ -1080,7 +1074,7 @@ function ProductivityInsightsSection({
               ))}
             </div>
           ) : (
-            <EmptyInsight>No budget or linking issues detected.</EmptyInsight>
+            <EmptyInsight>No linking issues detected.</EmptyInsight>
           )}
         </div>
 
@@ -1315,15 +1309,7 @@ function AgentCard({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-        <div className="rounded-md border border-black/10 bg-secondary/35 px-3 py-2 dark:border-white/10">
-          <p className="text-[10px] font-semibold uppercase text-muted-foreground">
-            Token Budget
-          </p>
-          <p className="mt-1 font-semibold text-foreground">
-            {formatTokenBudget(agent.tokenBudget)}
-          </p>
-        </div>
+      <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-md border border-black/10 bg-secondary/35 px-3 py-2 dark:border-white/10">
           <p className="text-[10px] font-semibold uppercase text-muted-foreground">
             Model
@@ -1770,15 +1756,6 @@ function AgentRunRow({
   const workflow = run.workflowRunId
     ? workflows.find((candidate) => candidate.id === run.workflowRunId)
     : null;
-  const budgetPercent = getAgentRunBudgetUsagePercent(run, usage);
-  const budgetTone =
-    budgetPercent === null
-      ? "neutral"
-      : budgetPercent >= 100
-        ? "red"
-        : budgetPercent >= 80
-          ? "amber"
-          : "green";
 
   return (
     <div
@@ -1843,16 +1820,8 @@ function AgentRunRow({
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
         <AgentPill>{run.startedAt.slice(0, 10)}</AgentPill>
-        <AgentPill>
-          {run.tokenBudget ? `${run.tokenBudget.toLocaleString()} budget` : "No budget"}
-        </AgentPill>
         {usage.totalTokens > 0 ? (
-          <AgentPill tone={budgetTone}>
-            {formatTokenCount(usage.totalTokens)} used
-          </AgentPill>
-        ) : null}
-        {budgetPercent !== null ? (
-          <AgentPill tone={budgetTone}>{`${budgetPercent}% budget`}</AgentPill>
+          <AgentPill>{formatTokenCount(usage.totalTokens)} used</AgentPill>
         ) : null}
         {run.terminalPaneId ? <AgentPill>{run.terminalPaneId}</AgentPill> : null}
       </div>
@@ -1901,15 +1870,6 @@ function AgentRunDetail({
   const workflow = run.workflowRunId
     ? workflows.find((candidate) => candidate.id === run.workflowRunId)
     : null;
-  const budgetPercent = getAgentRunBudgetUsagePercent(run, usage);
-  const budgetTone =
-    budgetPercent === null
-      ? "neutral"
-      : budgetPercent >= 100
-        ? "red"
-        : budgetPercent >= 80
-          ? "amber"
-          : "green";
 
   return (
     <aside className="rounded-lg border border-black/10 bg-white/70 p-4 text-xs dark:border-white/10 dark:bg-white/5">
@@ -1940,21 +1900,15 @@ function AgentRunDetail({
           </p>
         </div>
         <div className="rounded-md border border-black/10 bg-secondary/35 p-2 dark:border-white/10">
-          <p className="text-[10px] uppercase text-muted-foreground">Budget</p>
+          <p className="text-[10px] uppercase text-muted-foreground">Estimated Cost</p>
           <p className="mt-1 font-semibold text-foreground">
-            {budgetPercent === null ? "No budget" : `${budgetPercent}%`}
+            {formatEstimatedCost(usage.estimatedCost)}
           </p>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {run.tokenBudget ? (
-          <AgentPill tone={budgetTone}>
-            {`${usage.totalTokens.toLocaleString()} / ${run.tokenBudget.toLocaleString()}`}
-          </AgentPill>
-        ) : null}
         <AgentPill>{`${usage.eventCount} usage events`}</AgentPill>
-        <AgentPill>{formatEstimatedCost(usage.estimatedCost)}</AgentPill>
       </div>
 
       <dl className="mt-4 space-y-3">
@@ -2239,6 +2193,18 @@ export default function Agents() {
   const timeRange: TimeRangeValue = isValidTimeRange(timeRangeRaw)
     ? timeRangeRaw
     : DEFAULT_TIME_RANGE;
+  const [customTimeRangeRaw, setCustomTimeRange] = usePersistentState<CustomTimeRange>(
+    CUSTOM_TIME_RANGE_STORAGE_KEY,
+    DEFAULT_CUSTOM_TIME_RANGE,
+  );
+  const customTimeRange: CustomTimeRange = {
+    end: isValidDateInputValue(customTimeRangeRaw?.end)
+      ? customTimeRangeRaw.end
+      : null,
+    start: isValidDateInputValue(customTimeRangeRaw?.start)
+      ? customTimeRangeRaw.start
+      : null,
+  };
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] =
     useState<WorkflowDefinition | null>(null);
@@ -2294,33 +2260,51 @@ export default function Agents() {
   useEffect(() => {
     workspaceSelectionRef.current = workspaceSelection;
   }, [workspaceSelection]);
-  // Time-range filter. Recomputing the cutoff on every render would
+  // Time-range filter. Recomputing the bounds on every render would
   // invalidate the filter memos and every downstream memo (productivity
   // insights, handoff health, run rollups) even when telemetry inputs
-  // are unchanged. Cache the cutoff in state and refresh it on the
+  // are unchanged. Cache the bounds in state and refresh them on the
   // range change plus a 60s tick, so "Last 24 hours" still tracks the
-  // clock without churning memos on unrelated rerenders.
-  const [timeRangeCutoffMs, setTimeRangeCutoffMs] = useState<number | null>(
-    () => getTimeRangeCutoffMs(timeRange),
+  // clock without churning memos on unrelated rerenders. A custom range
+  // has fixed bounds, so it only needs to react to date changes.
+  const [timeRangeBounds, setTimeRangeBounds] = useState<TimeRangeBounds>(
+    () => getTimeRangeBounds(timeRange, customTimeRange),
   );
   useEffect(() => {
-    setTimeRangeCutoffMs(getTimeRangeCutoffMs(timeRange));
-    if (timeRange === "all") {
+    setTimeRangeBounds(getTimeRangeBounds(timeRange, customTimeRange));
+    if (timeRange === "all" || timeRange === "custom") {
       return;
     }
     const interval = window.setInterval(() => {
-      setTimeRangeCutoffMs(getTimeRangeCutoffMs(timeRange));
+      setTimeRangeBounds(getTimeRangeBounds(timeRange, customTimeRange));
     }, 60_000);
     return () => {
       window.clearInterval(interval);
     };
-  }, [timeRange]);
+  }, [timeRange, customTimeRange.start, customTimeRange.end]);
+  const isWithinTimeRangeBounds = useCallback(
+    (parsed: number) => {
+      if (!Number.isFinite(parsed)) {
+        return false;
+      }
+      if (timeRangeBounds.startMs !== null && parsed < timeRangeBounds.startMs) {
+        return false;
+      }
+      if (timeRangeBounds.endMs !== null && parsed > timeRangeBounds.endMs) {
+        return false;
+      }
+      return true;
+    },
+    [timeRangeBounds],
+  );
+  const hasTimeRangeBounds =
+    timeRangeBounds.startMs !== null || timeRangeBounds.endMs !== null;
   const timeFilteredAgentRuns = useMemo(() => {
-    if (timeRangeCutoffMs === null) {
+    if (!hasTimeRangeBounds) {
       return agentRuns;
     }
     return agentRuns.filter((run) => {
-      // Unfinished runs (active/blocked/paused) bypass the cutoff so a
+      // Unfinished runs (active/blocked/paused) bypass the bounds so a
       // long-running job that started before the window doesn't vanish
       // from the list and status totals as time passes.
       if (
@@ -2333,28 +2317,25 @@ export default function Agents() {
       }
       // For finished runs prefer endedAt; fall back to startedAt.
       const anchor = run.endedAt ?? run.startedAt;
-      const parsed = new Date(anchor).getTime();
-      return Number.isFinite(parsed) && parsed >= timeRangeCutoffMs;
+      return isWithinTimeRangeBounds(new Date(anchor).getTime());
     });
-  }, [agentRuns, timeRangeCutoffMs]);
+  }, [agentRuns, hasTimeRangeBounds, isWithinTimeRangeBounds]);
   const timeFilteredTokenUsageEvents = useMemo(() => {
-    if (timeRangeCutoffMs === null) {
+    if (!hasTimeRangeBounds) {
       return tokenUsageEvents;
     }
-    return tokenUsageEvents.filter((event) => {
-      const parsed = new Date(event.createdAt).getTime();
-      return Number.isFinite(parsed) && parsed >= timeRangeCutoffMs;
-    });
-  }, [tokenUsageEvents, timeRangeCutoffMs]);
+    return tokenUsageEvents.filter((event) =>
+      isWithinTimeRangeBounds(new Date(event.createdAt).getTime()),
+    );
+  }, [tokenUsageEvents, hasTimeRangeBounds, isWithinTimeRangeBounds]);
   const timeFilteredTaskTraceEntries = useMemo(() => {
-    if (timeRangeCutoffMs === null) {
+    if (!hasTimeRangeBounds) {
       return taskTraceEntries;
     }
-    return taskTraceEntries.filter((entry) => {
-      const parsed = new Date(entry.createdAt).getTime();
-      return Number.isFinite(parsed) && parsed >= timeRangeCutoffMs;
-    });
-  }, [taskTraceEntries, timeRangeCutoffMs]);
+    return taskTraceEntries.filter((entry) =>
+      isWithinTimeRangeBounds(new Date(entry.createdAt).getTime()),
+    );
+  }, [taskTraceEntries, hasTimeRangeBounds, isWithinTimeRangeBounds]);
   const runStatusSummary = useMemo(
     () => summarizeAgentRunsByStatus(timeFilteredAgentRuns),
     [timeFilteredAgentRuns],
@@ -2387,7 +2368,7 @@ export default function Agents() {
     visibleAgentRuns,
     AGENT_RUNS_PAGE_SIZE,
     {
-      resetKey: `${projectFilter}:${normalizedQuery}:${timeRange}`,
+      resetKey: `${projectFilter}:${normalizedQuery}:${timeRange}:${customTimeRange.start ?? ""}:${customTimeRange.end ?? ""}`,
       storageKey: "devdeck:agents:runs-pagination",
     },
   );
@@ -2479,7 +2460,7 @@ export default function Agents() {
       },
       {
         detail: codingToolAvailability.opencode.available
-          ? "Project launches create the worktree, agent run, trace capture, and token budget automatically."
+          ? "Project launches create the worktree, agent run, and trace capture automatically."
           : codingToolAvailability.opencode.reason ??
             "Install OpenCode to enable automatic project launches.",
         icon: Sparkles,
@@ -3206,6 +3187,39 @@ export default function Agents() {
                 ))}
               </SelectContent>
             </Select>
+            {timeRange === "custom" ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={customTimeRange.start ?? ""}
+                  max={customTimeRange.end ?? undefined}
+                  onChange={(event) =>
+                    setCustomTimeRange((current) => ({
+                      end: isValidDateInputValue(current?.end) ? current.end : null,
+                      start: event.target.value || null,
+                    }))
+                  }
+                  aria-label="Custom range start date"
+                  className="h-9 rounded-md border border-black/10 bg-white px-2 text-xs outline-none transition-colors focus:border-primary/50 dark:border-white/10 dark:bg-background"
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <input
+                  type="date"
+                  value={customTimeRange.end ?? ""}
+                  min={customTimeRange.start ?? undefined}
+                  onChange={(event) =>
+                    setCustomTimeRange((current) => ({
+                      end: event.target.value || null,
+                      start: isValidDateInputValue(current?.start)
+                        ? current.start
+                        : null,
+                    }))
+                  }
+                  aria-label="Custom range end date"
+                  className="h-9 rounded-md border border-black/10 bg-white px-2 text-xs outline-none transition-colors focus:border-primary/50 dark:border-white/10 dark:bg-background"
+                />
+              </div>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             {["all", ...projectOptions].map((projectName) => {

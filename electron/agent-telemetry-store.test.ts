@@ -42,7 +42,6 @@ const agentRun = {
   status: "active",
   taskTitle: "Persist agent runs",
   terminalPaneId: "pane-1",
-  tokenBudget: 120000,
   workflowRunId: "workflow-1",
   worktreePath: "/tmp/devdeck-agent-run",
 } satisfies AgentRun;
@@ -87,7 +86,6 @@ test("saveAgentRuns normalizes and persists durable run history", async () => {
       {
         id: "",
         status: "unknown",
-        tokenBudget: "90,000",
       },
     ]);
     const reloaded = await readAgentTelemetryStore();
@@ -98,7 +96,6 @@ test("saveAgentRuns normalizes and persists durable run history", async () => {
     assert.equal(persistedRun?.id, "run-1");
     assert.equal(fallbackRun?.status, "active");
     assert.equal(fallbackRun?.taskTitle, "Agent run");
-    assert.equal(fallbackRun?.tokenBudget, 90000);
     assert.deepEqual(reloaded.agentRuns, saved.agentRuns);
   } finally {
     fixture.cleanup();

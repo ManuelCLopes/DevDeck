@@ -143,7 +143,7 @@ Canonical model definitions live in `shared/`.
 | --- | --- | --- |
 | `WorkspaceSelection` | `shared/workspace.ts` | Selected local projects and workspace root. |
 | `WorkspaceSnapshot` | `shared/workspace.ts` | Project health, PRs, activity, insights, GitHub state, user activity. |
-| `AgentDefinition` | `shared/agents.ts` | Discovered agent responsibility, skills, tools, scope, and budget. |
+| `AgentDefinition` | `shared/agents.ts` | Discovered agent responsibility, skills, tools, and scope. |
 | `WorkflowDefinition` | `shared/agents.ts` | Multi-step agent workflow definitions. |
 | `AgentRun` | `shared/agents.ts` | A launched or tracked agent execution. |
 | `TaskTraceEntry` | `shared/agents.ts` | Captured trace events for an agent run. |
@@ -211,7 +211,7 @@ Recommendation and launch defaulting logic lives in `client/src/lib/agent-launch
 
 Agent telemetry has three slices:
 
-- `agentRuns`: run status, task title, linked project, branch, worktree, workflow, OpenCode session, and token budget.
+- `agentRuns`: run status, task title, linked project, branch, worktree, workflow, and OpenCode session.
 - `taskTraceEntries`: trace summaries, touched files, commands, tests, errors, handoff target, and next action.
 - `tokenUsageEvents`: token buckets, model/provider, cost, and run/project/workflow links.
 

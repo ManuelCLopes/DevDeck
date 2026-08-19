@@ -31,13 +31,11 @@ export interface AgentProductivityTotals extends TokenUsageRollup {
   averageDurationMs: number | null;
   averageTokensPerRun: number;
   blockedRunCount: number;
-  budgetWarningCount: number;
   completedRunCount: number;
   completionRate: number;
   failedRunCount: number;
   failureRate: number;
   linkedOpenCodeRunCount: number;
-  overBudgetRunCount: number;
   pausedRunCount: number;
   pausedOrBlockedRate: number;
   runCount: number;
@@ -49,7 +47,6 @@ export interface AgentProductivityTotals extends TokenUsageRollup {
 export interface AgentProductivityRunInsight extends TokenUsageRollup {
   agentId: string | null;
   agentName: string;
-  budgetPercent: number | null;
   durationMs: number | null;
   projectId: string | null;
   projectName: string;
@@ -64,12 +61,10 @@ export interface AgentProductivityAgentSummary extends TokenUsageRollup {
   agentName: string;
   averageDurationMs: number | null;
   blockedRunCount: number;
-  budgetWarningCount: number;
   completedRunCount: number;
   completionRate: number;
   failedRunCount: number;
   lastRunAt: string | null;
-  overBudgetRunCount: number;
   pausedRunCount: number;
   projectName: string;
   runCount: number;
@@ -208,7 +203,6 @@ export interface AgentHandoffLatencySummary {
 export interface AgentProductivityInsights {
   agentThroughputTrends: AgentThroughputTrend[];
   agentSummaries: AgentProductivityAgentSummary[];
-  budgetWarnings: AgentProductivityRunInsight[];
   expensiveRuns: AgentProductivityRunInsight[];
   handoffLatency: AgentHandoffLatencySummary;
   handoffRoles: AgentHandoffRoleSummary[];
@@ -496,12 +490,10 @@ function createAgentSummary(
     agentName: getAgentName(agent, agentId),
     averageDurationMs: null,
     blockedRunCount: 0,
-    budgetWarningCount: 0,
     completedRunCount: 0,
     completionRate: 0,
     failedRunCount: 0,
     lastRunAt: null,
-    overBudgetRunCount: 0,
     pausedRunCount: 0,
     projectName: getProjectName(agent?.projectName),
     runCount: 0,
@@ -587,9 +579,6 @@ function getWorkflowMetadataIssues(
       continue;
     }
 
-    if (!agent.tokenBudget) {
-      issues.add(`Missing budget: ${agent.name}`);
-    }
     if (agent.responsibilities.length === 0 && !agent.description) {
       issues.add(`Missing responsibilities: ${agent.name}`);
     }
@@ -742,15 +731,11 @@ export function buildAgentProductivityInsights(
       ? workflowsById.get(run.workflowRunId)
       : undefined;
     const usage = runUsageById.get(run.id) ?? createEmptyUsageRollup();
-    const budgetPercent = run.tokenBudget
-      ? Math.round((usage.totalTokens / run.tokenBudget) * 100)
-      : null;
 
     return {
       ...usage,
       agentId: run.agentId,
       agentName: getAgentName(agent, run.agentId),
-      budgetPercent,
       durationMs: getRunDurationMs(run, nowMs),
       projectId: run.projectId ?? agent?.projectId ?? workflow?.projectId ?? null,
       projectName: getProjectName(
@@ -775,13 +760,11 @@ export function buildAgentProductivityInsights(
     averageDurationMs: getAverage(durations),
     averageTokensPerRun: 0,
     blockedRunCount: 0,
-    budgetWarningCount: 0,
     completedRunCount: 0,
     completionRate: 0,
     failedRunCount: 0,
     failureRate: 0,
     linkedOpenCodeRunCount: 0,
-    overBudgetRunCount: 0,
     pausedRunCount: 0,
     pausedOrBlockedRate: 0,
     runCount: agentRuns.length,
@@ -816,12 +799,6 @@ export function buildAgentProductivityInsights(
     }
     if (!runInsight.run.opencodeSessionId) {
       totals.unlinkedOpenCodeRunCount += 1;
-    }
-    if (runInsight.budgetPercent !== null && runInsight.budgetPercent >= 80) {
-      totals.budgetWarningCount += 1;
-    }
-    if (runInsight.budgetPercent !== null && runInsight.budgetPercent > 100) {
-      totals.overBudgetRunCount += 1;
     }
   }
 
@@ -1168,12 +1145,6 @@ export function buildAgentProductivityInsights(
       getTime(runInsight.run.startedAt) > getTime(agentSummary.lastRunAt)
         ? runInsight.run.startedAt
         : agentSummary.lastRunAt;
-    if (runInsight.budgetPercent !== null && runInsight.budgetPercent >= 80) {
-      agentSummary.budgetWarningCount += 1;
-    }
-    if (runInsight.budgetPercent !== null && runInsight.budgetPercent > 100) {
-      agentSummary.overBudgetRunCount += 1;
-    }
     if (runInsight.durationMs !== null) {
       const samples = durationSamplesByAgentId.get(agentKey) ?? [];
       samples.push(runInsight.durationMs);
@@ -1321,15 +1292,6 @@ export function buildAgentProductivityInsights(
     }
   }
 
-  const budgetWarnings = runInsights
-    .filter((runInsight) => runInsight.budgetPercent !== null && runInsight.budgetPercent >= 80)
-    .sort(
-      (left, right) =>
-        (right.budgetPercent ?? 0) - (left.budgetPercent ?? 0) ||
-        getTime(right.run.startedAt) - getTime(left.run.startedAt),
-    )
-    .slice(0, 8);
-
   const expensiveRuns = [...runInsights]
     .sort((left, right) => getTime(right.run.startedAt) - getTime(left.run.startedAt))
     .slice(0, 50)
@@ -1390,7 +1352,6 @@ export function buildAgentProductivityInsights(
         right.totalTokens - left.totalTokens ||
         left.agentName.localeCompare(right.agentName),
     ),
-    budgetWarnings,
     expensiveRuns,
     handoffLatency,
     handoffRoles: Array.from(handoffRolesByAgentId.values()).sort(
@@ -1459,8 +1420,6 @@ export function serializeAgentTelemetryCsv(input: AgentProductivityInput) {
     "tool_call_tokens",
     "total_tokens",
     "estimated_cost",
-    "token_budget",
-    "budget_percent",
     "opencode_session_id",
     "branch_name",
     "worktree_path",
@@ -1488,8 +1447,6 @@ export function serializeAgentTelemetryCsv(input: AgentProductivityInput) {
     runInsight.toolCallTokens,
     runInsight.totalTokens,
     runInsight.estimatedCost.toFixed(4),
-    runInsight.run.tokenBudget,
-    runInsight.budgetPercent,
     runInsight.run.opencodeSessionId,
     runInsight.run.branchName,
     runInsight.run.worktreePath,

@@ -18,7 +18,6 @@ const builder = {
   responsibilities: ["Implement scoped changes"],
   sourceFormat: "json",
   sourcePath: "/repo/agents.json",
-  tokenBudget: 1000,
 } satisfies AgentDefinition;
 
 const reviewer = {
@@ -31,7 +30,6 @@ const reviewer = {
   id: "reviewer",
   name: "Reviewer Agent",
   responsibilities: [],
-  tokenBudget: null,
 } satisfies AgentDefinition;
 
 const workflow = {

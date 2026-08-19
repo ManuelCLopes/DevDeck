@@ -33,7 +33,6 @@ const builder = {
   responsibilities: ["Implement"],
   sourceFormat: "json",
   sourcePath: "/repo/agents.json",
-  tokenBudget: 1000,
 } satisfies AgentDefinition;
 
 const reviewer = {
@@ -85,7 +84,6 @@ const run = {
   status: "active",
   taskTitle: "Build trace view",
   terminalPaneId: "pane-1",
-  tokenBudget: 1000,
   workflowRunId: "feature",
   worktreePath: "/tmp/alpha",
 } satisfies AgentRun;
