@@ -42,12 +42,18 @@ import type {
   JiraConnection,
   JiraConnectionCredentials,
   JiraConnectionHealth,
+  JiraIssueDetail,
   JiraIssueRecord,
   JiraIssueType,
   JiraProjectConfig,
   JiraRemoteProject,
   JiraSyncMode,
 } from "../shared/jira";
+import type { RepositoryMappingMatch, RepositoryMappingRule } from "../shared/backlog";
+import type {
+  EvidenceItem,
+  GatherEvidenceRequest,
+} from "../shared/evidence";
 
 interface WorkspaceMonitorState {
   preferences: WorkspaceMonitorPreferences & {
@@ -292,6 +298,43 @@ const devdeck = {
   getBacklogDiagnostics(): Promise<BacklogDiagnosticsSummary> {
     return ipcRenderer.invoke("devdeck:get-backlog-diagnostics");
   },
+  backlogMapping: {
+    save(payload: {
+      id?: string;
+      enabled: boolean;
+      jiraProjectKey: string;
+      localProjectIds: string[];
+      match: RepositoryMappingMatch;
+      priority: number;
+    }): Promise<RepositoryMappingRule> {
+      return ipcRenderer.invoke("devdeck:backlog-mapping:save", payload);
+    },
+    list(jiraProjectKey: string): Promise<RepositoryMappingRule[]> {
+      return ipcRenderer.invoke("devdeck:backlog-mapping:list", jiraProjectKey);
+    },
+    delete(id: string): Promise<void> {
+      return ipcRenderer.invoke("devdeck:backlog-mapping:delete", id);
+    },
+    resolve(payload: {
+      components: string[];
+      issueKey: string;
+      jiraProjectKey: string;
+      labels: string[];
+    }): Promise<RepositoryMappingRule | null> {
+      return ipcRenderer.invoke("devdeck:backlog-mapping:resolve", payload);
+    },
+  },
+  evidence: {
+    getForIssue(payload: { issueKey: string; jiraProjectId: string }): Promise<EvidenceItem[]> {
+      return ipcRenderer.invoke("devdeck:evidence:get-for-issue", payload);
+    },
+    startGather(payload: {
+      jiraProjectId: string;
+      request: GatherEvidenceRequest;
+    }): Promise<EngineeringBrainOperation> {
+      return ipcRenderer.invoke("devdeck:evidence:start-gather", payload);
+    },
+  },
   jira: {
     getAuthCapabilities(): Promise<JiraAuthCapabilities> {
       return ipcRenderer.invoke("devdeck:jira:get-auth-capabilities");
@@ -336,6 +379,9 @@ const devdeck = {
       projectConfigId: string;
     }): Promise<{ issues: JiraIssueRecord[]; total: number }> {
       return ipcRenderer.invoke("devdeck:jira:list-issues", payload);
+    },
+    getIssueDetail(issueKey: string): Promise<JiraIssueDetail | null> {
+      return ipcRenderer.invoke("devdeck:jira:get-issue-detail", issueKey);
     },
     startSync(payload: {
       mode: JiraSyncMode;

@@ -37,12 +37,18 @@ import type {
   StartEngineeringBrainOperationRequest,
 } from "@shared/engineering-brain";
 import type { BacklogFeatureFlags } from "@shared/feature-flags";
-import type { BacklogDiagnosticsSummary } from "@shared/backlog";
+import type {
+  BacklogDiagnosticsSummary,
+  RepositoryMappingMatch,
+  RepositoryMappingRule,
+} from "@shared/backlog";
+import type { EvidenceItem, GatherEvidenceRequest } from "@shared/evidence";
 import type {
   JiraAuthCapabilities,
   JiraConnection,
   JiraConnectionCredentials,
   JiraConnectionHealth,
+  JiraIssueDetail,
   JiraIssueRecord,
   JiraIssueType,
   JiraProjectConfig,
@@ -207,6 +213,31 @@ interface DevDeckDesktopApi {
   syncWorkspaceMonitorState(state: WorkspaceMonitorState): Promise<void>;
   getBacklogFeatureFlags(): Promise<BacklogFeatureFlags>;
   getBacklogDiagnostics(): Promise<BacklogDiagnosticsSummary>;
+  backlogMapping: {
+    save(payload: {
+      id?: string;
+      enabled: boolean;
+      jiraProjectKey: string;
+      localProjectIds: string[];
+      match: RepositoryMappingMatch;
+      priority: number;
+    }): Promise<RepositoryMappingRule>;
+    list(jiraProjectKey: string): Promise<RepositoryMappingRule[]>;
+    delete(id: string): Promise<void>;
+    resolve(payload: {
+      components: string[];
+      issueKey: string;
+      jiraProjectKey: string;
+      labels: string[];
+    }): Promise<RepositoryMappingRule | null>;
+  };
+  evidence: {
+    getForIssue(payload: { issueKey: string; jiraProjectId: string }): Promise<EvidenceItem[]>;
+    startGather(payload: {
+      jiraProjectId: string;
+      request: GatherEvidenceRequest;
+    }): Promise<EngineeringBrainOperation>;
+  };
   jira: {
     getAuthCapabilities(): Promise<JiraAuthCapabilities>;
     getConnection(): Promise<JiraConnection | null>;
@@ -232,6 +263,7 @@ interface DevDeckDesktopApi {
       offset: number;
       projectConfigId: string;
     }): Promise<{ issues: JiraIssueRecord[]; total: number }>;
+    getIssueDetail(issueKey: string): Promise<JiraIssueDetail | null>;
     startSync(payload: {
       mode: JiraSyncMode;
       projectConfigId: string;
