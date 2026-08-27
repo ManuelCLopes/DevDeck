@@ -1024,6 +1024,8 @@ Deliver shared contracts, schemas, SQLite, migrations, IPC, Backlog shell UI, an
 
 ### Phase 2 — Jira read-only
 
+**Status (2026-08-27): implemented, validated only against a mocked Jira API** — this environment has no live Jira Cloud site to sync against. See docs/BACKLOG_INTELLIGENCE_INTEGRATION_PLAN.md's Phase 2 section for the file-by-file breakdown and what's still deferred (guided filters, issue-detail drill-down, live-scale validation).
+
 Deliver authentication, Keychain, project discovery, JQL, full and incremental sync, and issue browsing.
 
 ### Phase 3 — Repository evidence
