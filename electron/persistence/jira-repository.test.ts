@@ -5,6 +5,7 @@ import { openSqliteConnection } from "./sqlite-driver";
 import { runMigrations } from "./migration-runner";
 import { backlogMigrations } from "./migrations";
 import {
+  deleteJiraConnection,
   getJiraConnection,
   getJiraIssueDetail,
   getJiraProjectConfig,
@@ -63,6 +64,53 @@ test("upsertJiraConnection creates then updates a connection", () => {
   });
   assert.equal(updated.baseUrl, "https://renamed.atlassian.net");
   assert.equal(getJiraConnection(db, "conn-1")?.baseUrl, "https://renamed.atlassian.net");
+
+  db.close();
+});
+
+test("deleteJiraConnection cascades to remove dependent projects, issues, comments, and links", () => {
+  const db = createTestDatabase();
+  upsertJiraConnection(db, {
+    accountEmail: "dev@example.com",
+    baseUrl: "https://example.atlassian.net",
+    id: "conn-1",
+  });
+  const projectConfig = upsertJiraProjectConfig(db, {
+    connectionId: "conn-1",
+    jql: null,
+    name: "Engineering",
+    projectKey: "ENG",
+  });
+  upsertJiraIssues(db, [
+    {
+      ...buildIssue({ issueKey: "ENG-1", projectId: projectConfig.id }),
+      comments: [
+        {
+          author: "Dev",
+          body: "A comment",
+          id: "c-1",
+          issueKey: "ENG-1",
+          jiraCreatedAt: "2026-08-01T00:00:00.000Z",
+        },
+      ],
+      links: [
+        {
+          id: "ENG-1:ENG-2:blocks",
+          issueKey: "ENG-1",
+          linkType: "blocks",
+          relatedIssueKey: "ENG-2",
+        },
+      ],
+    },
+  ]);
+
+  assert.ok(getJiraIssueDetail(db, "ENG-1"));
+
+  deleteJiraConnection(db, "conn-1");
+
+  assert.equal(getJiraConnection(db, "conn-1"), null);
+  assert.equal(getJiraProjectConfig(db, projectConfig.id), null);
+  assert.equal(getJiraIssueDetail(db, "ENG-1"), null);
 
   db.close();
 });

@@ -92,7 +92,12 @@ test("normalizeJiraIssue normalises inbound and outbound issue links", () => {
   const normalized = normalizeJiraIssue(rawIssue, "project-config-1", "2026-08-19T00:00:00.000Z");
 
   assert.deepEqual(normalized.links, [
-    { id: "10100", issueKey: "ENG-3", linkType: "relates to", relatedIssueKey: "ENG-9" },
+    {
+      id: "ENG-3:ENG-9:relates to",
+      issueKey: "ENG-3",
+      linkType: "relates to",
+      relatedIssueKey: "ENG-9",
+    },
     {
       id: "ENG-3:ENG-8:is blocked by",
       issueKey: "ENG-3",
@@ -100,6 +105,52 @@ test("normalizeJiraIssue normalises inbound and outbound issue links", () => {
       relatedIssueKey: "ENG-8",
     },
   ]);
+});
+
+test("normalizeJiraIssue derives distinct link ids per endpoint even when Jira's own link id is shared", () => {
+  // Jira exposes the *same* link id on both sides of a relationship —
+  // syncing both endpoint issues must not produce colliding primary
+  // keys in jira_issue_links (id is a PRIMARY KEY there).
+  const sharedRawLink = {
+    id: "10100",
+    outwardIssue: { key: "ENG-9" },
+    type: { name: "relates to", outward: "relates to" },
+  };
+
+  const fromOutwardSide = normalizeJiraIssue(
+    {
+      fields: {
+        issuelinks: [sharedRawLink],
+        issuetype: { name: "Task" },
+        status: { name: "Open" },
+        summary: "Outward side",
+        updated: "2026-08-01T00:00:00.000Z",
+      },
+      id: "1",
+      key: "ENG-3",
+    },
+    "project-config-1",
+    "2026-08-19T00:00:00.000Z",
+  );
+  const fromInwardSide = normalizeJiraIssue(
+    {
+      fields: {
+        issuelinks: [
+          { id: "10100", inwardIssue: { key: "ENG-3" }, type: { inward: "is related to", name: "relates to" } },
+        ],
+        issuetype: { name: "Task" },
+        status: { name: "Open" },
+        summary: "Inward side",
+        updated: "2026-08-01T00:00:00.000Z",
+      },
+      id: "2",
+      key: "ENG-9",
+    },
+    "project-config-1",
+    "2026-08-19T00:00:00.000Z",
+  );
+
+  assert.notEqual(fromOutwardSide.links[0].id, fromInwardSide.links[0].id);
 });
 
 test("normalizeJiraIssue normalises comments, defaulting a missing author and body", () => {

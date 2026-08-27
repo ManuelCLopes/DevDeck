@@ -34,6 +34,28 @@ export interface JiraSyncContext {
   signal?: AbortSignal;
 }
 
+/**
+ * Always scopes a sync's JQL to the configured project — the user's own
+ * JQL (or the incremental time window) is ANDed onto a mandatory
+ * `project = "<key>"` clause rather than trusted to include one itself.
+ * Without this, an empty or misconfigured filter would run site-wide
+ * and attribute every returned issue to this local project config,
+ * corrupting later repository-mapping and evidence lookups.
+ */
+function buildProjectScopedJql(
+  projectConfig: JiraProjectConfig,
+  extraClause?: string,
+): string {
+  const clauses = [`project = "${projectConfig.projectKey}"`];
+  if (projectConfig.jql) {
+    clauses.push(projectConfig.jql);
+  }
+  if (extraClause) {
+    clauses.push(extraClause);
+  }
+  return clauses.map((clause) => `(${clause})`).join(" AND ");
+}
+
 function assertNotAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     const error = new Error("Sync cancelled.");
@@ -109,7 +131,7 @@ async function withConnectionHealthTracking(
  */
 export async function runFullJiraSync(context: JiraSyncContext): Promise<JiraSyncResult> {
   return withConnectionHealthTracking(context, async () => {
-    const jql = context.projectConfig.jql ?? "";
+    const jql = buildProjectScopedJql(context.projectConfig);
     const { issueKeys } = await fetchAllPages(context, jql);
 
     const markedOutOfScopeCount = markJiraIssuesOutOfScope(
@@ -166,11 +188,7 @@ export async function runIncrementalJiraSync(
     );
     const windowMinutes = Math.max(1, elapsedMinutes) + INCREMENTAL_SYNC_OVERLAP_MINUTES;
 
-    const baseJql = context.projectConfig.jql ?? "";
-    const jql = baseJql
-      ? `(${baseJql}) AND updated >= "-${windowMinutes}m"`
-      : `updated >= "-${windowMinutes}m"`;
-
+    const jql = buildProjectScopedJql(context.projectConfig, `updated >= "-${windowMinutes}m"`);
     const { issueKeys } = await fetchAllPages(context, jql);
 
     const syncedAt = new Date().toISOString();

@@ -16,6 +16,7 @@ import {
 } from "./jira/jira-auth";
 import { listIssueTypes, listProjects, searchIssues, testConnection } from "./jira/jira-client";
 import {
+  deleteJiraConnection,
   getJiraConnection,
   getJiraIssueDetail,
   getJiraProjectConfig,
@@ -139,6 +140,20 @@ export function registerJiraIpc(): void {
     await saveStoredJiraCredentials(credentials);
 
     const db = requireDatabaseConnection();
+
+    // Phase 2 has exactly one connection row, keyed by the stable
+    // JIRA_CONNECTION_ID rather than the site's identity. If the site
+    // itself changed (a different baseUrl — the user disconnected and
+    // connected a different Jira instance), upserting in place would
+    // silently keep the old site's jira_projects/jira_issues/comments/
+    // links attached to what is now a different account. Delete the old
+    // connection first so its ON DELETE CASCADE wipes that stale data
+    // before the new connection is created.
+    const existingConnection = getJiraConnection(db, JIRA_CONNECTION_ID);
+    if (existingConnection && existingConnection.baseUrl !== credentials.baseUrl) {
+      deleteJiraConnection(db, JIRA_CONNECTION_ID);
+    }
+
     const connection = upsertJiraConnection(db, {
       accountEmail: credentials.accountEmail,
       baseUrl: credentials.baseUrl,

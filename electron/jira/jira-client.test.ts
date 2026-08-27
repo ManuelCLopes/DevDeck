@@ -68,6 +68,25 @@ test("testConnection reports failure with Jira's message on 401 without retrying
   }
 });
 
+test("jiraApiRequest retries a plain 500 (not just 502/503/504), then succeeds", async () => {
+  let callCount = 0;
+  const restore = stubFetch(async () => {
+    callCount += 1;
+    if (callCount === 1) {
+      return jsonResponse({ errorMessages: ["Internal server error."] }, 500);
+    }
+    return jsonResponse({ displayName: "Dev Example" });
+  });
+
+  try {
+    const health = await testConnection(CREDENTIALS, { wait: noWait });
+    assert.equal(health.ok, true);
+    assert.equal(callCount, 2);
+  } finally {
+    restore();
+  }
+});
+
 test("jiraApiRequest retries a 429 honouring Retry-After, then succeeds", async () => {
   let callCount = 0;
   const waitedMs: number[] = [];

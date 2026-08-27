@@ -92,6 +92,18 @@ export function getJiraConnection(
   return row ? rowToConnection(row) : null;
 }
 
+/**
+ * Deletes a connection and, via `ON DELETE CASCADE`, every
+ * jira_project/jira_issue/comment/link that hung off it. Used when the
+ * single Phase 2 connection's site identity changes (a different
+ * `baseUrl`) — without this, the old site's cached projects and issues
+ * would linger under the new account and future syncs could mix or
+ * overwrite records that happen to share an issue key.
+ */
+export function deleteJiraConnection(db: SqliteConnection, id: string): void {
+  db.prepare("DELETE FROM jira_connections WHERE id = ?").run(id);
+}
+
 interface JiraProjectConfigRow {
   connection_id: string;
   id: string;
