@@ -48,6 +48,16 @@ export function closeEngineeringBrainPersistence(): void {
   databaseInitError = null;
 }
 
+/**
+ * The live SQLite connection, for other IPC modules that need it (e.g.
+ * electron/jira-ipc.ts). Returns null until
+ * initializeEngineeringBrainPersistence() has run successfully — callers
+ * must handle that rather than assuming persistence is always ready.
+ */
+export function getEngineeringBrainDatabaseConnection() {
+  return databaseHandle?.connection ?? null;
+}
+
 function getBacklogDiagnosticsSummary(): BacklogDiagnosticsSummary {
   if (databaseHandle) {
     return {

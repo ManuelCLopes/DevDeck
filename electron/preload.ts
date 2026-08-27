@@ -37,6 +37,17 @@ import type {
 } from "../shared/engineering-brain";
 import type { BacklogFeatureFlags } from "../shared/feature-flags";
 import type { BacklogDiagnosticsSummary } from "../shared/backlog";
+import type {
+  JiraAuthCapabilities,
+  JiraConnection,
+  JiraConnectionCredentials,
+  JiraConnectionHealth,
+  JiraIssueRecord,
+  JiraIssueType,
+  JiraProjectConfig,
+  JiraRemoteProject,
+  JiraSyncMode,
+} from "../shared/jira";
 
 interface WorkspaceMonitorState {
   preferences: WorkspaceMonitorPreferences & {
@@ -280,6 +291,58 @@ const devdeck = {
   },
   getBacklogDiagnostics(): Promise<BacklogDiagnosticsSummary> {
     return ipcRenderer.invoke("devdeck:get-backlog-diagnostics");
+  },
+  jira: {
+    getAuthCapabilities(): Promise<JiraAuthCapabilities> {
+      return ipcRenderer.invoke("devdeck:jira:get-auth-capabilities");
+    },
+    getConnection(): Promise<JiraConnection | null> {
+      return ipcRenderer.invoke("devdeck:jira:get-connection");
+    },
+    testAndSaveConnection(
+      credentials: JiraConnectionCredentials,
+    ): Promise<{ connection: JiraConnection; health: JiraConnectionHealth }> {
+      return ipcRenderer.invoke("devdeck:jira:test-and-save-connection", credentials);
+    },
+    clearConnection(): Promise<void> {
+      return ipcRenderer.invoke("devdeck:jira:clear-connection");
+    },
+    listRemoteProjects(): Promise<JiraRemoteProject[]> {
+      return ipcRenderer.invoke("devdeck:jira:list-remote-projects");
+    },
+    listIssueTypes(projectKey: string): Promise<JiraIssueType[]> {
+      return ipcRenderer.invoke("devdeck:jira:list-issue-types", projectKey);
+    },
+    previewJql(payload: {
+      connectionId: string;
+      jql: string;
+    }): Promise<{ total: number; valid: true } | { reason: string; valid: false }> {
+      return ipcRenderer.invoke("devdeck:jira:preview-jql", payload);
+    },
+    saveProjectConfig(payload: {
+      connectionId: string;
+      jql: string | null;
+      name: string;
+      projectKey: string;
+    }): Promise<JiraProjectConfig> {
+      return ipcRenderer.invoke("devdeck:jira:save-project-config", payload);
+    },
+    listProjectConfigs(connectionId: string): Promise<JiraProjectConfig[]> {
+      return ipcRenderer.invoke("devdeck:jira:list-project-configs", connectionId);
+    },
+    listIssues(payload: {
+      limit: number;
+      offset: number;
+      projectConfigId: string;
+    }): Promise<{ issues: JiraIssueRecord[]; total: number }> {
+      return ipcRenderer.invoke("devdeck:jira:list-issues", payload);
+    },
+    startSync(payload: {
+      mode: JiraSyncMode;
+      projectConfigId: string;
+    }): Promise<EngineeringBrainOperation> {
+      return ipcRenderer.invoke("devdeck:jira:start-sync", payload);
+    },
   },
   engineeringBrain: {
     startOperation(
