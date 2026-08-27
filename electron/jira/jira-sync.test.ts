@@ -58,7 +58,7 @@ function setUp() {
   });
   const projectConfig = upsertJiraProjectConfig(db, {
     connectionId: "conn-1",
-    jql: "project = ENG",
+    jql: "statusCategory != Done",
     name: "Engineering",
     projectKey: "ENG",
   });
@@ -127,6 +127,36 @@ test("runFullJiraSync upserts every page and marks issues no longer returned as 
     const refreshedConfig = getJiraProjectConfig(db, projectConfig.id);
     assert.ok(refreshedConfig?.lastFullSyncAt);
     assert.equal(getJiraConnection(db, "conn-1")?.lastSuccessfulSyncAt, refreshedConfig?.lastFullSyncAt);
+  } finally {
+    restore();
+  }
+});
+
+test("runFullJiraSync always scopes the query to the configured project, even with no additional JQL", async () => {
+  const { db, projectConfig } = setUp();
+  // Simulate the "user cleared the filter" case the review flagged: a
+  // saved project config with no JQL of its own.
+  const unfilteredConfig = { ...projectConfig, jql: null };
+
+  let capturedJql = "";
+  const restore = stubFetch(async (init) => {
+    const body = JSON.parse(String(init?.body)) as { jql: string };
+    capturedJql = body.jql;
+    return jsonResponse({ issues: [], maxResults: 50, startAt: 0, total: 0 });
+  });
+
+  try {
+    await runFullJiraSync({
+      clientOptions: { wait: async () => {} },
+      connectionId: "conn-1",
+      credentials: CREDENTIALS,
+      db,
+      projectConfig: unfilteredConfig,
+    });
+
+    // Must never run unscoped — every issue a site-wide query returned
+    // would otherwise be attributed to this local project config.
+    assert.equal(capturedJql, '(project = "ENG")');
   } finally {
     restore();
   }
@@ -208,7 +238,10 @@ test("runIncrementalJiraSync scopes the JQL to a relative updated window and nev
 
     assert.equal(incrementalResult.mode, "incremental");
     assert.equal(incrementalResult.markedOutOfScopeCount, 0);
-    assert.match(capturedJql, /^\(project = ENG\) AND updated >= "-\d+m"$/);
+    assert.match(
+      capturedJql,
+      /^\(project = "ENG"\) AND \(statusCategory != Done\) AND \(updated >= "-\d+m"\)$/,
+    );
 
     // ENG-1's record is updated, and out_of_scope is never touched by an
     // incremental sync — nothing here asserts it changed either way,

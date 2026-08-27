@@ -89,7 +89,14 @@ function normalizeIssueLink(rawLink: JiraApiIssueLink, issueKey: string): JiraIs
     : (rawLink.type.inward ?? rawLink.type.name);
 
   return {
-    id: rawLink.id ?? `${issueKey}:${relatedIssueKey}:${linkType}`,
+    // Jira's own link id is shared by both endpoints of the
+    // relationship (it appears verbatim in each issue's `issuelinks`).
+    // jira_issue_links.id is our primary key, and we store one row per
+    // endpoint (one for the issue that references it outward, one for
+    // the issue that references it inward) — reusing Jira's id would
+    // collide the second time the same link is synced from the other
+    // side. Always derive a per-endpoint id instead.
+    id: `${issueKey}:${relatedIssueKey}:${linkType}`,
     issueKey,
     linkType,
     relatedIssueKey,

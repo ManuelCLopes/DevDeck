@@ -46,7 +46,9 @@ export interface JiraClientRequestOptions {
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_ATTEMPTS = 4;
 const DEFAULT_RETRY_BASE_DELAY_MS = 300;
-const RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
+// 501 (Not Implemented) is deliberately excluded — it means the server
+// doesn't support this request at all, which retrying can't fix.
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 function defaultWait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
