@@ -1030,6 +1030,8 @@ Deliver authentication, Keychain, project discovery, JQL, full and incremental s
 
 ### Phase 3 — Repository evidence
 
+**Status (2026-08-27): implemented** — repository mapping precedence, the safe Git runner, ripgrep/Node lexical search, GitHub PR search, evidence persistence, and an issue-detail evidence panel. See docs/BACKLOG_INTELLIGENCE_INTEGRATION_PLAN.md's Phase 3 section for what's deferred (component-removal detection, a persisted incremental index, full evidence ranking).
+
 Deliver mappings, snapshots, Git search, code search, GitHub enrichment, and evidence UI.
 
 ### Phase 4 — Rules-only assessment
