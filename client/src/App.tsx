@@ -27,6 +27,7 @@ const Projects = lazy(() => import("@/pages/Projects"));
 const Agents = lazy(() => import("@/pages/Agents"));
 const Terminals = lazy(() => import("@/pages/Terminals"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
+const Backlog = lazy(() => import("@/pages/Backlog"));
 
 function AppLoadingScreen() {
   return (
@@ -96,6 +97,7 @@ function AppRouter() {
         <Route path="/agents">{() => <Agents />}</Route>
         <Route path="/terminals">{() => <Terminals />}</Route>
         <Route path="/activity">{() => <Activity />}</Route>
+        <Route path="/backlog">{() => <Backlog />}</Route>
         <Route path="/settings">{() => <Settings />}</Route>
         <Route>{() => <NotFound />}</Route>
       </Switch>

@@ -82,6 +82,11 @@ import { generateAICompletion, getPullRequestDiff } from "./ai-service";
 import { initializeMenubar, destroyMenubarTray, updateMenubarTray } from "./menubar";
 import { getGitCommitGraph } from "./git-graph";
 import { getConflictedFiles, resolveFileConflict } from "./git-conflict";
+import {
+  closeEngineeringBrainPersistence,
+  initializeEngineeringBrainPersistence,
+  registerEngineeringBrainIpc,
+} from "./engineering-brain-ipc";
 
 const execFileAsync = promisify(execFile);
 const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
@@ -996,9 +1001,11 @@ ipcMain.handle(
 );
 
 registerPtyIpc();
+registerEngineeringBrainIpc();
 
 app.whenReady().then(() => {
   syncMacAppIdentity();
+  initializeEngineeringBrainPersistence();
   createMainWindow();
   syncTrayPresence();
 
@@ -1017,6 +1024,7 @@ app.whenReady().then(() => {
 app.on("before-quit", () => {
   isQuitting = true;
   stopOpenCodeServer();
+  closeEngineeringBrainPersistence();
 });
 
 app.on("window-all-closed", () => {

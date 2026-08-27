@@ -37,6 +37,8 @@ flowchart LR
 
 ## M0 — Architecture validation
 
+**Status (2026-08-18): partially complete.** The foundational ADRs (docs/adr/) are accepted, and M1 proceeded on top of them per this roadmap's own dependency note ("M1 depends on M0 persistence decisions" — the decision, not full packaging validation). The packaged-arm64/signing/notarisation half of the persistence exit criterion below was not closed before M1 started and still isn't; see ADR-0003.
+
 ### Objectives
 
 - remove high-risk unknowns;
@@ -71,6 +73,8 @@ flowchart LR
 
 ## M1 — Domain foundation
 
+**Status (2026-08-18): implemented**, with one open item carried from M0. See below.
+
 ### Objectives
 
 Create the executable platform shell without implementing Jira or indexing.
@@ -90,15 +94,15 @@ Create the executable platform shell without implementing Jira or indexing.
 
 ### Exit criteria
 
-- fresh database and migrations work;
-- operation start/query/cancel flow works;
-- renderer can reconnect to canonical state;
-- no credentials or external calls exist yet;
-- type check, tests, build, and package pass.
+- fresh database and migrations work; ✅ `electron/persistence/` — see `backlog-db.test.ts`, `migration-runner.test.ts`, `migrations/0001-init.test.ts`.
+- operation start/query/cancel flow works; ✅ `electron/engineering-brain/engineering-brain-service.ts` + `engineering-brain-service.test.ts`. No operation kinds are registered yet, so `startOperation` always fails with `UnknownOperationKindError` until a real skill registers a handler (M4 onward).
+- renderer can reconnect to canonical state; ✅ for diagnostics (`useBacklogDiagnostics` re-fetches on mount). Operations themselves are **not** persisted — they live in an in-memory registry that a restart clears. That is an accepted Phase 1 gap, not a later-phase design decision: revisit once a real operation kind exists and needs to survive a restart.
+- no credentials or external calls exist yet; ✅ nothing in this milestone talks to Jira, GitHub, or a model provider.
+- type check, tests, build, and package pass. ✅ on Linux (`npm run check`, `npm test`, `npm run build`, existing Playwright desktop smoke suite). ❌ **not validated:** signed/notarised arm64 macOS packaging — this is an M0 exit criterion that was never actually closed out before M1 work started, and it still isn't; see ADR-0003's "Interim driver decision".
 
 ### Estimated effort
 
-1–2 weeks.
+1–2 weeks. Actual: implemented in one session; the outstanding macOS packaging validation is untimed follow-up work.
 
 ## M2 — Jira read-only
 
