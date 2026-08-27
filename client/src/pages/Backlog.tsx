@@ -1,11 +1,15 @@
+import { useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import JiraConnectionCard from "@/components/backlog/JiraConnectionCard";
+import JiraIssuesTable from "@/components/backlog/JiraIssuesTable";
+import JiraProjectSyncCard from "@/components/backlog/JiraProjectSyncCard";
 import { useBacklogDiagnostics } from "@/hooks/use-backlog-diagnostics";
 import { useBacklogFeatureFlags } from "@/hooks/use-backlog-feature-flags";
+import { useJiraConnection } from "@/hooks/use-jira-connection";
 import { EMPTY_BACKLOG_SUMMARY } from "@shared/backlog";
-import { AlertTriangle, DatabaseZap, Layers, ListChecks, ShieldAlert } from "lucide-react";
+import { AlertTriangle, DatabaseZap, ShieldAlert } from "lucide-react";
 
 const SUMMARY_TILES: Array<{
   key: keyof typeof EMPTY_BACKLOG_SUMMARY;
@@ -45,7 +49,10 @@ function BacklogDisabledState() {
 export default function Backlog() {
   const { data: featureFlags } = useBacklogFeatureFlags();
   const backlogIntelligenceEnabled = featureFlags?.backlogIntelligenceEnabled ?? false;
+  const jiraSyncEnabled = featureFlags?.jiraSyncEnabled ?? false;
   const diagnostics = useBacklogDiagnostics(backlogIntelligenceEnabled);
+  const jiraConnectionQuery = useJiraConnection();
+  const [selectedProjectConfigId, setSelectedProjectConfigId] = useState<string | null>(null);
 
   if (!backlogIntelligenceEnabled) {
     return <BacklogDisabledState />;
@@ -78,26 +85,33 @@ export default function Backlog() {
           ))}
         </div>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Layers className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Get started</CardTitle>
-            </div>
-            <CardDescription>
-              Jira connection, repository mapping, and scans are not
-              available yet — this is the domain foundation shell only
-              (Phase 1). Nothing here talks to Jira, GitHub, or a model
-              provider.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button disabled variant="outline">
-              <ListChecks className="mr-2 h-4 w-4" />
-              Connect Jira (coming soon)
-            </Button>
-          </CardContent>
-        </Card>
+        {jiraSyncEnabled ? (
+          <>
+            <JiraConnectionCard />
+            {jiraConnectionQuery.data ? (
+              <JiraProjectSyncCard
+                connection={jiraConnectionQuery.data}
+                onSelectedProjectConfigChange={setSelectedProjectConfigId}
+                selectedProjectConfigId={selectedProjectConfigId}
+              />
+            ) : null}
+            <JiraIssuesTable projectConfigId={selectedProjectConfigId} />
+          </>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Jira sync is disabled</CardTitle>
+              <CardDescription>
+                Set{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                  DEVDECK_FEATURE_JIRA_SYNC=true
+                </code>{" "}
+                to connect Jira and sync issues locally. Repository mapping and scans
+                are later phases; nothing here talks to GitHub or a model provider.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>
