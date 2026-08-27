@@ -5,9 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import JiraConnectionCard from "@/components/backlog/JiraConnectionCard";
 import JiraIssuesTable from "@/components/backlog/JiraIssuesTable";
 import JiraProjectSyncCard from "@/components/backlog/JiraProjectSyncCard";
+import RepositoryMappingCard from "@/components/backlog/RepositoryMappingCard";
 import { useBacklogDiagnostics } from "@/hooks/use-backlog-diagnostics";
 import { useBacklogFeatureFlags } from "@/hooks/use-backlog-feature-flags";
 import { useJiraConnection } from "@/hooks/use-jira-connection";
+import { useJiraProjectConfigs } from "@/hooks/use-jira-projects";
 import { EMPTY_BACKLOG_SUMMARY } from "@shared/backlog";
 import { AlertTriangle, DatabaseZap, ShieldAlert } from "lucide-react";
 
@@ -53,6 +55,9 @@ export default function Backlog() {
   const diagnostics = useBacklogDiagnostics(backlogIntelligenceEnabled);
   const jiraConnectionQuery = useJiraConnection();
   const [selectedProjectConfigId, setSelectedProjectConfigId] = useState<string | null>(null);
+  const projectConfigsQuery = useJiraProjectConfigs(jiraConnectionQuery.data?.id ?? null);
+  const selectedProjectConfig =
+    projectConfigsQuery.data?.find((config) => config.id === selectedProjectConfigId) ?? null;
 
   if (!backlogIntelligenceEnabled) {
     return <BacklogDisabledState />;
@@ -95,7 +100,13 @@ export default function Backlog() {
                 selectedProjectConfigId={selectedProjectConfigId}
               />
             ) : null}
-            <JiraIssuesTable projectConfigId={selectedProjectConfigId} />
+            {selectedProjectConfig ? (
+              <RepositoryMappingCard jiraProjectKey={selectedProjectConfig.projectKey} />
+            ) : null}
+            <JiraIssuesTable
+              projectConfigId={selectedProjectConfigId}
+              projectKey={selectedProjectConfig?.projectKey ?? null}
+            />
           </>
         ) : (
           <Card>

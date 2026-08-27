@@ -28,6 +28,7 @@ const Agents = lazy(() => import("@/pages/Agents"));
 const Terminals = lazy(() => import("@/pages/Terminals"));
 const Onboarding = lazy(() => import("@/pages/Onboarding"));
 const Backlog = lazy(() => import("@/pages/Backlog"));
+const BacklogIssueDetail = lazy(() => import("@/pages/BacklogIssueDetail"));
 
 function AppLoadingScreen() {
   return (
@@ -98,6 +99,9 @@ function AppRouter() {
         <Route path="/terminals">{() => <Terminals />}</Route>
         <Route path="/activity">{() => <Activity />}</Route>
         <Route path="/backlog">{() => <Backlog />}</Route>
+        <Route path="/backlog/issues/:issueKey">
+          {(params) => <BacklogIssueDetail issueKey={params.issueKey} />}
+        </Route>
         <Route path="/settings">{() => <Settings />}</Route>
         <Route>{() => <NotFound />}</Route>
       </Switch>
