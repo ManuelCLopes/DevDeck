@@ -13,6 +13,7 @@ import {
   upsertBacklogMapping,
 } from "./persistence/backlog-mapping-repository";
 import { getEvidenceForIssue } from "./persistence/evidence-repository";
+import { getRepositorySnapshot } from "./persistence/repository-snapshot-repository";
 import { gatherEvidence } from "./repository-index/evidence-gather";
 import {
   engineeringBrainService,
@@ -78,7 +79,30 @@ export function registerRepositoryEvidenceIpc(): void {
 
   ipcMain.handle("devdeck:evidence:get-for-issue", async (_event, payload: unknown) => {
     const request = getEvidenceForIssueRequestSchema.parse(payload);
-    return getEvidenceForIssue(requireDatabaseConnection(), request.jiraProjectId, request.issueKey);
+    const db = requireDatabaseConnection();
+    const evidence = getEvidenceForIssue(db, request.jiraProjectId, request.issueKey);
+
+    // item.filePath is relative to the repository it was found in, so the
+    // renderer (which opens files in an editor) needs each referenced
+    // snapshot's absolute repositoryPath to resolve it. Resolved here,
+    // once per distinct snapshot, rather than leaking every
+    // RepositorySnapshot row to the renderer.
+    const repositoryPathsBySnapshotId: Record<string, string> = {};
+    const distinctSnapshotIds = Array.from(
+      new Set(
+        evidence
+          .map((item) => item.repositorySnapshotId)
+          .filter((id): id is string => id !== null),
+      ),
+    );
+    for (const snapshotId of distinctSnapshotIds) {
+      const snapshot = getRepositorySnapshot(db, snapshotId);
+      if (snapshot) {
+        repositoryPathsBySnapshotId[snapshotId] = snapshot.repositoryPath;
+      }
+    }
+
+    return { evidence, repositoryPathsBySnapshotId };
   });
 
   // Thin convenience wrapper around engineeringBrain.startOperation, same

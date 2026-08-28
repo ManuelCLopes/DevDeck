@@ -51,7 +51,7 @@ import type {
 } from "../shared/jira";
 import type { RepositoryMappingMatch, RepositoryMappingRule } from "../shared/backlog";
 import type {
-  EvidenceItem,
+  EvidenceForIssueResult,
   GatherEvidenceRequest,
 } from "../shared/evidence";
 
@@ -325,7 +325,10 @@ const devdeck = {
     },
   },
   evidence: {
-    getForIssue(payload: { issueKey: string; jiraProjectId: string }): Promise<EvidenceItem[]> {
+    getForIssue(payload: {
+      issueKey: string;
+      jiraProjectId: string;
+    }): Promise<EvidenceForIssueResult> {
       return ipcRenderer.invoke("devdeck:evidence:get-for-issue", payload);
     },
     startGather(payload: {

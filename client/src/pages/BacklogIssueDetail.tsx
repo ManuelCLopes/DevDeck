@@ -6,11 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { useBacklogFeatureFlags } from "@/hooks/use-backlog-feature-flags";
 import { useResolvedRepositoryMapping } from "@/hooks/use-backlog-mapping";
 import { useEvidenceGather, useIssueEvidence } from "@/hooks/use-evidence";
 import { useJiraIssueDetail } from "@/hooks/use-jira-issue-detail";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import { getDesktopApi } from "@/lib/desktop";
+import { resolveEvidenceFilePath } from "@/lib/evidence-paths";
 import type { EvidenceItem } from "@shared/evidence";
 import {
   AlertTriangle,
@@ -56,6 +58,9 @@ export default function BacklogIssueDetail({ issueKey }: BacklogIssueDetailProps
   const projectConfigId = searchParams.get("projectConfigId");
   const projectKey = searchParams.get("projectKey");
 
+  const { data: featureFlags } = useBacklogFeatureFlags();
+  const repositoryIndexEnabled = featureFlags?.repositoryIndexEnabled ?? false;
+
   const normalizedIssueKey = issueKey ?? null;
   const issueDetailQuery = useJiraIssueDetail(normalizedIssueKey);
   const workspaceSelection = useWorkspaceSelection();
@@ -91,7 +96,8 @@ export default function BacklogIssueDetail({ issueKey }: BacklogIssueDetailProps
   const gather = useEvidenceGather(projectConfigId, normalizedIssueKey);
 
   const issue = issueDetailQuery.data;
-  const evidenceItems = evidenceQuery.data ?? [];
+  const evidenceItems = evidenceQuery.data?.evidence ?? [];
+  const repositoryPathsBySnapshotId = evidenceQuery.data?.repositoryPathsBySnapshotId ?? {};
 
   return (
     <AppLayout>
@@ -177,7 +183,15 @@ export default function BacklogIssueDetail({ issueKey }: BacklogIssueDetailProps
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {!projectKey ? (
+                {!repositoryIndexEnabled ? (
+                  <p className="text-sm text-muted-foreground">
+                    Repository evidence gathering is disabled. Set{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                      DEVDECK_FEATURE_REPOSITORY_INDEX=true
+                    </code>{" "}
+                    to enable it.
+                  </p>
+                ) : !projectKey ? (
                   <p className="text-sm text-muted-foreground">
                     Open this issue from the Backlog page's issue table so the project context
                     carries over.
@@ -224,6 +238,12 @@ export default function BacklogIssueDetail({ issueKey }: BacklogIssueDetailProps
                   <ul className="space-y-2">
                     {evidenceItems.map((item) => {
                       const Icon = EVIDENCE_KIND_ICONS[item.kind] ?? FileCode;
+                      const absoluteFilePath = resolveEvidenceFilePath(
+                        item.repositorySnapshotId
+                          ? repositoryPathsBySnapshotId[item.repositorySnapshotId]
+                          : undefined,
+                        item.filePath,
+                      );
                       return (
                         <li key={item.id} className="rounded-md border p-2 text-sm">
                           <div className="flex items-center gap-2">
@@ -250,7 +270,12 @@ export default function BacklogIssueDetail({ issueKey }: BacklogIssueDetailProps
                           <div className="mt-1 flex items-center gap-2">
                             {item.filePath ? (
                               <Button
-                                onClick={() => getDesktopApi()?.openInCode(item.filePath as string)}
+                                disabled={!absoluteFilePath}
+                                onClick={() => {
+                                  if (absoluteFilePath) {
+                                    void getDesktopApi()?.openInCode(absoluteFilePath);
+                                  }
+                                }}
                                 size="sm"
                                 variant="ghost"
                               >

@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { EngineeringBrainOperation } from "@shared/engineering-brain";
-import type { RepositoryReference } from "@shared/evidence";
+import type { EvidenceForIssueResult, RepositoryReference } from "@shared/evidence";
 import { getDesktopApi } from "@/lib/desktop";
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
+
+const EMPTY_EVIDENCE_RESULT: EvidenceForIssueResult = {
+  evidence: [],
+  repositoryPathsBySnapshotId: {},
+};
 
 export function useIssueEvidence(jiraProjectId: string | null, issueKey: string | null) {
   return useQuery({
@@ -12,7 +17,7 @@ export function useIssueEvidence(jiraProjectId: string | null, issueKey: string 
     queryFn: async () => {
       const desktopApi = getDesktopApi();
       if (!desktopApi?.evidence || !jiraProjectId || !issueKey) {
-        return [];
+        return EMPTY_EVIDENCE_RESULT;
       }
       return desktopApi.evidence.getForIssue({ issueKey, jiraProjectId });
     },

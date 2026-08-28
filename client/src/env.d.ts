@@ -42,7 +42,7 @@ import type {
   RepositoryMappingMatch,
   RepositoryMappingRule,
 } from "@shared/backlog";
-import type { EvidenceItem, GatherEvidenceRequest } from "@shared/evidence";
+import type { EvidenceForIssueResult, GatherEvidenceRequest } from "@shared/evidence";
 import type {
   JiraAuthCapabilities,
   JiraConnection,
@@ -232,7 +232,10 @@ interface DevDeckDesktopApi {
     }): Promise<RepositoryMappingRule | null>;
   };
   evidence: {
-    getForIssue(payload: { issueKey: string; jiraProjectId: string }): Promise<EvidenceItem[]>;
+    getForIssue(payload: {
+      issueKey: string;
+      jiraProjectId: string;
+    }): Promise<EvidenceForIssueResult>;
     startGather(payload: {
       jiraProjectId: string;
       request: GatherEvidenceRequest;

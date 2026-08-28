@@ -8,6 +8,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { hasCompletedOnboarding } from "@/lib/onboarding-state";
 import { getDesktopApi } from "@/lib/desktop";
 import { navigateInApp } from "@/lib/app-navigation";
+import { useBacklogFeatureFlags } from "@/hooks/use-backlog-feature-flags";
 import { useWorkspaceSelection } from "@/hooks/use-workspace-selection";
 import {
   hasValidWorkspaceSelection,
@@ -53,10 +54,42 @@ function LegacyRepositoriesRedirect() {
   return null;
 }
 
+/**
+ * Guards /backlog/issues/:issueKey behind the backlogIntelligenceEnabled
+ * master switch. Unlike /backlog (Backlog.tsx renders its own disabled
+ * state), this route has no fallback of its own — reaching
+ * BacklogIssueDetail while disabled would still mount its Jira-issue,
+ * mapping, and evidence queries (and let evidence gathering start), so
+ * the redirect has to happen before that component is ever rendered.
+ */
+function BacklogIssueDetailGate({
+  backlogIntelligenceEnabled,
+  issueKey,
+}: {
+  backlogIntelligenceEnabled: boolean;
+  issueKey?: string;
+}) {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!backlogIntelligenceEnabled) {
+      navigateInApp("/backlog", setLocation);
+    }
+  }, [backlogIntelligenceEnabled, setLocation]);
+
+  if (!backlogIntelligenceEnabled) {
+    return null;
+  }
+
+  return <BacklogIssueDetail issueKey={issueKey} />;
+}
+
 function AppRouter() {
   const [location, setLocation] = useLocation();
   const [isInitializing, setIsInitializing] = useState(true);
   const workspaceSelection = useWorkspaceSelection();
+  const { data: featureFlags } = useBacklogFeatureFlags();
+  const backlogIntelligenceEnabled = featureFlags?.backlogIntelligenceEnabled ?? false;
 
   useEffect(() => {
     const desktopApi = getDesktopApi();
@@ -100,7 +133,12 @@ function AppRouter() {
         <Route path="/activity">{() => <Activity />}</Route>
         <Route path="/backlog">{() => <Backlog />}</Route>
         <Route path="/backlog/issues/:issueKey">
-          {(params) => <BacklogIssueDetail issueKey={params.issueKey} />}
+          {(params) => (
+            <BacklogIssueDetailGate
+              backlogIntelligenceEnabled={backlogIntelligenceEnabled}
+              issueKey={params.issueKey}
+            />
+          )}
         </Route>
         <Route path="/settings">{() => <Settings />}</Route>
         <Route>{() => <NotFound />}</Route>
