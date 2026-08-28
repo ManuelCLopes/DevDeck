@@ -106,7 +106,10 @@ test("gatherEvidence collects commit and lexical evidence, and persists it", asy
 
     const codeEvidence = result.evidence.find((item) => item.kind === "code_file");
     assert.equal(codeEvidence?.strength, "low");
-    assert.equal(codeEvidence?.filePath, "./cache.ts");
+    // No leading "./" — code-search.ts normalises real ripgrep's path
+    // format (not guaranteed across versions) to match the Node
+    // fallback's, so filePath is consistent either way.
+    assert.equal(codeEvidence?.filePath, "cache.ts");
 
     // Persisted, not just returned.
     const stored = getEvidenceForIssue(db, projectConfig.id, "ENG-1");

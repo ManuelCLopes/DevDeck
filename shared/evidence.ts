@@ -57,7 +57,7 @@ export interface GatherEvidenceRequest {
 
 /**
  * `EvidenceItem.filePath` is relative to the repository it was found in
- * (e.g. `"./cache.ts"`) — it only means something combined with that
+ * (e.g. `"cache.ts"`) — it only means something combined with that
  * repository's absolute path. `repositoryPathsBySnapshotId` carries
  * exactly enough to resolve it: each evidence item's
  * `repositorySnapshotId` looks up the absolute `repositoryPath` it was
