@@ -94,10 +94,13 @@ test("computeObsolescenceSignal fires only when the issue is marked out of scope
   assert.deepEqual(signals[0].evidenceIds, []);
 });
 
-test("computeDuplicateSignals fires one signal per duplicate-typed link, ignoring other link types", () => {
+test("computeDuplicateSignals fires only when this issue duplicates the other, not the reverse", () => {
   const issue = buildIssue({
     links: [
+      // This issue is the duplicate — fires.
       { id: "link-1", issueKey: "ENG-1", linkType: "duplicates", relatedIssueKey: "ENG-2" },
+      // The *related* issue is the duplicate of this one — must not fire,
+      // or the original half of every duplicate pair gets misclassified.
       {
         id: "link-2",
         issueKey: "ENG-1",
@@ -110,8 +113,22 @@ test("computeDuplicateSignals fires one signal per duplicate-typed link, ignorin
 
   const signals = computeDuplicateSignals(issue);
 
+  assert.equal(signals.length, 1);
+  assert.equal(signals[0].classification, "possible_duplicate");
+  assert.match(signals[0].explanation, /ENG-2/);
+});
+
+test("computeDuplicateSignals fires one signal per outward duplicate link", () => {
+  const issue = buildIssue({
+    links: [
+      { id: "link-1", issueKey: "ENG-1", linkType: "duplicates", relatedIssueKey: "ENG-2" },
+      { id: "link-2", issueKey: "ENG-1", linkType: "duplicates", relatedIssueKey: "ENG-3" },
+    ],
+  });
+
+  const signals = computeDuplicateSignals(issue);
+
   assert.equal(signals.length, 2);
-  assert.ok(signals.every((signal) => signal.classification === "possible_duplicate"));
   assert.match(signals[0].explanation, /ENG-2/);
   assert.match(signals[1].explanation, /ENG-3/);
 });

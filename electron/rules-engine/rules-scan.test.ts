@@ -130,6 +130,61 @@ test("runRulesScan reports monotonically increasing progress ending at 1", async
   db.close();
 });
 
+test("runRulesScan yields to the event loop between issues, not just once at the end", async () => {
+  const { db, projectConfig } = setUp();
+  seedIssue(db, projectConfig.id, "ENG-1");
+  seedIssue(db, projectConfig.id, "ENG-2");
+  seedIssue(db, projectConfig.id, "ENG-3");
+
+  // Stands in for a pending main-process IPC callback (e.g. a cancel
+  // request) queued before the scan starts. If the loop only yields
+  // once after the whole scan finishes, this would still be false by
+  // the first progress checkpoint; scheduled with setImmediate before
+  // runRulesScan runs, it fires on the loop's very first per-issue
+  // yield if — and only if — that yield actually happens per issue.
+  let pendingMainProcessWorkRan = false;
+  setImmediate(() => {
+    pendingMainProcessWorkRan = true;
+  });
+
+  const observedAfterFirstIssue: boolean[] = [];
+  await runRulesScan({
+    db,
+    jiraProjectId: projectConfig.id,
+    onProgress: () => observedAfterFirstIssue.push(pendingMainProcessWorkRan),
+  });
+
+  assert.equal(observedAfterFirstIssue[0], true);
+
+  db.close();
+});
+
+test("runRulesScan stops mid-scan once the signal aborts, leaving later issues unassessed", async () => {
+  const { db, projectConfig } = setUp();
+  seedIssue(db, projectConfig.id, "ENG-1");
+  seedIssue(db, projectConfig.id, "ENG-2");
+  seedIssue(db, projectConfig.id, "ENG-3");
+  const controller = new AbortController();
+
+  const result = await runRulesScan({
+    db,
+    jiraProjectId: projectConfig.id,
+    // Aborts right after the first issue is assessed — the loop's yield
+    // (rather than only checking the flag it captured at loop entry)
+    // is what lets this be observed before issue 2 runs.
+    onProgress: () => controller.abort(),
+    signal: controller.signal,
+  });
+
+  assert.equal(result.cancelled, true);
+  assert.equal(result.assessedIssueCount, 1);
+  assert.ok(getLatestAssessmentForIssue(db, "ENG-1"));
+  assert.equal(getLatestAssessmentForIssue(db, "ENG-2"), null);
+  assert.equal(getLatestAssessmentForIssue(db, "ENG-3"), null);
+
+  db.close();
+});
+
 test("runRulesScan stops and marks the scan cancelled when the signal is already aborted", async () => {
   const { db, projectConfig } = setUp();
   seedIssue(db, projectConfig.id, "ENG-1");

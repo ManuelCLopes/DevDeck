@@ -34,7 +34,12 @@ interface ScanRow {
  * scopes to `RULES_SCAN_STATUSES` so a project's evidence-gather scan
  * never leaks into a rules-scan listing.
  */
-const RULES_SCAN_STATUSES: RulesScanStatus[] = ["running", "completed", "failed", "cancelled"];
+export const RULES_SCAN_STATUSES: RulesScanStatus[] = [
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+];
 const RULES_SCAN_STATUS_PLACEHOLDERS = RULES_SCAN_STATUSES.map(() => "?").join(",");
 
 export function createRulesScan(

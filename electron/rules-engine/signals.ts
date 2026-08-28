@@ -103,14 +103,24 @@ export function computeObsolescenceSignal(issue: JiraIssueDetail): AssessmentSig
 }
 
 /**
- * A Jira issue link whose type names it a duplicate ("duplicates",
- * "is duplicated by", ...) is an explicit, human-asserted relationship
- * — stronger than an inferred one. One signal per matching link, since
- * an issue can be linked as a duplicate of more than one other issue.
+ * A Jira issue link whose type names *this* issue as the duplicate is an
+ * explicit, human-asserted relationship — stronger than an inferred one.
+ *
+ * `linkType` (jira-normalizer.ts's `normalizeIssueLink`) is already
+ * direction-correct for this issue: Jira's outward phrasing ("duplicates")
+ * when this issue is the outward endpoint, or the inward phrasing ("is
+ * duplicated by") when it's the inward endpoint. Those mean opposite
+ * things — "duplicates" says *this* issue is the duplicate; "is
+ * duplicated by" says the *related* issue is. Matching on the substring
+ * "duplicate" would fire on both and misclassify the original half of
+ * every such pair, so this only matches the outward phrasing.
+ *
+ * One signal per matching link, since an issue can duplicate more than
+ * one other issue.
  */
 export function computeDuplicateSignals(issue: JiraIssueDetail): AssessmentSignal[] {
   return issue.links
-    .filter((link) => /duplicate/i.test(link.linkType))
+    .filter((link) => link.linkType.toLowerCase().startsWith("duplicate"))
     .map((link) =>
       buildSignal({
         category: "duplicate_evidence",

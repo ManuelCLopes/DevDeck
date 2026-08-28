@@ -5,6 +5,7 @@ import { runMigrations } from "./migration-runner";
 import { backlogMigrations } from "./migrations";
 import { upsertJiraConnection, upsertJiraIssues, upsertJiraProjectConfig } from "./jira-repository";
 import { createRulesScan } from "./rules-scan-repository";
+import { getOrCreateManualScan } from "./evidence-repository";
 import {
   getLatestAssessmentForIssue,
   getProjectAssessmentSummary,
@@ -180,6 +181,26 @@ test("getProjectAssessmentSummary counts only each issue's latest assessment", (
   assert.equal(summary.countsByClassification.possible_duplicate, 1);
   // ENG-1's first (insufficient_evidence) assessment must not still be counted.
   assert.equal(summary.countsByClassification.insufficient_evidence, 0);
+  assert.ok(summary.lastScanAt);
+
+  db.close();
+});
+
+test("getProjectAssessmentSummary's lastScanAt ignores Phase 3's evidence-gather scan", () => {
+  const { db, projectConfig } = createTestDatabase();
+  seedIssue(db, projectConfig.id, "ENG-1");
+
+  // Simulate gathering evidence before any rules scan ever ran — this
+  // creates a "manual_evidence_gather" row in the same scans table.
+  getOrCreateManualScan(db, projectConfig.id);
+
+  let summary = getProjectAssessmentSummary(db, projectConfig.id);
+  assert.equal(summary.lastScanAt, null);
+
+  const scanId = createRulesScan(db, projectConfig.id, "1");
+  insertAssessment(db, buildAssessmentInput({ issueKey: "ENG-1", scanId }));
+
+  summary = getProjectAssessmentSummary(db, projectConfig.id);
   assert.ok(summary.lastScanAt);
 
   db.close();

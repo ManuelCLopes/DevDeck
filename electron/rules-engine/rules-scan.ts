@@ -57,6 +57,11 @@ export interface RulesScanResult {
   scanId: string;
 }
 
+/** Hands control back to Electron's main-process event loop — see its call site's comment. */
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 function collectAllIssueKeys(db: SqliteConnection, jiraProjectId: string): string[] {
   const issueKeys: string[] = [];
   let offset = 0;
@@ -143,6 +148,16 @@ export async function runRulesScan(context: RunRulesScanContext): Promise<RulesS
   let assessedIssueCount = 0;
 
   for (let index = 0; index < issueKeys.length; index += 1) {
+    // Every step in assessIssue (SQLite reads/writes, pure signal/
+    // confidence computation) is synchronous, so without this the whole
+    // loop would run as one blocking stretch on Electron's main thread —
+    // a cancel IPC call (which only sets context.signal.aborted) would
+    // have no chance to run until the entire scan finished, and every
+    // other main-process IPC handler would stall along with it. Yielding
+    // once per issue keeps a large scan responsive to both.
+    // eslint-disable-next-line no-await-in-loop
+    await yieldToEventLoop();
+
     if (context.signal?.aborted) {
       cancelRulesScan(db, scanId);
       return { assessedIssueCount, cancelled: true, failedIssues, scanId };

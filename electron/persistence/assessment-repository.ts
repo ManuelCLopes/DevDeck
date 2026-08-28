@@ -6,7 +6,10 @@ import type {
   ProjectAssessmentSummary,
 } from "../../shared/assessment";
 import type { BacklogClassification, ConfidenceBand, SuggestedAction } from "../../shared/backlog";
+import { RULES_SCAN_STATUSES } from "./rules-scan-repository";
 import type { SqliteConnection } from "./sqlite-driver";
+
+const RULES_SCAN_STATUS_PLACEHOLDERS = RULES_SCAN_STATUSES.map(() => "?").join(",");
 
 /**
  * Persists Phase 4 rules-only assessments into the `assessments` /
@@ -213,9 +216,19 @@ export function getProjectAssessmentSummary(
     countsByClassification[row.classification as BacklogClassification] = row.count;
   }
 
+  // scans is shared with Phase 3's evidence gathering, which writes its
+  // own synthetic scan there with status "manual_evidence_gather" — not
+  // one of the rules-scan lifecycle states. Excluded here the same way
+  // listRulesScansForProject (rules-scan-repository.ts) excludes it, so
+  // an evidence gather can't be reported as the project's last rules scan.
   const lastScan = db
-    .prepare("SELECT started_at FROM scans WHERE jira_project_id = ? ORDER BY started_at DESC LIMIT 1")
-    .get(jiraProjectId) as { started_at: string } | undefined;
+    .prepare(
+      `SELECT started_at FROM scans
+       WHERE jira_project_id = ? AND status IN (${RULES_SCAN_STATUS_PLACEHOLDERS})
+       ORDER BY started_at DESC, rowid DESC
+       LIMIT 1`,
+    )
+    .get(jiraProjectId, ...RULES_SCAN_STATUSES) as { started_at: string } | undefined;
 
   return {
     countsByClassification,
