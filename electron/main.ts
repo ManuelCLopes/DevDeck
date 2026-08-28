@@ -89,6 +89,7 @@ import {
 } from "./engineering-brain-ipc";
 import { registerJiraIpc } from "./jira-ipc";
 import { registerRepositoryEvidenceIpc } from "./repository-evidence-ipc";
+import { registerRulesEngineIpc } from "./rules-engine-ipc";
 
 const execFileAsync = promisify(execFile);
 const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
@@ -1006,6 +1007,7 @@ registerPtyIpc();
 registerEngineeringBrainIpc();
 registerJiraIpc();
 registerRepositoryEvidenceIpc();
+registerRulesEngineIpc();
 
 app.whenReady().then(() => {
   syncMacAppIdentity();

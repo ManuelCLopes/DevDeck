@@ -6,6 +6,7 @@ import JiraConnectionCard from "@/components/backlog/JiraConnectionCard";
 import JiraIssuesTable from "@/components/backlog/JiraIssuesTable";
 import JiraProjectSyncCard from "@/components/backlog/JiraProjectSyncCard";
 import RepositoryMappingCard from "@/components/backlog/RepositoryMappingCard";
+import RulesScanCard from "@/components/backlog/RulesScanCard";
 import { useBacklogDiagnostics } from "@/hooks/use-backlog-diagnostics";
 import { useBacklogFeatureFlags } from "@/hooks/use-backlog-feature-flags";
 import { useJiraConnection } from "@/hooks/use-jira-connection";
@@ -52,6 +53,7 @@ export default function Backlog() {
   const { data: featureFlags } = useBacklogFeatureFlags();
   const backlogIntelligenceEnabled = featureFlags?.backlogIntelligenceEnabled ?? false;
   const jiraSyncEnabled = featureFlags?.jiraSyncEnabled ?? false;
+  const rulesAssessmentEnabled = featureFlags?.rulesAssessmentEnabled ?? false;
   const diagnostics = useBacklogDiagnostics(backlogIntelligenceEnabled);
   const jiraConnectionQuery = useJiraConnection();
   const [selectedProjectConfigId, setSelectedProjectConfigId] = useState<string | null>(null);
@@ -102,6 +104,9 @@ export default function Backlog() {
             ) : null}
             {selectedProjectConfig ? (
               <RepositoryMappingCard jiraProjectKey={selectedProjectConfig.projectKey} />
+            ) : null}
+            {selectedProjectConfig && rulesAssessmentEnabled ? (
+              <RulesScanCard jiraProjectId={selectedProjectConfig.id} />
             ) : null}
             <JiraIssuesTable
               projectConfigId={selectedProjectConfigId}
