@@ -103,7 +103,12 @@ async function searchWithRipgrep(
     }
 
     matches.push({
-      filePath: payload.data.path.text,
+      // Real ripgrep's leading "./" (from searching path ".") isn't
+      // guaranteed across versions/builds — some strip it, some don't.
+      // Stripped here so filePath has one consistent format regardless
+      // of which rg produced it, matching searchWithNodeFallback below
+      // (which never had a "./" to begin with).
+      filePath: payload.data.path.text.replace(/^\.\//, ""),
       lineNumber: payload.data.line_number,
       lineText: truncateLine(payload.data.lines.text.trimEnd()),
     });
