@@ -144,6 +144,8 @@ Not built in M2, deferred: a guided-filter UI (JQL only for now — the plan all
 
 ## M3 — Repository evidence
 
+**Status (2026-08-27): implemented, with two deliverables intentionally deferred.** See below.
+
 ### Objectives
 
 Map Jira scope to repositories and collect deterministic evidence.
@@ -164,16 +166,18 @@ Map Jira scope to repositories and collect deterministic evidence.
 
 ### Exit criteria
 
-- exact commit and PR references are discoverable;
-- current file and line evidence is navigable;
-- deleted and renamed components are detectable;
-- excluded files are never indexed;
-- index cancellation preserves previous ready state;
-- same snapshot and engine version produce reproducible evidence.
+- exact commit and PR references are discoverable; ✅ `git_commit` (exact `--fixed-strings` issue-key match) and `github_pull_request` evidence kinds, both strength `high`.
+- current file and line evidence is navigable; ✅ `code_file` evidence carries `filePath` + line number; the evidence panel opens it with the existing `openInCode` bridge.
+- deleted and renamed components are detectable; ❌ **not built.** `EvidenceKind` already has `component_removed`, but nothing in this milestone diffs across snapshots or otherwise detects removal/rename — that needs comparing two `repository_snapshots`, which doesn't exist yet. Left as a documented gap rather than a partial/unreliable implementation.
+- excluded files are never indexed; ✅ `electron/repository-index/ignore-rules.ts` applied identically on both the ripgrep and Node-fallback paths, before any file is opened.
+- index cancellation preserves previous ready state; ✅ evidence is only replaced once, after a gather completes in full — a cancelled gather (`AbortSignal`, checked before each repository) never calls the replace step, so a prior successful gather's evidence for that issue is untouched.
+- same snapshot and engine version produce reproducible evidence; ⚠️ **mostly.** Commit and lexical evidence are fully reproducible for a fixed HEAD SHA (`git log`/`rg` are deterministic); GitHub PR search results can change over time independent of the local HEAD SHA (a new PR referencing the issue can appear later) — expected, not a bug, but worth knowing before treating a re-gather as byte-identical.
+
+Also not built, and not claimed above: **incremental indexing.** Lexical search here is always live against the current working tree at call time (ripgrep, or the bounded Node fallback) — there is no persisted, incrementally-updated index to invalidate. `getOrCreateRepositorySnapshot` avoids duplicate snapshot *rows* for an unchanged HEAD SHA, which is a different, smaller guarantee. Simpler and arguably more correct for a live desktop tool at this data scale; revisit only if evaluation shows live search is too slow on large repositories.
 
 ### Estimated effort
 
-3–5 weeks.
+3–5 weeks. Actual: implemented in one session; component-removal/rename detection and a persisted incremental index are untimed follow-up work if evaluation shows they're needed.
 
 ## M4 — Rules-only Backlog Health
 

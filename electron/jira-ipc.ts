@@ -18,6 +18,7 @@ import { listIssueTypes, listProjects, searchIssues, testConnection } from "./ji
 import {
   deleteJiraConnection,
   getJiraConnection,
+  getJiraIssueDetail,
   getJiraProjectConfig,
   listJiraIssuesForProject,
   listJiraProjectConfigs,
@@ -216,6 +217,11 @@ export function registerJiraIpc(): void {
       limit: request.limit,
       offset: request.offset,
     });
+  });
+
+  ipcMain.handle("devdeck:jira:get-issue-detail", async (_event, issueKey: unknown) => {
+    const db = requireDatabaseConnection();
+    return getJiraIssueDetail(db, z.string().min(1).parse(issueKey));
   });
 
   // Thin convenience wrapper around the generic

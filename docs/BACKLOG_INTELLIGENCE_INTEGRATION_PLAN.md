@@ -1031,13 +1031,23 @@ Not built, deferred to a later phase or a follow-up: a guided-filter UI (JQL edi
 
 ## Phase 3 — Repository mapping and deterministic evidence
 
+**Status (2026-08-27): implemented.** See `shared/evidence.ts`, `electron/repository-index/`, `electron/persistence/{backlog-mapping,evidence,repository-snapshot}-repository.ts`, `electron/repository-evidence-ipc.ts`, `RepositoryMappingCard`, and the new `/backlog/issues/:issueKey` detail page.
+
 **Objective:** Relate issues to repositories and gather evidence without an LLM.
 
 **Deliverables:** mapping editor, Git search, lexical code search, commit/PR evidence, normalised evidence model, and issue detail.
 
 **Acceptance criteria:** exact commit and PR references are shown, files are navigable, excluded paths are never read, shell injection is prevented, results are reproducible for a HEAD SHA, and scans are cancellable.
 
-**Estimate:** 3–4 weeks.
+- exact commit and PR references are shown, files are navigable: ✅
+- excluded paths are never read: ✅ same deny-pattern check on both the ripgrep and Node-fallback code paths, applied before any file is opened
+- shell injection is prevented: ✅ every process spawn uses an argument array (`execFile`), never a shell; verified with `grep -rn "shell:\s*true"` finding nothing in this milestone's code
+- results are reproducible for a HEAD SHA: ⚠️ true for commit/lexical evidence; GitHub PR search results can change independent of the local HEAD SHA (see the M3 status note in `docs/architecture/DELIVERY_ROADMAP.md`)
+- scans are cancellable: ✅ `gatherEvidence` checks an `AbortSignal` before each repository and never persists a partial result
+
+Not built, deferred: deleted/renamed-component detection (`EvidenceKind.component_removed` exists in the type but nothing produces it — needs cross-snapshot diffing); a persisted, incrementally-updated lexical index (search is always live against the current working tree); the full evidence ranking/deduplication model from section 16 (BI-045) — evidence is ordered by strength band on read, not ranked by explicitness/source-reliability/temporal-relevance/contradiction-value the way the RFC describes; a guided mapping-rule builder beyond the plain form shipped here.
+
+**Estimate:** 3–4 weeks. Actual: implemented in one session.
 
 ---
 
@@ -1152,14 +1162,14 @@ Proceed only after a stable baseline demonstrates meaningful lexical misses.
 
 ### Repository evidence
 
-- `BI-040` Safe Git runner.
-- `BI-041` Issue-key commit search.
-- `BI-042` GitHub PR search.
-- `BI-043` Ripgrep adapter.
-- `BI-044` Evidence normalisation.
-- `BI-045` Evidence ranking.
-- `BI-046` Repository fingerprint.
-- `BI-047` Evidence cache.
+- `BI-040` Safe Git runner. ✅ `electron/repository-index/git-runner.ts` — argv-array `execFile`, no shell, canonical path resolution
+- `BI-041` Issue-key commit search. ✅ `searchCommitsByIssueKey` — `--fixed-strings`, case-insensitive
+- `BI-042` GitHub PR search. ✅ `electron/repository-index/github-pr-evidence.ts`, reusing the existing GitHub client
+- `BI-043` Ripgrep adapter. ✅ `electron/repository-index/code-search.ts` — real `rg --json`, bounded Node fallback when it's missing
+- `BI-044` Evidence normalisation. ✅ `electron/repository-index/evidence-gather.ts` + `shared/evidence.ts`
+- `BI-045` Evidence ranking. ⚠️ evidence is ordered by strength band on read (`electron/persistence/evidence-repository.ts`), not the full explicitness/source-reliability/temporal/contradiction ranking model from RFC section 20
+- `BI-046` Repository fingerprint. ✅ `computeRepositoryFingerprint` in `electron/persistence/repository-snapshot-repository.ts`
+- `BI-047` Evidence cache. ✅ persisted evidence is read back until the next explicit gather; repository snapshots are reused for an unchanged HEAD SHA
 
 ### Scans and assessment
 
