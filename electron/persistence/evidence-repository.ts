@@ -121,10 +121,40 @@ function rowToEvidenceItem(row: EvidenceRow): EvidenceItem {
 }
 
 /**
- * Replaces every evidence row for one issue (within the manual scan for
- * `jiraProjectId`) with `evidenceItems`, in one transaction. Safe to
- * call repeatedly for the same issue — a re-gather fully supersedes the
- * previous result rather than accumulating duplicates.
+ * Every evidence.id ever cited by one of this issue's assessments
+ * (`assessments.evidence_ids`, Phase 4) — across every rules scan, not
+ * just the latest. Queried directly against the `assessments` table
+ * rather than importing assessment-repository.ts, the same way other
+ * repository modules read tables outside their own domain when they
+ * need to (e.g. jira-repository.ts reading jira_issues).
+ */
+function getCitedEvidenceIds(db: SqliteConnection, issueKey: string): Set<string> {
+  const rows = db
+    .prepare("SELECT evidence_ids FROM assessments WHERE issue_key = ?")
+    .all(issueKey) as Array<{ evidence_ids: string }>;
+
+  const citedIds = new Set<string>();
+  for (const row of rows) {
+    for (const evidenceId of JSON.parse(row.evidence_ids) as string[]) {
+      citedIds.add(evidenceId);
+    }
+  }
+  return citedIds;
+}
+
+/**
+ * Replaces the evidence for one issue (within the manual scan for
+ * `jiraProjectId`) with `evidenceItems`, in one transaction — except for
+ * rows an assessment already cites (`assessments.evidence_ids`), which
+ * are left in place rather than deleted. Every evidence.id assigned by
+ * a fresh gather is a brand-new randomUUID (evidence-gather.ts), so a
+ * plain wholesale replace would silently orphan any assessment made
+ * before the last re-gather: its cited evidence rows would no longer
+ * exist, and AssessmentCard would show it citing nothing. This can
+ * leave a since-superseded row alongside a newer one for the same
+ * underlying commit/PR/match after a re-gather — an accepted display
+ * duplication, far preferable to a broken citation trail (RFC decision
+ * #10, "make every assessment auditable").
  */
 export function replaceEvidenceForIssue(
   db: SqliteConnection,
@@ -136,7 +166,8 @@ export function replaceEvidenceForIssue(
   const scanId = getOrCreateManualScan(db, jiraProjectId);
   const scanItemId = getOrCreateScanItem(db, scanId, issueKey, unavailableRepositories);
 
-  const deleteExisting = db.prepare("DELETE FROM evidence WHERE scan_item_id = ?");
+  const listExistingIds = db.prepare("SELECT id FROM evidence WHERE scan_item_id = ?");
+  const deleteOne = db.prepare("DELETE FROM evidence WHERE id = ?");
   const insertEvidence = db.prepare(
     `INSERT INTO evidence (
        id, scan_item_id, kind, source_id, source_url, repository_snapshot_id,
@@ -148,7 +179,14 @@ export function replaceEvidenceForIssue(
   );
 
   const applyReplace = db.transaction(() => {
-    deleteExisting.run(scanItemId);
+    const citedIds = getCitedEvidenceIds(db, issueKey);
+    const existingRows = listExistingIds.all(scanItemId) as Array<{ id: string }>;
+    for (const row of existingRows) {
+      if (!citedIds.has(row.id)) {
+        deleteOne.run(row.id);
+      }
+    }
+
     for (const item of evidenceItems) {
       insertEvidence.run({
         collectedAt: item.collectedAt,

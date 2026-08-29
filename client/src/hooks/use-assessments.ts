@@ -89,6 +89,21 @@ export function useRulesScan(jiraProjectId: string | null) {
   const [operation, setOperation] = useState<EngineeringBrainOperation | null>(null);
   const trackedOperationId = useRef<string | null>(null);
 
+  const invalidateOnCompletion = useCallback(() => {
+    if (!jiraProjectId) {
+      return;
+    }
+    void queryClient.invalidateQueries({
+      queryKey: ["assessment", "project-summary", jiraProjectId],
+    });
+    void queryClient.invalidateQueries({ queryKey: ["assessment", "scans", jiraProjectId] });
+    // A project scan can (re-)assess every synced issue at once —
+    // invalidate the whole "issue" and "history" prefixes rather
+    // than tracking which issue keys were touched.
+    void queryClient.invalidateQueries({ queryKey: ["assessment", "issue"] });
+    void queryClient.invalidateQueries({ queryKey: ["assessment", "history"] });
+  }, [jiraProjectId, queryClient]);
+
   useEffect(() => {
     const desktopApi = getDesktopApi();
     if (!desktopApi?.engineeringBrain) {
@@ -110,19 +125,11 @@ export function useRulesScan(jiraProjectId: string | null) {
       }
 
       setOperation(event.operation);
-      if (TERMINAL_STATUSES.has(event.operation.status) && jiraProjectId) {
-        void queryClient.invalidateQueries({
-          queryKey: ["assessment", "project-summary", jiraProjectId],
-        });
-        void queryClient.invalidateQueries({ queryKey: ["assessment", "scans", jiraProjectId] });
-        // A project scan can (re-)assess every synced issue at once —
-        // invalidate the whole "issue" and "history" prefixes rather
-        // than tracking which issue keys were touched.
-        void queryClient.invalidateQueries({ queryKey: ["assessment", "issue"] });
-        void queryClient.invalidateQueries({ queryKey: ["assessment", "history"] });
+      if (TERMINAL_STATUSES.has(event.operation.status)) {
+        invalidateOnCompletion();
       }
     });
-  }, [jiraProjectId, queryClient]);
+  }, [invalidateOnCompletion]);
 
   const start = useCallback(async () => {
     const desktopApi = getDesktopApi();
@@ -131,8 +138,22 @@ export function useRulesScan(jiraProjectId: string | null) {
     }
     const started = await desktopApi.assessment.startScan(jiraProjectId);
     trackedOperationId.current = started.id;
-    setOperation(started);
-  }, [jiraProjectId]);
+
+    // A fast scan (e.g. a project with no synced issues) can finish
+    // between the main process firing the handler and this IPC
+    // round-trip resolving — engineeringBrainService starts the handler
+    // without waiting for startOperation's own response. The subscribe()
+    // effect above would silently discard that terminal event, since
+    // trackedOperationId wasn't set yet when it arrived, leaving the UI
+    // stuck on "Scanning…" forever. Re-fetch the operation's current
+    // state directly to catch that instead of trusting `started`.
+    const current = await desktopApi.engineeringBrain?.getOperation(started.id);
+    const latest = current ?? started;
+    setOperation(latest);
+    if (TERMINAL_STATUSES.has(latest.status)) {
+      invalidateOnCompletion();
+    }
+  }, [invalidateOnCompletion, jiraProjectId]);
 
   const isScanning = operation
     ? operation.status === "pending" || operation.status === "running"

@@ -157,3 +157,38 @@ export function listRulesScansForProject(
     .all(jiraProjectId, ...RULES_SCAN_STATUSES, limit) as ScanRow[];
   return rows.map((row) => rowToSummary(db, row));
 }
+
+/**
+ * Engineering Brain operations are in-memory only (electron/engineering-
+ * brain/engineering-brain-service.ts) — a `scans` row this module wrote
+ * as `running` survives a restart, but the operation that could ever
+ * finish it does not. Left alone, that row (and any `scan_items` still
+ * `running` under it) would stay "live" forever: scan history and
+ * getProjectAssessmentSummary's lastScanAt would keep reporting a scan
+ * that in fact died with the app.
+ *
+ * Called once at startup (main.ts, right after the database opens) to
+ * mark every such orphan interrupted rather than perpetually running.
+ * Returns how many scans were reconciled, for startup logging.
+ */
+export function reconcileOrphanedRulesScans(db: SqliteConnection): number {
+  const now = new Date().toISOString();
+  // "running" is exclusive to this module's own lifecycle — Phase 3's
+  // evidence-gather scan uses the unrelated "manual_evidence_gather"
+  // status and is never touched here.
+  const orphanedScans = db.prepare("SELECT id FROM scans WHERE status = 'running'").all() as Array<{
+    id: string;
+  }>;
+
+  for (const scan of orphanedScans) {
+    db.prepare(
+      "UPDATE scan_items SET status = 'failed', error_code = 'INTERRUPTED', completed_at = ? WHERE scan_id = ? AND status = 'running'",
+    ).run(now, scan.id);
+    db.prepare("UPDATE scans SET status = 'cancelled', cancelled_at = ? WHERE id = ?").run(
+      now,
+      scan.id,
+    );
+  }
+
+  return orphanedScans.length;
+}

@@ -13,6 +13,7 @@ import {
   failScanItem,
   getRulesScan,
   listRulesScansForProject,
+  reconcileOrphanedRulesScans,
   startScanItem,
 } from "./rules-scan-repository";
 
@@ -149,6 +150,49 @@ test("listRulesScansForProject returns scans newest-first, scoped to the project
     scans.map((scan) => scan.id),
     [second, first],
   );
+
+  db.close();
+});
+
+test("reconcileOrphanedRulesScans marks a scan left running (app quit mid-scan) as cancelled", () => {
+  const { db, projectConfig } = createTestDatabase();
+  seedIssue(db, projectConfig.id, "ENG-1");
+  seedIssue(db, projectConfig.id, "ENG-2");
+
+  const scanId = createRulesScan(db, projectConfig.id, "1");
+  const completedItem = startScanItem(db, scanId, "ENG-1");
+  completeScanItem(db, completedItem);
+  // Still "running" when the app quit — never got to complete or fail.
+  startScanItem(db, scanId, "ENG-2");
+
+  const reconciledCount = reconcileOrphanedRulesScans(db);
+  assert.equal(reconciledCount, 1);
+
+  const scan = getRulesScan(db, scanId);
+  assert.equal(scan?.status, "cancelled");
+  assert.ok(scan?.cancelledAt);
+  // The already-completed item is untouched; only the orphaned one is
+  // reconciled.
+  assert.equal(scan?.assessedIssueCount, 1);
+  assert.equal(scan?.failedIssueCount, 1);
+
+  db.close();
+});
+
+test("reconcileOrphanedRulesScans leaves already-terminal scans and other scan types alone", () => {
+  const { db, projectConfig } = createTestDatabase();
+
+  const completed = createRulesScan(db, projectConfig.id, "1");
+  completeRulesScan(db, completed);
+  const cancelled = createRulesScan(db, projectConfig.id, "1");
+  cancelRulesScan(db, cancelled);
+  const failed = createRulesScan(db, projectConfig.id, "1");
+  failRulesScan(db, failed, "SOME_ERROR");
+
+  assert.equal(reconcileOrphanedRulesScans(db), 0);
+  assert.equal(getRulesScan(db, completed)?.status, "completed");
+  assert.equal(getRulesScan(db, cancelled)?.status, "cancelled");
+  assert.equal(getRulesScan(db, failed)?.status, "failed");
 
   db.close();
 });
