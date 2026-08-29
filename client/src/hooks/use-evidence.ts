@@ -9,6 +9,7 @@ const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
 const EMPTY_EVIDENCE_RESULT: EvidenceForIssueResult = {
   evidence: [],
   repositoryPathsBySnapshotId: {},
+  unavailableRepositories: [],
 };
 
 export function useIssueEvidence(jiraProjectId: string | null, issueKey: string | null) {

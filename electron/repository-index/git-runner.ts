@@ -97,6 +97,11 @@ export interface GitCommitMatch {
  * every local ref, case-insensitively (commit conventions vary:
  * "Eng-123" vs "ENG-123").
  */
+/** Escapes regex metacharacters so an issue key can be dropped into an extended-regex --grep pattern literally. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export async function searchCommitsByIssueKey(
   repositoryPathInput: string,
   issueKey: string,
@@ -105,12 +110,17 @@ export async function searchCommitsByIssueKey(
   const repositoryPath = resolveRepositoryPath(repositoryPathInput);
   const maxResults = Math.min(options.maxResults ?? DEFAULT_MAX_COMMITS, MAX_COMMITS_CAP);
 
+  // --fixed-strings did a plain substring match, so "ENG-1" also matched
+  // "ENG-10", "ENG-100", etc. — any issue key that prefixes another.
+  // Switched to --extended-regexp with an explicit "not immediately
+  // followed by another digit" boundary; --fixed-strings' literal
+  // matching is preserved by escaping the key first.
   const stdout = await runGit(repositoryPath, [
     "log",
     "--all",
-    "--fixed-strings",
+    "--extended-regexp",
     "--regexp-ignore-case",
-    `--grep=${issueKey}`,
+    `--grep=${escapeRegExp(issueKey)}([^0-9]|$)`,
     `--format=%H${FIELD_SEPARATOR}%an${FIELD_SEPARATOR}%aI${FIELD_SEPARATOR}%s`,
     `-n${maxResults}`,
   ]);

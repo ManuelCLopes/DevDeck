@@ -58,11 +58,19 @@ export interface GetOrCreateRepositorySnapshotInput {
 }
 
 /**
- * Reuses an existing snapshot at the same (local project, HEAD SHA,
- * indexer version) instead of inserting a duplicate — repeatedly
- * gathering evidence without the repository changing should not grow
- * this table unboundedly. A genuinely new HEAD SHA (or a bumped indexer
- * version) always gets its own row, preserving history.
+ * Reuses an existing snapshot at the same (local project, repository
+ * path, HEAD SHA, indexer version) instead of inserting a duplicate —
+ * repeatedly gathering evidence without the repository changing should
+ * not grow this table unboundedly. A genuinely new HEAD SHA (or a
+ * bumped indexer version) always gets its own row, preserving history.
+ *
+ * repositoryPath is part of the reuse key, matching
+ * computeRepositoryFingerprint's inputs above: a local project ID that
+ * gets moved or replaced by a different checkout (same ID, same HEAD
+ * SHA by coincidence — e.g. a fresh clone at an identical commit) must
+ * not reuse the old snapshot's now-stale repositoryPath, or newly
+ * gathered evidence and the UI's file links would point at the wrong
+ * location.
  */
 export function getOrCreateRepositorySnapshot(
   db: SqliteConnection,
@@ -73,11 +81,11 @@ export function getOrCreateRepositorySnapshot(
   const existing = db
     .prepare(
       `SELECT * FROM repository_snapshots
-       WHERE local_project_id = ? AND head_sha = ? AND indexer_version = ?
+       WHERE local_project_id = ? AND repository_path = ? AND head_sha = ? AND indexer_version = ?
        ORDER BY created_at DESC
        LIMIT 1`,
     )
-    .get(input.localProjectId, input.headSha, indexerVersion) as
+    .get(input.localProjectId, input.repositoryPath, input.headSha, indexerVersion) as
     | RepositorySnapshotRow
     | undefined;
   if (existing) {

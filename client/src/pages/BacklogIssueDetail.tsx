@@ -100,6 +100,7 @@ export default function BacklogIssueDetail({ issueKey }: BacklogIssueDetailProps
   const issue = issueDetailQuery.data;
   const evidenceItems = evidenceQuery.data?.evidence ?? [];
   const repositoryPathsBySnapshotId = evidenceQuery.data?.repositoryPathsBySnapshotId ?? {};
+  const unavailableRepositories = evidenceQuery.data?.unavailableRepositories ?? [];
 
   return (
     <AppLayout>
@@ -228,6 +229,26 @@ export default function BacklogIssueDetail({ issueKey }: BacklogIssueDetailProps
                     <AlertTriangle className="h-4 w-4" />
                     <AlertDescription>
                       Evidence gathering failed ({gather.operation.errorCode ?? "unknown error"}).
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {unavailableRepositories.length > 0 ? (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      <p>
+                        {unavailableRepositories.length} mapped repositor
+                        {unavailableRepositories.length === 1 ? "y was" : "ies were"} unavailable
+                        during the last gather — evidence below may be incomplete.
+                      </p>
+                      <ul className="mt-1 list-disc pl-4 font-mono text-xs">
+                        {unavailableRepositories.map((repository) => (
+                          <li key={repository.repositoryPath}>
+                            {repository.repositoryPath}: {repository.message}
+                          </li>
+                        ))}
+                      </ul>
                     </AlertDescription>
                   </Alert>
                 ) : null}

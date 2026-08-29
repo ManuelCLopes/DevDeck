@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { EvidenceItem } from "../../shared/evidence";
+import type { EvidenceItem, UnavailableRepository } from "../../shared/evidence";
 import type { SqliteConnection } from "./sqlite-driver";
 
 /**
@@ -45,25 +45,42 @@ export function getOrCreateManualScan(db: SqliteConnection, jiraProjectId: strin
   return id;
 }
 
-function getOrCreateScanItem(db: SqliteConnection, scanId: string, issueKey: string): string {
+/**
+ * `error_code` is repurposed here to carry a JSON-encoded
+ * `UnavailableRepository[]` rather than a single error string — this
+ * scan_item always represents a *completed* gather (a repository being
+ * unavailable never fails the whole gather, see evidence-gather.ts), so
+ * there is no single error to report, only zero or more partial ones.
+ * Phase 4's rules-scan uses this same column on its own, unrelated
+ * scan_items rows (a different `scans.status`) for actual per-issue
+ * failures, so the two usages never collide.
+ */
+function getOrCreateScanItem(
+  db: SqliteConnection,
+  scanId: string,
+  issueKey: string,
+  unavailableRepositories: UnavailableRepository[],
+): string {
   const existing = db
     .prepare("SELECT id FROM scan_items WHERE scan_id = ? AND issue_key = ?")
     .get(scanId, issueKey) as { id: string } | undefined;
 
   const now = new Date().toISOString();
+  const encodedUnavailable =
+    unavailableRepositories.length > 0 ? JSON.stringify(unavailableRepositories) : null;
+
   if (existing) {
-    db.prepare("UPDATE scan_items SET status = 'completed', completed_at = ? WHERE id = ?").run(
-      now,
-      existing.id,
-    );
+    db.prepare(
+      "UPDATE scan_items SET status = 'completed', error_code = ?, completed_at = ? WHERE id = ?",
+    ).run(encodedUnavailable, now, existing.id);
     return existing.id;
   }
 
   const id = randomUUID();
   db.prepare(
-    `INSERT INTO scan_items (id, scan_id, issue_key, status, started_at, completed_at)
-     VALUES (?, ?, ?, 'completed', ?, ?)`,
-  ).run(id, scanId, issueKey, now, now);
+    `INSERT INTO scan_items (id, scan_id, issue_key, status, error_code, started_at, completed_at)
+     VALUES (?, ?, ?, 'completed', ?, ?, ?)`,
+  ).run(id, scanId, issueKey, encodedUnavailable, now, now);
   return id;
 }
 
@@ -114,9 +131,10 @@ export function replaceEvidenceForIssue(
   jiraProjectId: string,
   issueKey: string,
   evidenceItems: EvidenceItem[],
+  unavailableRepositories: UnavailableRepository[] = [],
 ): void {
   const scanId = getOrCreateManualScan(db, jiraProjectId);
-  const scanItemId = getOrCreateScanItem(db, scanId, issueKey);
+  const scanItemId = getOrCreateScanItem(db, scanId, issueKey, unavailableRepositories);
 
   const deleteExisting = db.prepare("DELETE FROM evidence WHERE scan_item_id = ?");
   const insertEvidence = db.prepare(
@@ -154,19 +172,29 @@ export function replaceEvidenceForIssue(
   applyReplace();
 }
 
+function findManualScanItem(
+  db: SqliteConnection,
+  jiraProjectId: string,
+  issueKey: string,
+): { error_code: string | null; id: string } | undefined {
+  return db
+    .prepare(
+      `SELECT scan_items.id AS id, scan_items.error_code AS error_code
+       FROM scan_items
+       JOIN scans ON scans.id = scan_items.scan_id
+       WHERE scans.jira_project_id = ? AND scans.status = ? AND scan_items.issue_key = ?`,
+    )
+    .get(jiraProjectId, MANUAL_SCAN_STATUS, issueKey) as
+    | { error_code: string | null; id: string }
+    | undefined;
+}
+
 export function getEvidenceForIssue(
   db: SqliteConnection,
   jiraProjectId: string,
   issueKey: string,
 ): EvidenceItem[] {
-  const scanItem = db
-    .prepare(
-      `SELECT scan_items.id AS id
-       FROM scan_items
-       JOIN scans ON scans.id = scan_items.scan_id
-       WHERE scans.jira_project_id = ? AND scans.status = ? AND scan_items.issue_key = ?`,
-    )
-    .get(jiraProjectId, MANUAL_SCAN_STATUS, issueKey) as { id: string } | undefined;
+  const scanItem = findManualScanItem(db, jiraProjectId, issueKey);
   if (!scanItem) {
     return [];
   }
@@ -181,4 +209,22 @@ export function getEvidenceForIssue(
     )
     .all(scanItem.id) as EvidenceRow[];
   return rows.map(rowToEvidenceItem);
+}
+
+/**
+ * The repositories that failed the issue's most recent gather (moved,
+ * deleted, not a git checkout, a transient git error) — see the
+ * `getOrCreateScanItem` doc comment for where this is stored. Empty
+ * when nothing failed, or when no gather has run yet.
+ */
+export function getUnavailableRepositoriesForIssue(
+  db: SqliteConnection,
+  jiraProjectId: string,
+  issueKey: string,
+): UnavailableRepository[] {
+  const scanItem = findManualScanItem(db, jiraProjectId, issueKey);
+  if (!scanItem?.error_code) {
+    return [];
+  }
+  return JSON.parse(scanItem.error_code) as UnavailableRepository[];
 }
