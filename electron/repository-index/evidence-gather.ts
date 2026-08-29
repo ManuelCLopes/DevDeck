@@ -71,7 +71,13 @@ export async function gatherEvidence(
     context.onProgress?.((index + 1) / request.repositories.length);
   }
 
-  replaceEvidenceForIssue(db, jiraProjectId, request.issueKey, evidence);
+  replaceEvidenceForIssue(
+    db,
+    jiraProjectId,
+    request.issueKey,
+    evidence,
+    result.unavailableRepositories,
+  );
 
   return result;
 }

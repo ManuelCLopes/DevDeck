@@ -43,6 +43,20 @@ interface RipgrepMatchPayload {
   type: string;
 }
 
+/**
+ * A pattern like "secrets/**" contains a slash, which makes it a rooted
+ * gitignore-style glob (the syntax ripgrep's -g uses) — it excludes only
+ * a top-level secrets/, not one nested under packages/app/secrets/.
+ * Prefixing with "**\/" matches it at every depth instead, the same
+ * any-depth semantics IgnoreRules.isIgnored already gives the Node
+ * fallback (ignore-rules.ts's compilePattern checks every path segment,
+ * not just the first). Slash-free patterns (*.pem, .env*) already match
+ * anywhere and don't need this.
+ */
+function toRipgrepGlob(pattern: string): string {
+  return pattern.includes("/") ? `**/${pattern}` : pattern;
+}
+
 async function searchWithRipgrep(
   repositoryPath: string,
   query: string,
@@ -57,7 +71,7 @@ async function searchWithRipgrep(
     String(maxMatchesPerFile),
     "--max-filesize",
     String(MAX_INDEXABLE_FILE_BYTES),
-    ...DEFAULT_DENY_PATTERNS.flatMap((pattern) => ["-g", `!${pattern}`]),
+    ...DEFAULT_DENY_PATTERNS.flatMap((pattern) => ["-g", `!${toRipgrepGlob(pattern)}`]),
     "--",
     query,
     ".",

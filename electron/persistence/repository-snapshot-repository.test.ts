@@ -58,6 +58,32 @@ test("getOrCreateRepositorySnapshot creates a new row when the HEAD SHA changes"
   db.close();
 });
 
+test("getOrCreateRepositorySnapshot creates a new row when the repository path changes, even with the same local project ID and HEAD SHA", () => {
+  const db = createTestDatabase();
+
+  const first = getOrCreateRepositorySnapshot(db, {
+    defaultBranch: "main",
+    headSha: "abc123",
+    localProjectId: "proj-1",
+    repositoryPath: "/old/path",
+  });
+  // Same local project ID and HEAD SHA — e.g. the project was moved or
+  // replaced by a fresh checkout that happens to be at an identical
+  // commit. Reusing the old snapshot here would attach new evidence to
+  // a repository_path that no longer exists.
+  const second = getOrCreateRepositorySnapshot(db, {
+    defaultBranch: "main",
+    headSha: "abc123",
+    localProjectId: "proj-1",
+    repositoryPath: "/new/path",
+  });
+
+  assert.notEqual(first.id, second.id);
+  assert.equal(getRepositorySnapshot(db, second.id)?.repositoryPath, "/new/path");
+
+  db.close();
+});
+
 test("getOrCreateRepositorySnapshot creates a new row when the indexer version bumps", () => {
   const db = createTestDatabase();
 

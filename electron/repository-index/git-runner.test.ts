@@ -98,3 +98,30 @@ test("searchCommitsByIssueKey treats the issue key as a fixed string, not a rege
     rmSync(repositoryPath, { force: true, recursive: true });
   }
 });
+
+test("searchCommitsByIssueKey does not match an issue key that is a prefix of another", async () => {
+  const repositoryPath = mkdtempSync(join(tmpdir(), "devdeck-git-runner-"));
+  execFileSync("git", ["init", "-b", "main"], { cwd: repositoryPath, stdio: "ignore" });
+  const commit = (message: string, fileName: string) => {
+    writeFileSync(join(repositoryPath, fileName), "content\n");
+    execFileSync("git", ["add", fileName], { cwd: repositoryPath, stdio: "ignore" });
+    execFileSync(
+      "git",
+      ["-c", "user.name=DevDeck Tests", "-c", "user.email=tests@devdeck.local", "commit", "-m", message],
+      { cwd: repositoryPath, stdio: "ignore" },
+    );
+  };
+  // ENG-1 is a literal prefix of ENG-10 and ENG-100 — only the exact
+  // key, not commits that merely start with it, should match.
+  commit("ENG-10: unrelated work", "a.ts");
+  commit("ENG-100: also unrelated", "b.ts");
+  commit("ENG-1: the actual fix", "c.ts");
+
+  try {
+    const matches = await searchCommitsByIssueKey(repositoryPath, "ENG-1");
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0].subject, "ENG-1: the actual fix");
+  } finally {
+    rmSync(repositoryPath, { force: true, recursive: true });
+  }
+});

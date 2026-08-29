@@ -12,7 +12,10 @@ import {
   resolveRepositoryMapping,
   upsertBacklogMapping,
 } from "./persistence/backlog-mapping-repository";
-import { getEvidenceForIssue } from "./persistence/evidence-repository";
+import {
+  getEvidenceForIssue,
+  getUnavailableRepositoriesForIssue,
+} from "./persistence/evidence-repository";
 import { getRepositorySnapshot } from "./persistence/repository-snapshot-repository";
 import { gatherEvidence } from "./repository-index/evidence-gather";
 import {
@@ -102,7 +105,13 @@ export function registerRepositoryEvidenceIpc(): void {
       }
     }
 
-    return { evidence, repositoryPathsBySnapshotId };
+    const unavailableRepositories = getUnavailableRepositoriesForIssue(
+      db,
+      request.jiraProjectId,
+      request.issueKey,
+    );
+
+    return { evidence, repositoryPathsBySnapshotId, unavailableRepositories };
   });
 
   // Thin convenience wrapper around engineeringBrain.startOperation, same

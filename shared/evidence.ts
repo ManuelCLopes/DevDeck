@@ -67,6 +67,8 @@ export interface GatherEvidenceRequest {
 export interface EvidenceForIssueResult {
   evidence: EvidenceItem[];
   repositoryPathsBySnapshotId: Record<string, string>;
+  /** Repositories that failed the issue's most recent gather — read-only leftovers from that run, not fetched fresh here. Empty means either nothing failed or no gather has run yet. */
+  unavailableRepositories: UnavailableRepository[];
 }
 
 export interface UnavailableRepository {

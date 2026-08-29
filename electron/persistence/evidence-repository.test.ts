@@ -12,6 +12,7 @@ import {
 import {
   getEvidenceForIssue,
   getOrCreateManualScan,
+  getUnavailableRepositoriesForIssue,
   replaceEvidenceForIssue,
 } from "./evidence-repository";
 
@@ -138,6 +139,50 @@ test("getEvidenceForIssue orders high-strength evidence before low, not alphabet
 test("getEvidenceForIssue returns an empty array for an issue with nothing gathered", () => {
   const { db, projectConfig } = createTestDatabase();
   assert.deepEqual(getEvidenceForIssue(db, projectConfig.id, "ENG-999"), []);
+  db.close();
+});
+
+test("getUnavailableRepositoriesForIssue returns an empty array when nothing failed or nothing was ever gathered", () => {
+  const { db, projectConfig } = createTestDatabase();
+  seedIssue(db, projectConfig.id, "ENG-1");
+
+  // No gather has run yet.
+  assert.deepEqual(getUnavailableRepositoriesForIssue(db, projectConfig.id, "ENG-1"), []);
+
+  replaceEvidenceForIssue(db, projectConfig.id, "ENG-1", [buildEvidence()]);
+  // A gather ran and nothing failed.
+  assert.deepEqual(getUnavailableRepositoriesForIssue(db, projectConfig.id, "ENG-1"), []);
+
+  db.close();
+});
+
+test("getUnavailableRepositoriesForIssue persists and reads back a gather's partial failures", () => {
+  const { db, projectConfig } = createTestDatabase();
+  seedIssue(db, projectConfig.id, "ENG-1");
+
+  replaceEvidenceForIssue(db, projectConfig.id, "ENG-1", [buildEvidence()], [
+    { message: "not a git repository", repositoryPath: "/does/not/exist" },
+  ]);
+
+  const unavailable = getUnavailableRepositoriesForIssue(db, projectConfig.id, "ENG-1");
+  assert.deepEqual(unavailable, [
+    { message: "not a git repository", repositoryPath: "/does/not/exist" },
+  ]);
+
+  db.close();
+});
+
+test("getUnavailableRepositoriesForIssue clears a stale failure once a re-gather succeeds fully", () => {
+  const { db, projectConfig } = createTestDatabase();
+  seedIssue(db, projectConfig.id, "ENG-1");
+
+  replaceEvidenceForIssue(db, projectConfig.id, "ENG-1", [buildEvidence()], [
+    { message: "not a git repository", repositoryPath: "/does/not/exist" },
+  ]);
+  replaceEvidenceForIssue(db, projectConfig.id, "ENG-1", [buildEvidence()]);
+
+  assert.deepEqual(getUnavailableRepositoriesForIssue(db, projectConfig.id, "ENG-1"), []);
+
   db.close();
 });
 

@@ -29,6 +29,28 @@ test("searchRepositoryText (real ripgrep) finds matches in real files and exclud
   }
 });
 
+test("searchRepositoryText (real ripgrep) excludes a denied directory nested below the repository root", async () => {
+  const root = createFixtureTree();
+  mkdirSync(join(root, "packages", "app", "secrets"), { recursive: true });
+  writeFileSync(
+    join(root, "packages", "app", "secrets", "token.txt"),
+    "TOKEN=ENG-123\n",
+  );
+  try {
+    const matches = await searchRepositoryText(root, "ENG-123");
+    const filePaths = matches.map((match) => match.filePath);
+
+    // A denied pattern like "secrets/**" contains a slash, which
+    // gitignore-style globs (ripgrep's -g) root at the search directory
+    // by default — this nested secrets/ must still be excluded, not
+    // just a top-level one.
+    assert.ok(!filePaths.some((path) => path.includes("secrets")));
+    assert.ok(filePaths.some((path) => path.endsWith("cache.ts")));
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
 test("searchRepositoryText rejects a nonexistent repository path", async () => {
   await assert.rejects(() => searchRepositoryText("/does/not/exist", "anything"));
 });

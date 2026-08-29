@@ -12,7 +12,10 @@ import {
   upsertJiraIssues,
   upsertJiraProjectConfig,
 } from "../persistence/jira-repository";
-import { getEvidenceForIssue } from "../persistence/evidence-repository";
+import {
+  getEvidenceForIssue,
+  getUnavailableRepositoriesForIssue,
+} from "../persistence/evidence-repository";
 import { gatherEvidence } from "./evidence-gather";
 
 function createFixtureRepository(): string {
@@ -142,6 +145,11 @@ test("gatherEvidence records an unavailable repository without failing the whole
     // The second, valid repository still produced evidence.
     assert.ok(result.evidence.length > 0);
     assert.equal(result.repositorySnapshots.length, 1);
+
+    // Persisted, not just returned — the renderer reads this back on a
+    // later visit, not only right after the gather completes.
+    const persisted = getUnavailableRepositoriesForIssue(db, projectConfig.id, "ENG-1");
+    assert.deepEqual(persisted, result.unavailableRepositories);
   } finally {
     rmSync(goodRepositoryPath, { force: true, recursive: true });
     db.close();
