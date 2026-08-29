@@ -148,9 +148,26 @@ export function useRulesScan(jiraProjectId: string | null) {
     // stuck on "Scanning…" forever. Re-fetch the operation's current
     // state directly to catch that instead of trusting `started`.
     const current = await desktopApi.engineeringBrain?.getOperation(started.id);
-    const latest = current ?? started;
-    setOperation(latest);
-    if (TERMINAL_STATUSES.has(latest.status)) {
+    const fetched = current ?? started;
+
+    // getOperation and the subscribe() push event are two independent
+    // IPC round-trips with no ordering guarantee between them — the
+    // terminal event can be received and applied first, and this (now
+    // stale) non-terminal snapshot must not regress that back to
+    // "running"/"pending" once it finally resolves.
+    let shouldInvalidate = false;
+    setOperation((currentOperation) => {
+      const alreadyTerminal =
+        currentOperation?.id === fetched.id && TERMINAL_STATUSES.has(currentOperation.status);
+      if (alreadyTerminal && !TERMINAL_STATUSES.has(fetched.status)) {
+        return currentOperation;
+      }
+      if (!alreadyTerminal && TERMINAL_STATUSES.has(fetched.status)) {
+        shouldInvalidate = true;
+      }
+      return fetched;
+    });
+    if (shouldInvalidate) {
       invalidateOnCompletion();
     }
   }, [invalidateOnCompletion, jiraProjectId]);

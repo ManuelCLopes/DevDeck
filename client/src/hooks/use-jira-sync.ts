@@ -18,6 +18,20 @@ export function useJiraSync(projectConfigId: string | null, connectionId: string
   const [operation, setOperation] = useState<EngineeringBrainOperation | null>(null);
   const trackedOperationId = useRef<string | null>(null);
 
+  const invalidateOnCompletion = useCallback(() => {
+    if (connectionId) {
+      void queryClient.invalidateQueries({
+        queryKey: ["jira", "project-configs", connectionId],
+      });
+    }
+    if (projectConfigId) {
+      void queryClient.invalidateQueries({
+        queryKey: ["jira", "issues", projectConfigId],
+        exact: false,
+      });
+    }
+  }, [connectionId, projectConfigId, queryClient]);
+
   useEffect(() => {
     const desktopApi = getDesktopApi();
     if (!desktopApi?.engineeringBrain) {
@@ -41,20 +55,10 @@ export function useJiraSync(projectConfigId: string | null, connectionId: string
       setOperation(event.operation);
 
       if (TERMINAL_STATUSES.has(event.operation.status)) {
-        if (connectionId) {
-          void queryClient.invalidateQueries({
-            queryKey: ["jira", "project-configs", connectionId],
-          });
-        }
-        if (projectConfigId) {
-          void queryClient.invalidateQueries({
-            queryKey: ["jira", "issues", projectConfigId],
-            exact: false,
-          });
-        }
+        invalidateOnCompletion();
       }
     });
-  }, [connectionId, projectConfigId, queryClient]);
+  }, [invalidateOnCompletion]);
 
   const start = useCallback(
     async (mode: JiraSyncMode) => {
@@ -64,9 +68,41 @@ export function useJiraSync(projectConfigId: string | null, connectionId: string
       }
       const started = await desktopApi.jira.startSync({ mode, projectConfigId });
       trackedOperationId.current = started.id;
-      setOperation(started);
+
+      // A fast sync (e.g. an incremental sync that finds nothing to do)
+      // can finish between the main process starting the handler and
+      // this IPC round-trip resolving — engineeringBrainService fires
+      // the handler without waiting for startOperation's own response.
+      // The subscribe() effect above would silently discard that
+      // terminal event, since trackedOperationId wasn't set yet when it
+      // arrived, leaving the UI stuck on "Syncing…" forever. Re-fetch
+      // the operation's current state directly to catch that instead of
+      // trusting `started`.
+      const current = await desktopApi.engineeringBrain?.getOperation(started.id);
+      const fetched = current ?? started;
+
+      // getOperation and the subscribe() push event are two independent
+      // IPC round-trips with no ordering guarantee between them — the
+      // terminal event can be received and applied first, and this
+      // (now stale) non-terminal snapshot must not regress that back to
+      // "running"/"pending" once it finally resolves.
+      let shouldInvalidate = false;
+      setOperation((currentOperation) => {
+        const alreadyTerminal =
+          currentOperation?.id === fetched.id && TERMINAL_STATUSES.has(currentOperation.status);
+        if (alreadyTerminal && !TERMINAL_STATUSES.has(fetched.status)) {
+          return currentOperation;
+        }
+        if (!alreadyTerminal && TERMINAL_STATUSES.has(fetched.status)) {
+          shouldInvalidate = true;
+        }
+        return fetched;
+      });
+      if (shouldInvalidate) {
+        invalidateOnCompletion();
+      }
     },
-    [projectConfigId],
+    [invalidateOnCompletion, projectConfigId],
   );
 
   const isSyncing = operation
