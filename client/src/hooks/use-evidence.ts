@@ -37,6 +37,12 @@ export function useEvidenceGather(jiraProjectId: string | null, issueKey: string
   const [operation, setOperation] = useState<EngineeringBrainOperation | null>(null);
   const trackedOperationId = useRef<string | null>(null);
 
+  const invalidateOnCompletion = useCallback(() => {
+    if (jiraProjectId && issueKey) {
+      void queryClient.invalidateQueries({ queryKey: ["evidence", jiraProjectId, issueKey] });
+    }
+  }, [issueKey, jiraProjectId, queryClient]);
+
   useEffect(() => {
     const desktopApi = getDesktopApi();
     if (!desktopApi?.engineeringBrain) {
@@ -58,11 +64,11 @@ export function useEvidenceGather(jiraProjectId: string | null, issueKey: string
       }
 
       setOperation(event.operation);
-      if (TERMINAL_STATUSES.has(event.operation.status) && jiraProjectId && issueKey) {
-        void queryClient.invalidateQueries({ queryKey: ["evidence", jiraProjectId, issueKey] });
+      if (TERMINAL_STATUSES.has(event.operation.status)) {
+        invalidateOnCompletion();
       }
     });
-  }, [issueKey, jiraProjectId, queryClient]);
+  }, [invalidateOnCompletion]);
 
   const start = useCallback(
     async (repositories: RepositoryReference[]) => {
@@ -75,9 +81,22 @@ export function useEvidenceGather(jiraProjectId: string | null, issueKey: string
         request: { issueKey, repositories },
       });
       trackedOperationId.current = started.id;
-      setOperation(started);
+
+      // A fast gather (e.g. an already-unavailable repository failing
+      // immediately) can finish between the main process starting the
+      // handler and this IPC round-trip resolving — the subscribe()
+      // effect above would silently discard that terminal event, since
+      // trackedOperationId wasn't set yet when it arrived. Re-fetch the
+      // operation's current state directly to catch that instead of
+      // trusting `started`.
+      const current = await desktopApi.engineeringBrain?.getOperation(started.id);
+      const latest = current ?? started;
+      setOperation(latest);
+      if (TERMINAL_STATUSES.has(latest.status)) {
+        invalidateOnCompletion();
+      }
     },
-    [issueKey, jiraProjectId],
+    [invalidateOnCompletion, issueKey, jiraProjectId],
   );
 
   const isGathering = operation

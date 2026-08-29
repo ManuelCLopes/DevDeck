@@ -15,6 +15,8 @@ import {
   getUnavailableRepositoriesForIssue,
   replaceEvidenceForIssue,
 } from "./evidence-repository";
+import { insertAssessment } from "./assessment-repository";
+import { createRulesScan } from "./rules-scan-repository";
 
 function createTestDatabase() {
   const db = openSqliteConnection({ path: ":memory:" });
@@ -100,6 +102,65 @@ test("replaceEvidenceForIssue persists evidence retrievable by getEvidenceForIss
 });
 
 test("replaceEvidenceForIssue fully replaces (not accumulates) on a re-gather", () => {
+  const { db, projectConfig } = createTestDatabase();
+  seedIssue(db, projectConfig.id, "ENG-1");
+
+  replaceEvidenceForIssue(db, projectConfig.id, "ENG-1", [
+    buildEvidence({ id: "evidence-1", sourceId: "first-run" }),
+  ]);
+  replaceEvidenceForIssue(db, projectConfig.id, "ENG-1", [
+    buildEvidence({ id: "evidence-2", sourceId: "second-run" }),
+  ]);
+
+  const stored = getEvidenceForIssue(db, projectConfig.id, "ENG-1");
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].sourceId, "second-run");
+
+  db.close();
+});
+
+test("replaceEvidenceForIssue preserves an evidence row still cited by an assessment, even after a re-gather", () => {
+  const { db, projectConfig } = createTestDatabase();
+  seedIssue(db, projectConfig.id, "ENG-1");
+
+  replaceEvidenceForIssue(db, projectConfig.id, "ENG-1", [
+    buildEvidence({ id: "cited-evidence", sourceId: "first-run" }),
+  ]);
+
+  // A rules scan assessed the issue and cited that evidence row —
+  // evidence-gather.ts's evidence.id values are fresh randomUUIDs every
+  // gather, so nothing else keeps this id alive except the citation.
+  const scanId = createRulesScan(db, projectConfig.id, "1");
+  insertAssessment(db, {
+    classification: "possibly_implemented",
+    confidence: 0.8,
+    confidenceBand: "medium",
+    contradictions: [],
+    engineVersion: "1",
+    evidenceIds: ["cited-evidence"],
+    issueKey: "ENG-1",
+    openQuestions: [],
+    rationale: "Found a commit that references this issue.",
+    repositorySnapshotIds: [],
+    scanId,
+    suggestedAction: "investigate",
+    summary: "Likely already implemented.",
+  });
+
+  // A later re-gather finds a brand-new evidence row (a fresh randomUUID)
+  // for the same underlying commit — the cited row must survive.
+  replaceEvidenceForIssue(db, projectConfig.id, "ENG-1", [
+    buildEvidence({ id: "second-run-evidence", sourceId: "second-run" }),
+  ]);
+
+  const stored = getEvidenceForIssue(db, projectConfig.id, "ENG-1");
+  const storedIds = stored.map((item) => item.id).sort();
+  assert.deepEqual(storedIds, ["cited-evidence", "second-run-evidence"]);
+
+  db.close();
+});
+
+test("replaceEvidenceForIssue still fully replaces evidence no assessment cites", () => {
   const { db, projectConfig } = createTestDatabase();
   seedIssue(db, projectConfig.id, "ENG-1");
 

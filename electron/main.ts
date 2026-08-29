@@ -84,11 +84,14 @@ import { getGitCommitGraph } from "./git-graph";
 import { getConflictedFiles, resolveFileConflict } from "./git-conflict";
 import {
   closeEngineeringBrainPersistence,
+  getEngineeringBrainDatabaseConnection,
   initializeEngineeringBrainPersistence,
   registerEngineeringBrainIpc,
 } from "./engineering-brain-ipc";
 import { registerJiraIpc } from "./jira-ipc";
 import { registerRepositoryEvidenceIpc } from "./repository-evidence-ipc";
+import { registerRulesEngineIpc } from "./rules-engine-ipc";
+import { reconcileOrphanedRulesScans } from "./persistence/rules-scan-repository";
 
 const execFileAsync = promisify(execFile);
 const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
@@ -1006,10 +1009,19 @@ registerPtyIpc();
 registerEngineeringBrainIpc();
 registerJiraIpc();
 registerRepositoryEvidenceIpc();
+registerRulesEngineIpc();
 
 app.whenReady().then(() => {
   syncMacAppIdentity();
   initializeEngineeringBrainPersistence();
+  // Engineering Brain operations don't survive a restart (see the
+  // reconcileOrphanedRulesScans doc comment) — a rules scan interrupted
+  // by the app quitting would otherwise show as permanently "running"
+  // forever, so sweep for that once right after the database opens.
+  const engineeringBrainDb = getEngineeringBrainDatabaseConnection();
+  if (engineeringBrainDb) {
+    reconcileOrphanedRulesScans(engineeringBrainDb);
+  }
   createMainWindow();
   syncTrayPresence();
 

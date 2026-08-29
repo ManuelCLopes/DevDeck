@@ -1036,6 +1036,8 @@ Deliver mappings, snapshots, Git search, code search, GitHub enrichment, and evi
 
 ### Phase 4 — Rules-only assessment
 
+**Status (2026-08-28): implemented, core scope only** — scan orchestration, a rules engine covering 4 of the 6 documented categories, deterministic confidence aggregation, assessment persistence with full scan history, and per-issue human feedback (accept/reject/correct). See docs/BACKLOG_INTELLIGENCE_INTEGRATION_PLAN.md's Phase 4 section for the file-by-file breakdown and what's deferred (exports, a dedicated review-queue UI, "stale specification evidence" detection, live-scale validation).
+
 Deliver scan orchestration, signals, confidence, assessments, review workflow, feedback, and exports.
 
 This is the first release with standalone value.

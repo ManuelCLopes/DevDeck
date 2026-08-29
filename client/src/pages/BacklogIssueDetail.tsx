@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import AssessmentCard from "@/components/backlog/AssessmentCard";
 import { useBacklogFeatureFlags } from "@/hooks/use-backlog-feature-flags";
 import { useResolvedRepositoryMapping } from "@/hooks/use-backlog-mapping";
 import { useEvidenceGather, useIssueEvidence } from "@/hooks/use-evidence";
@@ -60,6 +61,7 @@ export default function BacklogIssueDetail({ issueKey }: BacklogIssueDetailProps
 
   const { data: featureFlags } = useBacklogFeatureFlags();
   const repositoryIndexEnabled = featureFlags?.repositoryIndexEnabled ?? false;
+  const rulesAssessmentEnabled = featureFlags?.rulesAssessmentEnabled ?? false;
 
   const normalizedIssueKey = issueKey ?? null;
   const issueDetailQuery = useJiraIssueDetail(normalizedIssueKey);
@@ -323,6 +325,23 @@ export default function BacklogIssueDetail({ issueKey }: BacklogIssueDetailProps
                 )}
               </CardContent>
             </Card>
+
+            {rulesAssessmentEnabled ? (
+              <AssessmentCard evidenceItems={evidenceItems} issueKey={issue.record.issueKey} />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Assessment</CardTitle>
+                  <CardDescription>
+                    Rules-only assessment is disabled. Set{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                      DEVDECK_FEATURE_RULES_ASSESSMENT=true
+                    </code>{" "}
+                    to enable it.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            )}
           </>
         )}
       </div>

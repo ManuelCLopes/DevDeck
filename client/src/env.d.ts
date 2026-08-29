@@ -38,11 +38,19 @@ import type {
 } from "@shared/engineering-brain";
 import type { BacklogFeatureFlags } from "@shared/feature-flags";
 import type {
+  BacklogClassification,
   BacklogDiagnosticsSummary,
   RepositoryMappingMatch,
   RepositoryMappingRule,
 } from "@shared/backlog";
 import type { EvidenceForIssueResult, GatherEvidenceRequest } from "@shared/evidence";
+import type {
+  Assessment,
+  AssessmentFeedback,
+  AssessmentFeedbackDecision,
+  ProjectAssessmentSummary,
+  RulesScanSummary,
+} from "@shared/assessment";
 import type {
   JiraAuthCapabilities,
   JiraConnection,
@@ -240,6 +248,20 @@ interface DevDeckDesktopApi {
       jiraProjectId: string;
       request: GatherEvidenceRequest;
     }): Promise<EngineeringBrainOperation>;
+  };
+  assessment: {
+    getForIssue(issueKey: string): Promise<Assessment | null>;
+    getProjectSummary(jiraProjectId: string): Promise<ProjectAssessmentSummary>;
+    listFeedback(assessmentId: string): Promise<AssessmentFeedback[]>;
+    listHistory(payload: { issueKey: string; limit?: number }): Promise<Assessment[]>;
+    listScans(payload: { jiraProjectId: string; limit?: number }): Promise<RulesScanSummary[]>;
+    startScan(jiraProjectId: string): Promise<EngineeringBrainOperation>;
+    submitFeedback(payload: {
+      assessmentId: string;
+      correctedClassification?: BacklogClassification | null;
+      decision: AssessmentFeedbackDecision;
+      note?: string | null;
+    }): Promise<AssessmentFeedback>;
   };
   jira: {
     getAuthCapabilities(): Promise<JiraAuthCapabilities>;
