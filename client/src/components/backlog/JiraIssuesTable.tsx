@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,11 +18,24 @@ const PAGE_SIZE = 25;
 
 interface JiraIssuesTableProps {
   projectConfigId: string | null;
+  projectKey: string | null;
 }
 
-export default function JiraIssuesTable({ projectConfigId }: JiraIssuesTableProps) {
+export default function JiraIssuesTable({ projectConfigId, projectKey }: JiraIssuesTableProps) {
+  const [, setLocation] = useLocation();
   const [offset, setOffset] = useState(0);
   const issuesQuery = useJiraIssues(projectConfigId, { limit: PAGE_SIZE, offset });
+
+  const openIssue = (issueKey: string) => {
+    const params = new URLSearchParams();
+    if (projectConfigId) {
+      params.set("projectConfigId", projectConfigId);
+    }
+    if (projectKey) {
+      params.set("projectKey", projectKey);
+    }
+    setLocation(`/backlog/issues/${encodeURIComponent(issueKey)}?${params.toString()}`);
+  };
 
   const issues = issuesQuery.data?.issues ?? [];
   const total = issuesQuery.data?.total ?? 0;
@@ -65,9 +79,13 @@ export default function JiraIssuesTable({ projectConfigId }: JiraIssuesTableProp
                 </TableHeader>
                 <TableBody>
                   {issues.map((issue) => (
-                    <TableRow key={issue.issueKey} className={issue.outOfScope ? "opacity-60" : ""}>
+                    <TableRow
+                      key={issue.issueKey}
+                      className={`cursor-pointer ${issue.outOfScope ? "opacity-60" : ""}`}
+                      onClick={() => openIssue(issue.issueKey)}
+                    >
                       <TableCell className="whitespace-nowrap font-mono text-xs">
-                        {issue.issueKey}
+                        <span className="text-primary hover:underline">{issue.issueKey}</span>
                         {issue.outOfScope ? (
                           <Badge className="ml-2" variant="outline">
                             out of scope
