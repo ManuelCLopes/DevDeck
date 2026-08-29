@@ -1008,13 +1008,24 @@ A repository layer over the schema v1 tables (typed query/insert helpers for `ji
 
 ## Phase 2 — Read-only Jira connection and sync
 
+**Status (2026-08-27): implemented, validated only against a mocked Jira API.** See `shared/jira.ts`, `shared/jira-schemas.ts`, `electron/jira/`, `electron/persistence/jira-repository.ts`, `electron/jira-ipc.ts`, and the Jira section of `client/src/pages/Backlog.tsx`.
+
 **Objective:** Authenticate and synchronise Jira locally.
 
 **Deliverables:** connection UI, Keychain, project discovery, JQL preview, full/incremental sync, and issue list.
 
 **Acceptance criteria:** tested connection, Keychain token storage, paginated sync of at least 1,000 issues, incremental updates, actionable JQL errors, offline browsing, and no Jira mutation.
 
-**Estimate:** 2–3 weeks.
+- tested connection, Keychain token storage: ✅ `testAndSaveConnection` validates against Jira before storing; Keychain on macOS, file fallback (0600) elsewhere;
+- paginated sync of at least 1,000 issues: ⚠️ pagination itself is implemented and tested against a stubbed multi-page response; **reliability at real scale against a real Jira Cloud site has not been exercised** — this repository's execution environment has no Jira instance or credentials. Validate before depending on this for a real backlog;
+- incremental updates: ✅ relative-window JQL, never touches `out_of_scope` (only a full sync may);
+- actionable JQL errors: ✅ `JQL_INVALID` / `PERMISSION_DENIED` preserve Jira's own error text;
+- offline browsing: ✅ `JiraIssuesTable` reads only the local SQLite store;
+- no Jira mutation: ✅ every client function is a GET or a POST to `/search`.
+
+Not built, deferred to a later phase or a follow-up: a guided-filter UI (JQL editor only, per "guided filters **or** JQL"); issue-detail drill-down (the client already has `getIssue`/`getComments`/`getIssueChangelog`, just no screen uses them yet); saved filters; the general `BacklogErrorCode` taxonomy (BI-003) beyond the Jira-specific codes used here.
+
+**Estimate:** 2–3 weeks. Actual: implemented in one session; live-Jira validation is untimed follow-up work.
 
 ---
 
@@ -1129,15 +1140,15 @@ Proceed only after a stable baseline demonstrates meaningful lexical misses.
 
 ### Jira
 
-- `BI-020` Keychain credential storage.
-- `BI-021` Jira client.
-- `BI-022` Connection health.
-- `BI-023` Project discovery.
-- `BI-024` JQL preview.
-- `BI-025` Full sync.
-- `BI-026` Incremental sync.
-- `BI-027` Rate-limit and retry handling.
-- `BI-028` ADF normalisation.
+- `BI-020` Keychain credential storage. ✅ `electron/jira/jira-auth.ts` (+ `electron/keychain-storage.ts`)
+- `BI-021` Jira client. ✅ `electron/jira/jira-client.ts` — validated against a mocked API only, see Phase 2 status above
+- `BI-022` Connection health. ✅ `testConnection`, surfaced via `jira_connections.last_error` / `last_successful_sync_at`
+- `BI-023` Project discovery. ✅ `listProjects` (remote), `listJiraProjectConfigs` (local)
+- `BI-024` JQL preview. ✅ `devdeck:jira:preview-jql` (count-only search, `maxResults: 0`)
+- `BI-025` Full sync. ✅ `runFullJiraSync` — paginated, marks out-of-scope issues
+- `BI-026` Incremental sync. ✅ `runIncrementalJiraSync` — relative-window JQL
+- `BI-027` Rate-limit and retry handling. ✅ bounded exponential backoff + jitter, `Retry-After` honoured
+- `BI-028` ADF normalisation. ✅ `electron/jira/jira-adf.ts`
 
 ### Repository evidence
 

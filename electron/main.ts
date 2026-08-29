@@ -87,6 +87,7 @@ import {
   initializeEngineeringBrainPersistence,
   registerEngineeringBrainIpc,
 } from "./engineering-brain-ipc";
+import { registerJiraIpc } from "./jira-ipc";
 
 const execFileAsync = promisify(execFile);
 const REVIEW_CLAIM_COMMENT_MARKER = "<!-- devdeck:review-claim -->";
@@ -1002,6 +1003,7 @@ ipcMain.handle(
 
 registerPtyIpc();
 registerEngineeringBrainIpc();
+registerJiraIpc();
 
 app.whenReady().then(() => {
   syncMacAppIdentity();

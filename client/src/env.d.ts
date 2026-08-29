@@ -38,6 +38,17 @@ import type {
 } from "@shared/engineering-brain";
 import type { BacklogFeatureFlags } from "@shared/feature-flags";
 import type { BacklogDiagnosticsSummary } from "@shared/backlog";
+import type {
+  JiraAuthCapabilities,
+  JiraConnection,
+  JiraConnectionCredentials,
+  JiraConnectionHealth,
+  JiraIssueRecord,
+  JiraIssueType,
+  JiraProjectConfig,
+  JiraRemoteProject,
+  JiraSyncMode,
+} from "@shared/jira";
 
 interface WorkspaceMonitorState {
   preferences: WorkspaceMonitorPreferences & {
@@ -196,6 +207,36 @@ interface DevDeckDesktopApi {
   syncWorkspaceMonitorState(state: WorkspaceMonitorState): Promise<void>;
   getBacklogFeatureFlags(): Promise<BacklogFeatureFlags>;
   getBacklogDiagnostics(): Promise<BacklogDiagnosticsSummary>;
+  jira: {
+    getAuthCapabilities(): Promise<JiraAuthCapabilities>;
+    getConnection(): Promise<JiraConnection | null>;
+    testAndSaveConnection(
+      credentials: JiraConnectionCredentials,
+    ): Promise<{ connection: JiraConnection; health: JiraConnectionHealth }>;
+    clearConnection(): Promise<void>;
+    listRemoteProjects(): Promise<JiraRemoteProject[]>;
+    listIssueTypes(projectKey: string): Promise<JiraIssueType[]>;
+    previewJql(payload: {
+      connectionId: string;
+      jql: string;
+    }): Promise<{ total: number; valid: true } | { reason: string; valid: false }>;
+    saveProjectConfig(payload: {
+      connectionId: string;
+      jql: string | null;
+      name: string;
+      projectKey: string;
+    }): Promise<JiraProjectConfig>;
+    listProjectConfigs(connectionId: string): Promise<JiraProjectConfig[]>;
+    listIssues(payload: {
+      limit: number;
+      offset: number;
+      projectConfigId: string;
+    }): Promise<{ issues: JiraIssueRecord[]; total: number }>;
+    startSync(payload: {
+      mode: JiraSyncMode;
+      projectConfigId: string;
+    }): Promise<EngineeringBrainOperation>;
+  };
   engineeringBrain: {
     startOperation(
       request: StartEngineeringBrainOperationRequest,

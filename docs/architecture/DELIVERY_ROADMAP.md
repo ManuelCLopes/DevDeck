@@ -106,6 +106,8 @@ Create the executable platform shell without implementing Jira or indexing.
 
 ## M2 — Jira read-only
 
+**Status (2026-08-27): implemented against mocked Jira responses; never validated against a live Jira Cloud site.** See below.
+
 ### Objectives
 
 Connect Jira Cloud and persist a reliable local snapshot.
@@ -125,16 +127,20 @@ Connect Jira Cloud and persist a reliable local snapshot.
 
 ### Exit criteria
 
-- at least 1,000 issues sync reliably;
-- retries and rate limits are handled;
-- incremental sync updates changed issues only;
-- invalid JQL and permission failures are actionable;
-- no Jira mutation endpoints are exposed;
-- tokens are absent from database, logs, and renderer DTOs.
+- at least 1,000 issues sync reliably; ❌ **not validated.** This execution environment has no Jira Cloud instance or credentials to sync against. `electron/jira/jira-sync.test.ts` proves the pagination/upsert/out-of-scope logic against a stubbed API across multiple pages, but that is not the same claim as "1,000 real issues from a real site sync reliably." Do this before relying on M2 for a real backlog.
+- retries and rate limits are handled; ✅ `electron/jira/jira-client.ts` — bounded exponential backoff with jitter on 429/5xx, `Retry-After` honoured when present, unit-tested including the backoff curve itself (`jira-client.test.ts`).
+- incremental sync updates changed issues only; ✅ `runIncrementalJiraSync` scopes its JQL to a relative `updated >= "-Nm"` window and never calls `markJiraIssuesOutOfScope` (`jira-sync.test.ts`).
+- invalid JQL and permission failures are actionable; ✅ mapped to `JQL_INVALID` / `PERMISSION_DENIED` with Jira's own error text preserved (`electron/jira/jira-errors.ts`).
+- no Jira mutation endpoints are exposed; ✅ every `jira-client.ts` function is a GET, or a POST to `/search` (a query, not a mutation — Jira just puts long JQL there instead of a URL).
+- tokens are absent from database, logs, and renderer DTOs. ✅ credentials live only in Keychain/file storage (`electron/jira/jira-auth.ts`); no IPC handler returns an `apiToken`; nothing under `electron/jira/` or `electron/jira-ipc.ts` logs anything.
+
+Also delivered beyond the listed deliverables: offline issue browsing (`JiraIssuesTable`, reads local SQLite only) and connection-health diagnostics (`jira_connections.last_error` / `last_successful_sync_at`, surfaced in `JiraConnectionCard`) — a lighter version of "sync diagnostics" than section 4.6's full observability model (scan id, stage durations, token/cost data), which only makes sense once a scan concept exists (M4).
+
+Not built in M2, deferred: a guided-filter UI (JQL only for now — the plan allows either); issue-detail drill-down UI (`getIssue`/`getComments`/`getIssueChangelog` already exist in the client, unused by any screen yet); a `BacklogErrorCode` taxonomy beyond the Jira-specific subset (BI-003, still open).
 
 ### Estimated effort
 
-2–3 weeks.
+2–3 weeks. Actual: implemented in one session; live-Jira validation is untimed follow-up work, same shape as M1's macOS packaging gap.
 
 ## M3 — Repository evidence
 
