@@ -49,11 +49,22 @@ import type {
   JiraRemoteProject,
   JiraSyncMode,
 } from "../shared/jira";
-import type { RepositoryMappingMatch, RepositoryMappingRule } from "../shared/backlog";
+import type {
+  BacklogClassification,
+  RepositoryMappingMatch,
+  RepositoryMappingRule,
+} from "../shared/backlog";
 import type {
   EvidenceForIssueResult,
   GatherEvidenceRequest,
 } from "../shared/evidence";
+import type {
+  Assessment,
+  AssessmentFeedback,
+  AssessmentFeedbackDecision,
+  ProjectAssessmentSummary,
+  RulesScanSummary,
+} from "../shared/assessment";
 
 interface WorkspaceMonitorState {
   preferences: WorkspaceMonitorPreferences & {
@@ -336,6 +347,34 @@ const devdeck = {
       request: GatherEvidenceRequest;
     }): Promise<EngineeringBrainOperation> {
       return ipcRenderer.invoke("devdeck:evidence:start-gather", payload);
+    },
+  },
+  assessment: {
+    getForIssue(issueKey: string): Promise<Assessment | null> {
+      return ipcRenderer.invoke("devdeck:assessment:get-for-issue", issueKey);
+    },
+    getProjectSummary(jiraProjectId: string): Promise<ProjectAssessmentSummary> {
+      return ipcRenderer.invoke("devdeck:assessment:get-project-summary", jiraProjectId);
+    },
+    listFeedback(assessmentId: string): Promise<AssessmentFeedback[]> {
+      return ipcRenderer.invoke("devdeck:assessment:list-feedback", assessmentId);
+    },
+    listHistory(payload: { issueKey: string; limit?: number }): Promise<Assessment[]> {
+      return ipcRenderer.invoke("devdeck:assessment:list-history", payload);
+    },
+    listScans(payload: { jiraProjectId: string; limit?: number }): Promise<RulesScanSummary[]> {
+      return ipcRenderer.invoke("devdeck:assessment:list-scans", payload);
+    },
+    startScan(jiraProjectId: string): Promise<EngineeringBrainOperation> {
+      return ipcRenderer.invoke("devdeck:assessment:start-scan", { jiraProjectId });
+    },
+    submitFeedback(payload: {
+      assessmentId: string;
+      correctedClassification?: BacklogClassification | null;
+      decision: AssessmentFeedbackDecision;
+      note?: string | null;
+    }): Promise<AssessmentFeedback> {
+      return ipcRenderer.invoke("devdeck:assessment:submit-feedback", payload);
     },
   },
   jira: {

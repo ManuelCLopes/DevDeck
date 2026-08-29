@@ -181,31 +181,33 @@ Also not built, and not claimed above: **incremental indexing.** Lexical search 
 
 ## M4 — Rules-only Backlog Health
 
+**Status (2026-08-28): implemented, core scope only.** See `electron/rules-engine/`, `electron/persistence/{assessment,rules-scan}-repository.ts`, `electron/rules-engine-ipc.ts`, `shared/assessment.ts`, and the Phase 4 status note in `docs/BACKLOG_INTELLIGENCE_INTEGRATION_PLAN.md` for the full breakdown.
+
 ### Objectives
 
 Deliver the first standalone user value without any model dependency.
 
 ### Deliverables
 
-- scan orchestration;
-- per-issue work queue;
-- deterministic rules;
-- signal and confidence model;
-- assessment persistence;
-- contradiction handling;
-- issue review queue;
-- human feedback;
-- CSV, JSON, and Markdown exports;
-- evaluation report.
+- scan orchestration; ✅ `runRulesScan`, wired as an Engineering Brain operation kind
+- per-issue work queue; ⚠️ per-issue isolation exists (`scan_items`), but "queue" here means the generic Engineering Brain operation service's concurrency limit, not a dedicated scan queue
+- deterministic rules; ⚠️ 4 of the RFC's 6 rule categories — see the Phase 4 status note
+- signal and confidence model; ✅ `AssessmentSignal` + `aggregateSignals`
+- assessment persistence; ✅ one row per issue per scan, full history retained
+- contradiction handling; ✅ opposing classifications both scoring is recorded and discounts confidence
+- issue review queue; ❌ not built — `AssessmentCard` shows one issue's latest assessment; there is no queue UI for grooming many at once (M6 territory)
+- human feedback; ✅ accept / reject / correct-classification with an optional note
+- CSV, JSON, and Markdown exports; ❌ not built
+- evaluation report; ❌ not built — no evaluation corpus exists yet (that's M5's "model evaluation corpus" territory, and this milestone has no model to evaluate)
 
 ### Exit criteria
 
-- 500-issue scan completes with bounded resources;
-- every assessment has valid evidence or `insufficient_evidence`;
-- issue age alone never drives obsolescence;
-- failures are isolated;
-- users can accept, reject, and correct assessments;
-- precision thresholds are approved for beta.
+- 500-issue scan completes with bounded resources; ⚠️ `runRulesScan` pages through issues (200/page) and never loads a whole project into memory at once, but this has only been exercised against small in-memory test fixtures — not load-tested at 500-issue scale, the same live-scale gap M2 already flags for Jira sync
+- every assessment has valid evidence or `insufficient_evidence`; ✅ `computeAssessmentSignals` always falls back to `insufficient_evidence` when no other rule fires — there is no code path that classifies without a signal backing it
+- issue age alone never drives obsolescence; ✅ no signal in `electron/rules-engine/signals.ts` reads issue age at all — obsolescence comes only from Jira's own out-of-scope sync state
+- failures are isolated; ✅ `scan_items` per issue
+- users can accept, reject, and correct assessments; ✅
+- precision thresholds are approved for beta; ❌ not applicable yet — no live-Jira validation has happened (M2's own gap) to calibrate against
 
 ### Product milestone
 
@@ -213,7 +215,7 @@ First release with clear standalone value.
 
 ### Estimated effort
 
-2–4 weeks.
+2–4 weeks. Actual: implemented in one session; live-scale validation and the deferred deliverables above are untimed follow-up work, same shape as M1/M2/M3's own gaps.
 
 ## M5 — Hybrid assessment
 

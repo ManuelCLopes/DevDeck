@@ -1053,13 +1053,34 @@ Not built, deferred: deleted/renamed-component detection (`EvidenceKind.componen
 
 ## Phase 4 — Rules-only Backlog Health Scan
 
+**Status (2026-08-28): implemented, core scope only.** See `shared/assessment.ts`, `shared/assessment-schemas.ts`, `electron/rules-engine/`, `electron/persistence/{assessment,rules-scan}-repository.ts`, `electron/rules-engine-ipc.ts`, `RulesScanCard` (on `client/src/pages/Backlog.tsx`), and `AssessmentCard` (on the issue detail page).
+
 **Objective:** Produce useful assessments without an LLM dependency.
 
 **Deliverables:** scan orchestration, rules engine, confidence, dashboard, scan history, review workflow, feedback, and exports.
 
+- scan orchestration: ✅ `runRulesScan` (`electron/rules-engine/rules-scan.ts`), wired as the `rules-scan-project` Engineering Brain operation kind — same start/progress/cancel machinery every other long-running operation uses
+- rules engine: ⚠️ covers 4 of the RFC's 6 rule categories (section 21) from data Phase 2/3 already collect — implementation evidence (commit/PR/code matches), obsolescence (a project's own JQL filter dropping the issue), duplicate (a Jira issue link naming it a duplicate), and insufficient evidence (the fallback). "Stale specification evidence" needs comparing an issue's description against what the code does — deferred to Phase 5's model layer, not something a rule can do reliably. "Contradiction" isn't a signal generator; it's detected in `confidence.ts` from two rules firing against the same issue (e.g. implementation evidence *and* an obsolescence signal)
+- confidence: ✅ deterministic, versioned (`RULES_ENGINE_VERSION`), inspectable — every persisted assessment stores the engine version, rationale, and which evidence ids it cites
+- dashboard: ⚠️ `RulesScanCard` shows a per-project classification breakdown and a "run scan" control on the Backlog page; there is no dedicated dashboard page (Phase 6's "advanced triage UX" territory)
+- scan history: ⚠️ persisted in full (every scan is its own `scans` row, never overwritten — see the schema note below) and queryable via `listRulesScansForProject`, but the UI only surfaces the latest scan's stats, not a history browser
+- review workflow: ⚠️ `AssessmentCard` on the issue detail page shows the latest assessment with rationale, contradictions, open questions, and suggested action; there is no dedicated review queue for grooming many issues at once (Phase 6)
+- feedback: ✅ accept / reject / correct-classification with an optional note, persisted to `assessment_feedback`
+- exports: ❌ not built — deferred
+
 **Acceptance criteria:** 100-issue end-to-end scan, cited assessments, explainable confidence, isolated failures, persisted feedback, exportable results, and no age-only classifications.
 
-**Estimate:** 2–3 weeks.
+- 100-issue end-to-end scan: ⚠️ the mechanism (paginated issue collection, one scan per project run) handles it, but this has only been exercised against small in-memory test fixtures — not load-tested against a real 100+ issue project, the same live-validation gap Phase 2 already flags for Jira sync at scale
+- cited assessments: ⚠️ evidence-grounded signals (implementation) cite real `evidence.id` rows; obsolescence and duplicate-link signals cite Jira's own sync/link state directly in their explanation instead, since no `evidence` row represents that state (see `AssessmentSignal`'s doc comment in `shared/assessment.ts`) — an intentional v1 simplification, not a bug
+- explainable confidence: ✅ `aggregateSignals` (`electron/rules-engine/confidence.ts`) is a pure function from signals to classification/confidence/rationale — same input always produces the same output
+- isolated failures: ✅ one `scan_items` row per issue (status + error code); one issue's assessment failing does not stop the rest of the scan, matching Phase 3's per-repository isolation
+- persisted feedback: ✅
+- exportable results: ❌ not built — deferred
+- no age-only classifications: ✅ the rule set has no age-based signal at all — an issue with no evidence and not otherwise flagged always lands on `insufficient_evidence` rather than a guess
+
+Not built, deferred: CSV/Markdown export of scan results; a dedicated scan-history browser and review-queue UI (Phase 6); per-issue on-demand assessment (scans only run project-wide from the Backlog page, not from a single issue's page); "stale specification evidence" detection; re-running feedback-informed threshold calibration (the RFC allows it only through an explicit versioned change, and no calibration exists yet to apply).
+
+**Estimate:** 2–3 weeks. Actual: implemented in one session.
 
 ---
 
@@ -1173,17 +1194,17 @@ Proceed only after a stable baseline demonstrates meaningful lexical misses.
 
 ### Scans and assessment
 
-- `BI-050` Scan lifecycle.
-- `BI-051` Scan queue.
-- `BI-052` Cancellation.
-- `BI-053` Per-issue failure isolation.
-- `BI-054` Progress events.
-- `BI-060` Rules engine.
-- `BI-061` Signal model.
-- `BI-062` Confidence model.
-- `BI-063` Contradiction handling.
-- `BI-064` Assessment persistence.
-- `BI-065` Human feedback.
+- `BI-050` Scan lifecycle. ✅ `electron/persistence/rules-scan-repository.ts` — `running` → `completed` / `failed` / `cancelled`, one `scans` row per run (schema v1, built in Phase 1 for exactly this)
+- `BI-051` Scan queue. ⚠️ reuses the generic Engineering Brain operation service's `maxConcurrentOperations` policy (same as Jira sync and evidence gather); no scan-specific queue exists beyond that
+- `BI-052` Cancellation. ✅ `runRulesScan` checks its `AbortSignal` before each issue and marks the scan `cancelled` rather than leaving it `running`
+- `BI-053` Per-issue failure isolation. ✅ one `scan_items` row per issue; one issue's assessment failing does not stop the rest of the scan
+- `BI-054` Progress events. ✅ `onProgress` reports `(issues assessed) / (total issues)`, flowing through the existing `engineeringBrain.subscribe` event stream
+- `BI-060` Rules engine. ⚠️ `electron/rules-engine/signals.ts` — 4 of the RFC's 6 rule categories, see the Phase 4 status note above
+- `BI-061` Signal model. ✅ `AssessmentSignal` (`shared/assessment.ts`) matches the RFC's documented shape exactly
+- `BI-062` Confidence model. ✅ `electron/rules-engine/confidence.ts` — deterministic, versioned, sums weighted signal scores per classification
+- `BI-063` Contradiction handling. ✅ opposing classifications (e.g. `possibly_implemented` and `possibly_obsolete`) both scoring is recorded in `contradictions` and discounts confidence rather than being silently dropped
+- `BI-064` Assessment persistence. ✅ `electron/persistence/assessment-repository.ts` — one row per issue per scan, full history retained
+- `BI-065` Human feedback. ✅ accept / reject / correct-classification with an optional note, `assessment_feedback` table
 
 ### AI
 
@@ -1197,14 +1218,14 @@ Proceed only after a stable baseline demonstrates meaningful lexical misses.
 
 ### UI and quality
 
-- `BI-080` Dashboard.
+- `BI-080` Dashboard. ⚠️ `RulesScanCard` (Phase 4) shows a per-project classification breakdown, not a dedicated dashboard page
 - `BI-081` Issue table.
 - `BI-082` Issue detail.
 - `BI-083` Evidence panel.
-- `BI-084` Scan progress.
-- `BI-085` Feedback controls.
-- `BI-086` Saved views.
-- `BI-087` Exports.
+- `BI-084` Scan progress. ✅ `RulesScanCard`'s progress bar, driven by the `rules-scan-project` operation's progress events (Phase 4)
+- `BI-085` Feedback controls. ✅ `AssessmentCard`'s accept / reject / correct-classification controls (Phase 4)
+- `BI-086` Saved views. ❌ not built
+- `BI-087` Exports. ❌ not built — deferred (Phase 4 status note above)
 - `BI-090` Threat model.
 - `BI-091` Secret exposure tests.
 - `BI-092` Shell injection tests.
