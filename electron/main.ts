@@ -99,7 +99,10 @@ app.setPath("userData", getDevDeckUserDataPath());
 const DEFAULT_WORKSPACE_MONITOR_PREFERENCES = {
   alertFailingBuilds: true,
   autoRefreshEnabled: true,
-  autoRefreshIntervalSeconds: 30,
+  // Mirrors client/src/lib/app-preferences.ts's default — kept in sync
+  // manually since this is only the fallback used before the renderer's
+  // real preferences arrive over IPC.
+  autoRefreshIntervalSeconds: 3600,
   keepRunningInBackground: true,
   notifyApproved: true,
   notifyChangesRequested: true,

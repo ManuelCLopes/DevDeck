@@ -99,7 +99,11 @@ const APP_THEME_MODES = new Set<AppThemeMode>(["light", "dark", "system"]);
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   alertFailingBuilds: true,
   autoRefreshEnabled: true,
-  autoRefreshIntervalSeconds: 30,
+  // 1 hour — was 30s. GitHub's API rate limit is shared across every
+  // tracked repo's PR/CI/review lookups in one refresh; polling every
+  // 30s made it easy to burn through that budget over a session. Still
+  // user-adjustable in Settings for anyone who wants tighter feedback.
+  autoRefreshIntervalSeconds: 3600,
   highlightStalePrs: true,
   keepRunningInBackground: true,
   launchAtLogin: false,
