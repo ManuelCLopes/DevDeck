@@ -437,6 +437,12 @@ E2E and documentation
 
 ## Feature flags
 
+Phases 1-4 (`backlogIntelligenceEnabled`, `jiraSyncEnabled`,
+`repositoryIndexEnabled`, `rulesAssessmentEnabled`) are fully implemented
+and default **on** — see `shared/feature-flags.ts`. Phase 5+ flags stay off
+by default until their phase lands; each can still be overridden per-flag
+via its `DEVDECK_FEATURE_*` environment variable.
+
 ```text
 backlogIntelligenceEnabled
 jiraSyncEnabled

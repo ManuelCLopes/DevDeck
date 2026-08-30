@@ -1,9 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  getAgentRunBudgetUsagePercent,
-  summarizeTokenUsageForAgentRun,
-} from "./agent-run-detail";
+import { summarizeTokenUsageForAgentRun } from "./agent-run-detail";
 import type { AgentRun, TokenUsageEvent } from "@shared/agents";
 
 const run = {
@@ -17,7 +14,6 @@ const run = {
   status: "active",
   taskTitle: "Build detail view",
   terminalPaneId: "pane-1",
-  tokenBudget: 1000,
   workflowRunId: "workflow-1",
   worktreePath: "/tmp/repo-detail",
 } satisfies AgentRun;
@@ -63,14 +59,4 @@ test("summarizeTokenUsageForAgentRun rolls up direct and OpenCode-linked events"
   assert.equal(summary.inputTokens, 300);
   assert.equal(summary.totalTokens, 500);
   assert.deepEqual(summary.modelLabels, ["opencode / gpt-5-codex"]);
-});
-
-test("getAgentRunBudgetUsagePercent returns null without a budget", () => {
-  const usage = summarizeTokenUsageForAgentRun([baseEvent], run);
-
-  assert.equal(getAgentRunBudgetUsagePercent(run, usage), 20);
-  assert.equal(
-    getAgentRunBudgetUsagePercent({ ...run, tokenBudget: null }, usage),
-    null,
-  );
 });

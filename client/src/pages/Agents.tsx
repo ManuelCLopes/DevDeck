@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   BarChart3,
   Bot,
+  ChevronDown,
+  ChevronRight,
   ClipboardList,
   Copy,
   Download,
@@ -43,8 +45,10 @@ import {
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -89,7 +93,6 @@ import {
   type TokenUsageSummary,
 } from "@/lib/token-usage";
 import {
-  getAgentRunBudgetUsagePercent,
   summarizeTokenUsageForAgentRun,
   type AgentRunUsageSummary,
 } from "@/lib/agent-run-detail";
@@ -167,14 +170,6 @@ function formatSourceName(sourcePath: string) {
 
 function buildSourceErrorKey(sourcePath: string, errors: string[]) {
   return `${sourcePath}::${errors.join("\n")}`;
-}
-
-function formatTokenBudget(tokenBudget: number | null) {
-  if (!tokenBudget) {
-    return "No budget";
-  }
-
-  return new Intl.NumberFormat().format(tokenBudget);
 }
 
 function formatTokenCount(tokens: number) {
@@ -275,16 +270,6 @@ function buildRunDiagnosticsText(runInsight: AgentProductivityRunInsight) {
     `Ended: ${formatDateTime(runInsight.run.endedAt)}`,
     `Duration: ${formatDuration(runInsight.durationMs)}`,
     `Tokens: ${runInsight.totalTokens.toLocaleString()}`,
-    `Budget: ${
-      runInsight.run.tokenBudget
-        ? runInsight.run.tokenBudget.toLocaleString()
-        : "No budget"
-    }`,
-    `Budget Usage: ${
-      runInsight.budgetPercent === null
-        ? "No budget"
-        : formatPercent(runInsight.budgetPercent)
-    }`,
     `Estimated Cost: ${formatEstimatedCost(runInsight.estimatedCost)}`,
     `Usage Events: ${runInsight.eventCount}`,
     `Branch: ${runInsight.run.branchName ?? "No branch"}`,
@@ -341,7 +326,6 @@ function buildAgentBriefText(agent: AgentDefinition) {
     agent.handoffTargets.length
       ? `Handoff Targets: ${agent.handoffTargets.join(", ")}`
       : null,
-    agent.tokenBudget ? `Token Budget: ${agent.tokenBudget}` : null,
     `Source: ${agent.sourcePath}`,
   ]
     .filter((line): line is string => Boolean(line))
@@ -636,7 +620,7 @@ function ProductivityInsightsSection({
         <h2 className="text-sm font-semibold text-foreground">Productivity Insights</h2>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <InsightMetric
           icon={Gauge}
           label="Completion"
@@ -672,12 +656,6 @@ function ProductivityInsightsSection({
           label="Unlinked"
           value={insights.totals.unlinkedOpenCodeRunCount.toLocaleString()}
           detail={`${insights.totals.linkedOpenCodeRunCount} OpenCode links`}
-        />
-        <InsightMetric
-          icon={ShieldCheck}
-          label="Budget Risk"
-          value={insights.totals.budgetWarningCount.toLocaleString()}
-          detail={`${insights.totals.overBudgetRunCount} over budget`}
         />
       </div>
 
@@ -1040,26 +1018,10 @@ function ProductivityInsightsSection({
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold text-foreground">Budget & Linking Attention</h3>
+            <h3 className="text-sm font-semibold text-foreground">Linking Attention</h3>
           </div>
-          {insights.budgetWarnings.length > 0 || insights.telemetryGaps.length > 0 ? (
+          {insights.telemetryGaps.length > 0 ? (
             <div className="space-y-2">
-              {insights.budgetWarnings.slice(0, 4).map((runInsight) => (
-                <div
-                  key={`budget:${runInsight.run.id}`}
-                  className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="min-w-0 truncate font-semibold">{runInsight.run.taskTitle}</p>
-                    <AgentPill tone={runInsight.budgetPercent && runInsight.budgetPercent > 100 ? "red" : "amber"}>
-                      {runInsight.budgetPercent}% budget
-                    </AgentPill>
-                  </div>
-                  <p className="mt-1 text-[11px] opacity-85">
-                    {runInsight.agentName} · {formatTokenCount(runInsight.totalTokens)}
-                  </p>
-                </div>
-              ))}
               {insights.telemetryGaps.slice(0, 4).map((gap) => (
                 <div
                   key={`gap:${gap.runId ?? gap.taskTitle}:${gap.createdAt}`}
@@ -1080,7 +1042,7 @@ function ProductivityInsightsSection({
               ))}
             </div>
           ) : (
-            <EmptyInsight>No budget or linking issues detected.</EmptyInsight>
+            <EmptyInsight>No linking issues detected.</EmptyInsight>
           )}
         </div>
 
@@ -1315,15 +1277,7 @@ function AgentCard({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-        <div className="rounded-md border border-black/10 bg-secondary/35 px-3 py-2 dark:border-white/10">
-          <p className="text-[10px] font-semibold uppercase text-muted-foreground">
-            Token Budget
-          </p>
-          <p className="mt-1 font-semibold text-foreground">
-            {formatTokenBudget(agent.tokenBudget)}
-          </p>
-        </div>
+      <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-md border border-black/10 bg-secondary/35 px-3 py-2 dark:border-white/10">
           <p className="text-[10px] font-semibold uppercase text-muted-foreground">
             Model
@@ -1770,15 +1724,6 @@ function AgentRunRow({
   const workflow = run.workflowRunId
     ? workflows.find((candidate) => candidate.id === run.workflowRunId)
     : null;
-  const budgetPercent = getAgentRunBudgetUsagePercent(run, usage);
-  const budgetTone =
-    budgetPercent === null
-      ? "neutral"
-      : budgetPercent >= 100
-        ? "red"
-        : budgetPercent >= 80
-          ? "amber"
-          : "green";
 
   return (
     <div
@@ -1843,16 +1788,8 @@ function AgentRunRow({
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
         <AgentPill>{run.startedAt.slice(0, 10)}</AgentPill>
-        <AgentPill>
-          {run.tokenBudget ? `${run.tokenBudget.toLocaleString()} budget` : "No budget"}
-        </AgentPill>
         {usage.totalTokens > 0 ? (
-          <AgentPill tone={budgetTone}>
-            {formatTokenCount(usage.totalTokens)} used
-          </AgentPill>
-        ) : null}
-        {budgetPercent !== null ? (
-          <AgentPill tone={budgetTone}>{`${budgetPercent}% budget`}</AgentPill>
+          <AgentPill>{formatTokenCount(usage.totalTokens)} used</AgentPill>
         ) : null}
         {run.terminalPaneId ? <AgentPill>{run.terminalPaneId}</AgentPill> : null}
       </div>
@@ -1901,15 +1838,6 @@ function AgentRunDetail({
   const workflow = run.workflowRunId
     ? workflows.find((candidate) => candidate.id === run.workflowRunId)
     : null;
-  const budgetPercent = getAgentRunBudgetUsagePercent(run, usage);
-  const budgetTone =
-    budgetPercent === null
-      ? "neutral"
-      : budgetPercent >= 100
-        ? "red"
-        : budgetPercent >= 80
-          ? "amber"
-          : "green";
 
   return (
     <aside className="rounded-lg border border-black/10 bg-white/70 p-4 text-xs dark:border-white/10 dark:bg-white/5">
@@ -1940,21 +1868,15 @@ function AgentRunDetail({
           </p>
         </div>
         <div className="rounded-md border border-black/10 bg-secondary/35 p-2 dark:border-white/10">
-          <p className="text-[10px] uppercase text-muted-foreground">Budget</p>
+          <p className="text-[10px] uppercase text-muted-foreground">Est. Cost</p>
           <p className="mt-1 font-semibold text-foreground">
-            {budgetPercent === null ? "No budget" : `${budgetPercent}%`}
+            {formatEstimatedCost(usage.estimatedCost)}
           </p>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {run.tokenBudget ? (
-          <AgentPill tone={budgetTone}>
-            {`${usage.totalTokens.toLocaleString()} / ${run.tokenBudget.toLocaleString()}`}
-          </AgentPill>
-        ) : null}
         <AgentPill>{`${usage.eventCount} usage events`}</AgentPill>
-        <AgentPill>{formatEstimatedCost(usage.estimatedCost)}</AgentPill>
       </div>
 
       <dl className="mt-4 space-y-3">
@@ -2218,6 +2140,9 @@ export default function Agents() {
     () => new Set(dismissedSourceErrorKeys),
     [dismissedSourceErrorKeys],
   );
+  // Collapsed by default so a noisy harness (many unparseable source
+  // files) doesn't push the agent list below the fold — expand on demand.
+  const [sourceErrorsExpanded, setSourceErrorsExpanded] = useState(false);
   const [agentRuns, setAgentRuns, { error: agentRunStorageError }] =
     useAgentRunsState();
   const [
@@ -2231,7 +2156,9 @@ export default function Agents() {
     { error: taskTraceStorageError },
   ] = useTaskTraceEntriesState();
   const [query, setQuery] = useState("");
-  const [projectFilter, setProjectFilter] = useState<string>("all");
+  // Empty selection means "All Projects" — everything matches.
+  const [projectFilter, setProjectFilter] = useState<string[]>([]);
+  const projectFilterKey = [...projectFilter].sort().join(",");
   const [timeRangeRaw, setTimeRange] = usePersistentState<TimeRangeValue>(
     TIME_RANGE_STORAGE_KEY,
     DEFAULT_TIME_RANGE,
@@ -2272,6 +2199,7 @@ export default function Agents() {
 
   const agentRunsRef = useRef(agentRuns);
   const agentsRef = useRef(agents);
+  const workflowsRef = useRef(workflows);
   const workspaceProjectsRefInit = useMemo(
     () =>
       (workspaceSnapshot?.projects ?? []).map((project) => ({
@@ -2288,6 +2216,9 @@ export default function Agents() {
   useEffect(() => {
     agentsRef.current = agents;
   }, [agents]);
+  useEffect(() => {
+    workflowsRef.current = workflows;
+  }, [workflows]);
   useEffect(() => {
     workspaceProjectsRef.current = workspaceProjectsRefInit;
   }, [workspaceProjectsRefInit]);
@@ -2364,8 +2295,10 @@ export default function Agents() {
       timeFilteredAgentRuns
         .filter((run) => {
           const matchesProject =
-            projectFilter === "all" ||
-            agents.find((agent) => agent.id === run.agentId)?.projectName === projectFilter;
+            projectFilter.length === 0 ||
+            projectFilter.includes(
+              agents.find((agent) => agent.id === run.agentId)?.projectName ?? "",
+            );
           const matchesQuery =
             normalizedQuery.length === 0 ||
             [
@@ -2387,7 +2320,7 @@ export default function Agents() {
     visibleAgentRuns,
     AGENT_RUNS_PAGE_SIZE,
     {
-      resetKey: `${projectFilter}:${normalizedQuery}:${timeRange}`,
+      resetKey: `${projectFilterKey}:${normalizedQuery}:${timeRange}`,
       storageKey: "devdeck:agents:runs-pagination",
     },
   );
@@ -2549,7 +2482,8 @@ export default function Agents() {
     () =>
       agents.filter((agent) => {
         const matchesProject =
-          projectFilter === "all" || getProjectLabel(agent.projectName) === projectFilter;
+          projectFilter.length === 0 ||
+          projectFilter.includes(getProjectLabel(agent.projectName));
         const matchesQuery =
           normalizedQuery.length === 0 ||
           [
@@ -2583,7 +2517,7 @@ export default function Agents() {
     [favouriteAgentIdSet, filteredAgents],
   );
   const agentsPagination = usePagination(sortedAgents, AGENTS_PAGE_SIZE, {
-    resetKey: `${projectFilter}:${normalizedQuery}`,
+    resetKey: `${projectFilterKey}:${normalizedQuery}`,
     storageKey: "devdeck:agents:list-pagination",
   });
   const toggleFavouriteAgent = useCallback(
@@ -2613,6 +2547,7 @@ export default function Agents() {
         agents: agentsRef.current,
         existingRuns: linkedRuns,
         projects: workspaceProjectsRef.current,
+        workflows: workflowsRef.current,
       });
       const nextRuns = mergeAgentRuns(linkedRuns, synthesized);
       const linksChanged = haveAgentRunLinksChanged(currentRuns, linkedRuns);
@@ -3207,26 +3142,52 @@ export default function Agents() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {["all", ...projectOptions].map((projectName) => {
-              const selected = projectFilter === projectName;
-              return (
-                <button
-                  key={projectName}
-                  type="button"
-                  onClick={() => setProjectFilter(projectName)}
-                  className={cn(
-                    "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
-                    selected
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-black/10 bg-white text-muted-foreground hover:text-foreground dark:border-white/10 dark:bg-background",
-                  )}
-                >
-                  {projectName === "all" ? "All Projects" : projectName}
-                </button>
-              );
-            })}
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors",
+                  projectFilter.length > 0
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-black/10 bg-white text-muted-foreground hover:text-foreground dark:border-white/10 dark:bg-background",
+                )}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                {projectFilter.length === 0
+                  ? "All Projects"
+                  : projectFilter.length === 1
+                    ? projectFilter[0]
+                    : `${projectFilter.length} Projects`}
+                <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
+              <DropdownMenuItem onSelect={() => setProjectFilter([])}>
+                All Projects
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {projectOptions.map((projectName) => {
+                const selected = projectFilter.includes(projectName);
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={projectName}
+                    checked={selected}
+                    onSelect={(event) => event.preventDefault()}
+                    onCheckedChange={(checked) =>
+                      setProjectFilter((current) =>
+                        checked
+                          ? [...current, projectName]
+                          : current.filter((name) => name !== projectName),
+                      )
+                    }
+                  >
+                    {projectName}
+                  </DropdownMenuCheckboxItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </section>
 
         {error ? (
@@ -3236,42 +3197,62 @@ export default function Agents() {
         ) : null}
 
         {visibleSourceErrors.length > 0 ? (
-          <section className="space-y-2">
-            {visibleSourceErrors.map((source) => {
-              const dismissKey = buildSourceErrorKey(
-                source.sourcePath,
-                source.errors,
-              );
-              return (
-                <div
-                  key={source.sourcePath}
-                  className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200"
-                >
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold">{formatSourceName(source.sourcePath)}</p>
-                    <p className="mt-1 break-words">{source.errors.join(" ")}</p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 shrink-0 text-amber-900 hover:text-amber-950 dark:text-amber-200"
-                    onClick={() =>
-                      setDismissedSourceErrorKeys((current) =>
-                        current.includes(dismissKey)
-                          ? current
-                          : [...current, dismissKey],
-                      )
-                    }
-                    title="Dismiss warning"
-                    aria-label="Dismiss warning"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              );
-            })}
+          <section className="overflow-hidden rounded-lg border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200">
+            <button
+              type="button"
+              onClick={() => setSourceErrorsExpanded((current) => !current)}
+              className="flex w-full items-center gap-2 p-3 text-left text-xs"
+              aria-expanded={sourceErrorsExpanded}
+            >
+              {sourceErrorsExpanded ? (
+                <ChevronDown className="h-4 w-4 shrink-0" />
+              ) : (
+                <ChevronRight className="h-4 w-4 shrink-0" />
+              )}
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span className="font-semibold">
+                {visibleSourceErrors.length} harness source{" "}
+                {visibleSourceErrors.length === 1 ? "warning" : "warnings"}
+              </span>
+            </button>
+            {sourceErrorsExpanded ? (
+              <div className="space-y-2 border-t border-amber-200 p-3 pt-2 dark:border-amber-900/50">
+                {visibleSourceErrors.map((source) => {
+                  const dismissKey = buildSourceErrorKey(
+                    source.sourcePath,
+                    source.errors,
+                  );
+                  return (
+                    <div
+                      key={source.sourcePath}
+                      className="flex items-start gap-2 rounded-lg border border-amber-200 bg-white/60 p-3 text-xs dark:border-amber-900/50 dark:bg-white/5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold">{formatSourceName(source.sourcePath)}</p>
+                        <p className="mt-1 break-words">{source.errors.join(" ")}</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0 text-amber-900 hover:text-amber-950 dark:text-amber-200"
+                        onClick={() =>
+                          setDismissedSourceErrorKeys((current) =>
+                            current.includes(dismissKey)
+                              ? current
+                              : [...current, dismissKey],
+                          )
+                        }
+                        title="Dismiss warning"
+                        aria-label="Dismiss warning"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
           </section>
         ) : null}
 

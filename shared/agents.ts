@@ -19,7 +19,6 @@ export interface AgentDefinition {
   responsibilities: string[];
   sourceFormat: AgentHarnessSourceFormat;
   sourcePath: string;
-  tokenBudget: number | null;
 }
 
 export interface WorkflowStepDefinition {
@@ -60,7 +59,6 @@ export interface AgentRun {
   status: AgentRunStatus;
   taskTitle: string;
   terminalPaneId: string | null;
-  tokenBudget: number | null;
   workflowRunId: string | null;
   worktreePath: string | null;
 }

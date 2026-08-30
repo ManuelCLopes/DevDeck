@@ -117,7 +117,6 @@ export function normalizeAgentRuns(rawValue: unknown): AgentRun[] {
       status: normalizeStatus(value.status),
       taskTitle: normalizeString(value.taskTitle) ?? "Agent run",
       terminalPaneId: normalizeString(value.terminalPaneId),
-      tokenBudget: normalizeNullableNumber(value.tokenBudget),
       workflowRunId: normalizeString(value.workflowRunId),
       worktreePath: normalizeString(value.worktreePath),
     }));
@@ -274,18 +273,11 @@ export function buildAgentRunEnvironment(options: {
     environment.DEVDECK_TRACE_FORMAT = "jsonl";
     environment.DEVDECK_TRACE_PATH = options.tracePath;
   }
-  if (options.run.tokenBudget) {
-    environment.DEVDECK_AGENT_RUN_TOKEN_BUDGET = String(options.run.tokenBudget);
-  }
 
   if (options.agent) {
     environment.DEVDECK_AGENT_ID = options.agent.id;
     environment.DEVDECK_AGENT_NAME = options.agent.name;
     environment.DEVDECK_AGENT_SOURCE = options.agent.sourcePath;
-    const effectiveTokenBudget = options.run.tokenBudget ?? options.agent.tokenBudget;
-    if (effectiveTokenBudget) {
-      environment.DEVDECK_AGENT_TOKEN_BUDGET = String(effectiveTokenBudget);
-    }
   }
 
   if (options.workflow) {
@@ -304,7 +296,6 @@ export function buildAgentLaunchSummary(options: {
   taskTitle: string;
   traceAppendCommand?: string | null;
   tracePath?: string | null;
-  tokenBudget?: number | null;
   workflow: WorkflowDefinition | null;
 }) {
   return [
@@ -322,9 +313,6 @@ export function buildAgentLaunchSummary(options: {
       : null,
     options.traceAppendCommand
       ? `Trace Append Command:\n${options.traceAppendCommand}`
-      : null,
-    options.tokenBudget
-      ? `Token Budget: ${options.tokenBudget.toLocaleString()} tokens`
       : null,
     options.agent?.responsibilities.length
       ? `Responsibilities: ${options.agent.responsibilities.slice(0, 4).join("; ")}`
@@ -555,6 +543,34 @@ function isSyntheticOpenCodeRunId(id: string) {
   return id.startsWith("opencode:");
 }
 
+// OpenCode's own session data carries no notion of "workflow" — that's a
+// DevDeck-side abstraction (steps naming agent IDs) that only gets recorded
+// on a run when it's launched through DevDeck's own dialog. A session
+// DevDeck merely discovers (the user ran `opencode` directly) has no
+// ground truth to read the workflow from, so this is a best-effort guess:
+// if the matched agent is a step in exactly one workflow scoped to the
+// resolved project (or a workspace-level one), assume that's the workflow
+// in play. An agent shared by several workflows, or matched to none,
+// leaves workflowRunId unset rather than guess wrong.
+function inferWorkflowIdForOpenCodeRecord(
+  agent: AgentDefinition | null,
+  projectId: string | null,
+  workflows: WorkflowDefinition[],
+) {
+  if (!agent) {
+    return null;
+  }
+
+  const scopedWorkflows = workflows.filter(
+    (workflow) => workflow.projectId === projectId || workflow.projectId === null,
+  );
+  const candidates = scopedWorkflows.filter((workflow) =>
+    workflow.steps.some((step) => step.agentId === agent.id),
+  );
+
+  return candidates.length === 1 ? candidates[0].id : null;
+}
+
 export function synthesizeAgentRunsFromOpenCodeRecords(
   records: OpenCodeUsageRecord[],
   options: {
@@ -562,10 +578,12 @@ export function synthesizeAgentRunsFromOpenCodeRecords(
     existingRuns: AgentRun[];
     now?: Date | string;
     projects?: Array<{ id: string; localPath: string | null }>;
+    workflows?: WorkflowDefinition[];
   },
 ) {
   const nowMs = options.now ? new Date(options.now).getTime() : Date.now();
   const projects = options.projects ?? [];
+  const workflows = options.workflows ?? [];
   const existingBySession = new Map<string, AgentRun>();
   const existingById = new Map<string, AgentRun>();
   for (const run of options.existingRuns) {
@@ -623,8 +641,9 @@ export function synthesizeAgentRunsFromOpenCodeRecords(
         existingRun?.taskTitle ??
         "OpenCode session",
       terminalPaneId: existingRun?.terminalPaneId ?? null,
-      tokenBudget: matchedAgent?.tokenBudget ?? existingRun?.tokenBudget ?? null,
-      workflowRunId: existingRun?.workflowRunId ?? null,
+      workflowRunId:
+        existingRun?.workflowRunId ??
+        inferWorkflowIdForOpenCodeRecord(matchedAgent, projectId, workflows),
       worktreePath:
         normalizeString(record.directory) ?? existingRun?.worktreePath ?? null,
     });

@@ -4,7 +4,6 @@ import {
   buildAgentLaunchTaskTemplates,
   buildRecommendedOpenCodeLaunchDefaults,
   buildRecommendedOpenCodeLaunchPath,
-  parseLaunchTokenBudget,
   recommendAgentForLaunch,
 } from "./agent-launch";
 import type { AgentDefinition, WorkflowDefinition } from "@shared/agents";
@@ -24,7 +23,6 @@ const builder = {
   responsibilities: ["Implement scoped changes", "Run focused verification"],
   sourceFormat: "json",
   sourcePath: "/tmp/repo/agents.json",
-  tokenBudget: 120000,
 } satisfies AgentDefinition;
 
 const reviewer = {
@@ -33,7 +31,6 @@ const reviewer = {
   id: "reviewer",
   name: "Reviewer",
   responsibilities: ["Review diffs", "Identify regressions"],
-  tokenBudget: 60000,
 } satisfies AgentDefinition;
 
 const workflow = {
@@ -131,10 +128,4 @@ test("buildRecommendedOpenCodeLaunchPath keeps unrelated harness entries manual"
   assert.equal(url.searchParams.get("agent"), null);
   assert.equal(url.searchParams.get("workflow"), null);
   assert.equal(url.searchParams.get("task"), "OpenCode workspace for Repo");
-});
-
-test("parseLaunchTokenBudget accepts commas and rejects invalid input", () => {
-  assert.equal(parseLaunchTokenBudget("120,000"), 120000);
-  assert.equal(parseLaunchTokenBudget("0"), null);
-  assert.equal(parseLaunchTokenBudget("bad"), null);
 });
