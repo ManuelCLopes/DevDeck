@@ -114,15 +114,6 @@ export function buildAgentHarnessQualityReport(input: {
         sourcePath: agent.sourcePath,
       });
     }
-    if (!agent.tokenBudget) {
-      addIssue({
-        category: "agent",
-        entityLabel: agent.name,
-        message: "No default token budget is defined.",
-        severity: "info",
-        sourcePath: agent.sourcePath,
-      });
-    }
   }
 
   for (const duplicateAgents of Array.from(agentsById.values())) {

@@ -96,7 +96,6 @@ import { getDesktopApi } from "@/lib/desktop";
 import {
   buildAgentLaunchTaskTemplates,
   buildRecommendedOpenCodeLaunchDefaults,
-  parseLaunchTokenBudget,
   recommendAgentForLaunch,
 } from "@/lib/agent-launch";
 import {
@@ -259,7 +258,6 @@ export default function Terminals() {
   const [selectedAgentId, setSelectedAgentId] = useState("none");
   const [selectedWorkflowId, setSelectedWorkflowId] = useState("none");
   const [launchTaskTitle, setLaunchTaskTitle] = useState("");
-  const [launchTokenBudget, setLaunchTokenBudget] = useState("");
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
@@ -371,8 +369,6 @@ export default function Terminals() {
       selectedWorkflow,
     ],
   );
-  const resolvedLaunchTokenBudget =
-    parseLaunchTokenBudget(launchTokenBudget) ?? selectedAgent?.tokenBudget ?? null;
   const selectedAgentIsRecommended = Boolean(
     selectedAgent && recommendedAgent.agent?.id === selectedAgent.id,
   );
@@ -552,7 +548,6 @@ export default function Terminals() {
     setSelectedAgentId(requestedAgentId ?? "none");
     setSelectedWorkflowId(requestedWorkflowId ?? "none");
     setLaunchTaskTitle(requestedTaskTitle ?? "");
-    setLaunchTokenBudget("");
     setAppliedLaunchRequestKey(launchRequestKey);
     setAppliedAutomaticLaunchDefaultsKey(null);
   }, [
@@ -632,16 +627,6 @@ export default function Terminals() {
     selectedWorkflowId,
   ]);
 
-  useEffect(() => {
-    if (!selectedRepoForLaunch) {
-      return;
-    }
-
-    setLaunchTokenBudget(
-      selectedAgent?.tokenBudget ? String(selectedAgent.tokenBudget) : "",
-    );
-  }, [selectedAgent?.id, selectedAgent?.tokenBudget, selectedRepoForLaunch]);
-
   const clearSelectedLaunchRepository = useCallback(() => {
     setSelectedRepoForLaunch(null);
     setNewBranchName("");
@@ -649,7 +634,6 @@ export default function Terminals() {
     setSelectedAgentId("none");
     setSelectedWorkflowId("none");
     setLaunchTaskTitle("");
-    setLaunchTokenBudget("");
     setAppliedLaunchRequestKey(null);
     setAppliedAutomaticLaunchDefaultsKey(null);
 
@@ -685,9 +669,7 @@ export default function Terminals() {
     const taskTitle =
       launchTaskTitle.trim() ||
       `${agentForRun?.name ?? "OpenCode"} on ${branchToUse}`;
-    const tokenBudgetForRun =
-      parseLaunchTokenBudget(launchTokenBudget) ?? agentForRun?.tokenBudget ?? null;
-    
+
     setIsCreatingSession(true);
     try {
       toast({
@@ -719,7 +701,6 @@ export default function Terminals() {
         status: "active",
         taskTitle,
         terminalPaneId: basePane.id,
-        tokenBudget: tokenBudgetForRun,
         workflowRunId: workflowForRun?.id ?? null,
         worktreePath: result.localPath,
       };
@@ -736,7 +717,6 @@ export default function Terminals() {
         taskTitle,
         traceAppendCommand,
         tracePath,
-        tokenBudget: tokenBudgetForRun,
         workflow: workflowForRun,
       });
 
@@ -1599,7 +1579,7 @@ export default function Terminals() {
                           ) : null}
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4 text-xs md:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-4 text-xs md:grid-cols-2">
                           <div className="space-y-2">
                             <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
                               <Workflow className="h-3.5 w-3.5" />
@@ -1645,21 +1625,6 @@ export default function Terminals() {
                               </SelectContent>
                             </Select>
                           </div>
-
-                          <div className="space-y-2">
-                            <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
-                              <Sparkles className="h-3.5 w-3.5" />
-                              Token Budget
-                            </Label>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              value={launchTokenBudget}
-                              onChange={(event) => setLaunchTokenBudget(event.target.value)}
-                              placeholder="Optional budget"
-                              className="h-9 w-full rounded-md border border-black/10 bg-white px-3 text-[12px] outline-none transition-colors focus:border-primary/50 dark:border-white/10 dark:bg-background"
-                            />
-                          </div>
                         </div>
 
                         {selectedAgent ? (
@@ -1672,11 +1637,6 @@ export default function Terminals() {
                                     Recommended
                                   </span>
                                 ) : null}
-                              </span>
-                              <span className="font-mono">
-                                {resolvedLaunchTokenBudget
-                                  ? `${resolvedLaunchTokenBudget.toLocaleString()} tokens`
-                                  : "No token budget"}
                               </span>
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-2">

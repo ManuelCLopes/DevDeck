@@ -29,7 +29,6 @@ const agent = {
   responsibilities: ["Implement changes", "Run tests"],
   sourceFormat: "json",
   sourcePath: "/tmp/repo/agents.json",
-  tokenBudget: 120000,
 } satisfies AgentDefinition;
 
 const workflow = {
@@ -54,17 +53,13 @@ const run = {
   status: "active",
   taskTitle: "Improve launch",
   terminalPaneId: "pane-1",
-  tokenBudget: 120000,
   workflowRunId: "feature",
   worktreePath: "/tmp/repo-feature",
 } satisfies AgentRun;
 
 test("normalizeAgentRuns keeps valid persisted run details", () => {
   const runs = normalizeAgentRuns([
-    {
-      ...run,
-      tokenBudget: 90000,
-    },
+    run,
     {
       id: "",
       taskTitle: "",
@@ -73,7 +68,6 @@ test("normalizeAgentRuns keeps valid persisted run details", () => {
 
   assert.equal(runs.length, 2);
   assert.equal(runs[0]?.agentId, "builder");
-  assert.equal(runs[0]?.tokenBudget, 90000);
   assert.equal(runs[1]?.taskTitle, "Agent run");
 });
 
@@ -147,7 +141,7 @@ test("linkAgentRunsToOpenCodeUsageRecords persists matched OpenCode session ids"
 test("buildAgentRunEnvironment exports agent and workflow identifiers", () => {
   const environment = buildAgentRunEnvironment({
     agent,
-    run: { ...run, tokenBudget: 90000 },
+    run,
     tracePath: "/tmp/repo-feature/.devdeck/traces/run-1.jsonl",
     workflow,
   });
@@ -159,8 +153,6 @@ test("buildAgentRunEnvironment exports agent and workflow identifiers", () => {
   );
   assert.equal(environment.DEVDECK_TRACE_FORMAT, "jsonl");
   assert.equal(environment.DEVDECK_AGENT_ID, "builder");
-  assert.equal(environment.DEVDECK_AGENT_RUN_TOKEN_BUDGET, "90000");
-  assert.equal(environment.DEVDECK_AGENT_TOKEN_BUDGET, "90000");
   assert.equal(environment.DEVDECK_WORKFLOW_ID, "feature");
 });
 
@@ -176,7 +168,6 @@ test("buildAgentLaunchSummary includes responsibilities and boundaries", () => {
       "cat <<'DEVDECK_TRACE_JSONL' >> \"$TRACE_PATH\"",
     ].join("\n"),
     tracePath: "/tmp/repo-feature/.devdeck/traces/run-1.jsonl",
-    tokenBudget: 90000,
     workflow,
   });
 
@@ -186,7 +177,6 @@ test("buildAgentLaunchSummary includes responsibilities and boundaries", () => {
   assert.match(summary, /Trace File: append JSONL task trace entries/);
   assert.match(summary, /Trace Append Command:/);
   assert.match(summary, /DEVDECK_TRACE_JSONL/);
-  assert.match(summary, /Token Budget: 90,000 tokens/);
   assert.match(summary, /Responsibilities: Implement changes; Run tests/);
   assert.match(summary, /Boundaries: Do not merge without review/);
 });

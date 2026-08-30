@@ -26,7 +26,6 @@ test("parseJsonAgentHarness normalizes agents and workflows", () => {
           id: "builder",
           responsibilities: ["Implement scoped changes"],
           skills: ["typescript"],
-          tokenBudget: "120000",
           tools: ["shell"],
         },
       ],
@@ -54,7 +53,6 @@ test("parseJsonAgentHarness normalizes agents and workflows", () => {
   assert.deepEqual(result.agents[0]?.responsibilities, [
     "Implement scoped changes",
   ]);
-  assert.equal(result.agents[0]?.tokenBudget, 120000);
   assert.equal(result.workflows[0]?.steps[0]?.agentId, "builder");
   assert.deepEqual(result.workflows[0]?.steps[0]?.verificationCommandIds, [
     "npm test",
@@ -78,8 +76,6 @@ test("parseMarkdownAgentHarness extracts responsibility sections", () => {
       "",
       "Tools:",
       "- shell",
-      "",
-      "Token Budget: 90000",
     ].join("\n"),
     {
       ...baseContext,
@@ -95,7 +91,6 @@ test("parseMarkdownAgentHarness extracts responsibility sections", () => {
     "Run the project verification recipe",
   ]);
   assert.deepEqual(result.agents[0]?.boundaries, ["Do not merge without review"]);
-  assert.equal(result.agents[0]?.tokenBudget, 90000);
 });
 
 test("discoverAgentHarness scans configured project paths", async () => {
@@ -144,8 +139,6 @@ test("discoverAgentHarness picks up opencode agent folder markdown files", async
       "",
       "Responsibilities:",
       "- Implement scoped changes",
-      "",
-      "Token Budget: 80000",
     ].join("\n"),
     "utf8",
   );
@@ -157,8 +150,6 @@ test("discoverAgentHarness picks up opencode agent folder markdown files", async
       "",
       "Responsibilities:",
       "- Inspect diffs",
-      "",
-      "Token Budget: 60000",
     ].join("\n"),
     "utf8",
   );
@@ -170,7 +161,6 @@ test("discoverAgentHarness picks up opencode agent folder markdown files", async
           id: "planner",
           name: "Planner",
           responsibilities: ["Break down the task"],
-          tokenBudget: 40000,
         },
       ],
     }),
@@ -326,7 +316,6 @@ test("discoverAgentHarness reports invalid workflow references", async () => {
           id: "builder",
           name: "Builder",
           responsibilities: ["Implement scoped changes"],
-          tokenBudget: 120000,
         },
       ],
       workflows: [

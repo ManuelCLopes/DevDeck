@@ -120,10 +120,6 @@ function scoreAgentForLaunch(
     ...agent.defaultTools,
   ]) * 12;
 
-  if (agent.tokenBudget) {
-    score += 3;
-  }
-
   return score;
 }
 
@@ -274,18 +270,4 @@ export function buildRecommendedOpenCodeLaunchDefaults(
     taskTitle: taskTitle ?? `OpenCode workspace for ${options.project.name}`,
     workflow,
   };
-}
-
-export function parseLaunchTokenBudget(value: string) {
-  const normalized = value.trim();
-  if (!normalized) {
-    return null;
-  }
-
-  const parsed = Number(normalized.replace(/,/g, ""));
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
-  }
-
-  return Math.floor(parsed);
 }

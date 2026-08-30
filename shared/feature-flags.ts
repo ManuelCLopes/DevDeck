@@ -30,16 +30,17 @@ export interface BacklogFeatureFlags {
 }
 
 /**
- * All flags default to off. Phase 1 only introduces the platform shell, so
- * `backlogIntelligenceEnabled` may be turned on to reveal the empty Backlog
- * route shell without turning on any capability that talks to Jira, an
- * LLM provider, or the network.
+ * Phases 1-4 (platform shell, Jira sync, repository evidence, rules-only
+ * assessment) are fully implemented, so their flags default to on. Phase
+ * 5+ flags (model-assisted assessment, background sync, Jira write-back,
+ * semantic index) stay off by default because nothing implements them yet
+ * — turning one on today would just be a dead switch.
  */
 export const DEFAULT_BACKLOG_FEATURE_FLAGS: BacklogFeatureFlags = {
-  backlogIntelligenceEnabled: false,
-  jiraSyncEnabled: false,
-  repositoryIndexEnabled: false,
-  rulesAssessmentEnabled: false,
+  backlogIntelligenceEnabled: true,
+  jiraSyncEnabled: true,
+  repositoryIndexEnabled: true,
+  rulesAssessmentEnabled: true,
   modelAssessmentEnabled: false,
   backgroundSyncEnabled: false,
   jiraWriteBackEnabled: false,

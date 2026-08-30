@@ -39,7 +39,6 @@ const agentRun = {
   status: "active",
   taskTitle: "Track usage",
   terminalPaneId: "pane-1",
-  tokenBudget: 100000,
   workflowRunId: "workflow-1",
   worktreePath: "/tmp/repo-worktree",
 } satisfies AgentRun;
@@ -231,7 +230,6 @@ test("buildTokenUsageEventsFromOpenCodeRecords falls back to agents when no run 
         responsibilities: [],
         sourceFormat: "json",
         sourcePath: "/tmp/repo/agents.json",
-        tokenBudget: null,
       },
     ],
   );

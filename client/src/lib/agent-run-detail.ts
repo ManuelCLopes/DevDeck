@@ -66,14 +66,3 @@ export function summarizeTokenUsageForAgentRun(
   summary.modelLabels = Array.from(modelLabels).sort();
   return summary;
 }
-
-export function getAgentRunBudgetUsagePercent(
-  run: AgentRun,
-  usage: AgentRunUsageSummary,
-) {
-  if (!run.tokenBudget || run.tokenBudget <= 0) {
-    return null;
-  }
-
-  return Math.round((usage.totalTokens / run.tokenBudget) * 100);
-}
