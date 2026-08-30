@@ -61,7 +61,6 @@ function writeAgentHarness(repositoryPath: string) {
               "Run focused verification",
             ],
             skills: ["typescript"],
-            tokenBudget: 120000,
             tools: ["shell"],
           },
         ],
@@ -334,7 +333,6 @@ test("agent registry imports harness definitions and tracking surfaces", async (
       page.getByRole("heading", { name: "Builder Agent", exact: true }),
     ).toBeVisible();
     await expect(page.getByText("Implement scoped changes")).toBeVisible();
-    await expect(page.getByText("120,000")).toBeVisible();
     await expect(page.getByText("Feature Build", { exact: true }).first()).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Agent Runs", exact: true }),
@@ -398,7 +396,6 @@ test("agent productivity insights summarize persisted telemetry", async () => {
           status: "completed",
           taskTitle: "Build insight panel",
           terminalPaneId: "pane-insights",
-          tokenBudget: 1000,
           workflowRunId: "feature",
           worktreePath,
         },
@@ -445,7 +442,7 @@ test("agent productivity insights summarize persisted telemetry", async () => {
     await expect(insights).toContainText("Usage Coverage");
     await expect(insights).toContainText("Feature Build");
     await expect(insights).toContainText("openai / gpt-5-codex");
-    await expect(insights).toContainText("Budget & Linking Attention");
+    await expect(insights).toContainText("Linking Attention");
     await expect(insights).toContainText("Productivity Trends");
     await expect(insights).toContainText("Agent Throughput Trend");
     await expect(insights).toContainText("Rework Rate Trend");
@@ -546,7 +543,6 @@ test("terminal launcher exposes agent-aware OpenCode setup before launch", async
         .locator("main")
         .getByText(/Implement scoped changes \| Run focused verification/),
     ).toBeVisible();
-    await expect(page.getByText("Token Budget", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Launch OpenCode Workspace", exact: true }),
     ).toBeVisible();

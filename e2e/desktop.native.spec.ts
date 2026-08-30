@@ -105,7 +105,6 @@ test("@native embedded terminal support can report availability", async () => {
           status: "active",
           taskTitle: "Native telemetry bridge",
           terminalPaneId: "pane-native",
-          tokenBudget: 120000,
           workflowRunId: null,
           worktreePath: "/tmp/native-telemetry",
         },
