@@ -3162,7 +3162,7 @@ export default function Agents() {
                 <ChevronDown className="h-3.5 w-3.5 opacity-70" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
+            <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => setProjectFilter([])}>
                 All Projects
               </DropdownMenuItem>

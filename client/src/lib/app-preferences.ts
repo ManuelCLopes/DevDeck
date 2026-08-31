@@ -99,7 +99,11 @@ const APP_THEME_MODES = new Set<AppThemeMode>(["light", "dark", "system"]);
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   alertFailingBuilds: true,
   autoRefreshEnabled: true,
-  autoRefreshIntervalSeconds: 30,
+  // 1 hour — was 30s. GitHub's API rate limit is shared across every
+  // tracked repo's PR/CI/review lookups in one refresh; polling every
+  // 30s made it easy to burn through that budget over a session. Still
+  // user-adjustable in Settings for anyone who wants tighter feedback.
+  autoRefreshIntervalSeconds: 3600,
   highlightStalePrs: true,
   keepRunningInBackground: true,
   launchAtLogin: false,
@@ -166,6 +170,57 @@ export function applyAppThemePreferences(
   root.classList.toggle("dark", effectiveTheme === "dark");
 }
 
+const AUTO_REFRESH_INTERVAL_MIGRATION_KEY =
+  "devdeck_app_preferences_autorefresh_interval_migrated_v1";
+const LEGACY_AUTO_REFRESH_INTERVAL_SECONDS = 30;
+
+/**
+ * One-time migration for installations that predate raising
+ * autoRefreshIntervalSeconds off its old 30s default (see
+ * DEFAULT_APP_PREFERENCES above). usePersistentState's persistence
+ * effect eagerly writes whatever value a session starts with back to
+ * storage, so every installation that has ever opened DevDeck already
+ * has `autoRefreshIntervalSeconds: 30` recorded explicitly — not merely
+ * inherited from the default — which meant raising the default alone
+ * did nothing for any existing user, exactly the audience the
+ * GitHub-rate-limit fix was for.
+ *
+ * Both read paths below (getAppPreferences and useAppPreferences's
+ * deserialize) call this, and more than one usePersistentState(
+ * APP_PREFERENCES_KEY) instance can mount in the same render (AppLayout,
+ * Settings, Terminals, App all call useAppPreferences independently).
+ * So this persists the corrected value itself, synchronously, guarded
+ * by AUTO_REFRESH_INTERVAL_MIGRATION_KEY, rather than returning a
+ * corrected in-memory object and trusting the caller's own save effect
+ * to eventually persist it — leaving that to the caller would let
+ * whichever instance's effect fires last win, and independent instances
+ * would disagree in memory until every one of them remounts.
+ */
+function migrateLegacyAutoRefreshInterval(
+  rawPreferences: Partial<AppPreferences>,
+): Partial<AppPreferences> {
+  if (typeof window === "undefined") {
+    return rawPreferences;
+  }
+
+  if (window.localStorage.getItem(AUTO_REFRESH_INTERVAL_MIGRATION_KEY)) {
+    return rawPreferences;
+  }
+  window.localStorage.setItem(AUTO_REFRESH_INTERVAL_MIGRATION_KEY, "1");
+
+  if (rawPreferences.autoRefreshIntervalSeconds !== LEGACY_AUTO_REFRESH_INTERVAL_SECONDS) {
+    return rawPreferences;
+  }
+
+  const migrated: Partial<AppPreferences> = {
+    ...rawPreferences,
+    autoRefreshIntervalSeconds: DEFAULT_APP_PREFERENCES.autoRefreshIntervalSeconds,
+  };
+  window.localStorage.setItem(APP_PREFERENCES_KEY, JSON.stringify(migrated));
+
+  return migrated;
+}
+
 export function getAppPreferences() {
   if (typeof window === "undefined") {
     return DEFAULT_APP_PREFERENCES;
@@ -177,7 +232,9 @@ export function getAppPreferences() {
   }
 
   try {
-    return normalizeAppPreferences(JSON.parse(rawPreferences) as Partial<AppPreferences>);
+    return normalizeAppPreferences(
+      migrateLegacyAutoRefreshInterval(JSON.parse(rawPreferences) as Partial<AppPreferences>),
+    );
   } catch {
     return DEFAULT_APP_PREFERENCES;
   }
@@ -189,7 +246,9 @@ export function useAppPreferences() {
     DEFAULT_APP_PREFERENCES,
     {
       deserialize: (value) =>
-        normalizeAppPreferences(JSON.parse(value) as Partial<AppPreferences>),
+        normalizeAppPreferences(
+          migrateLegacyAutoRefreshInterval(JSON.parse(value) as Partial<AppPreferences>),
+        ),
     },
   );
   const normalizedPreferences = useMemo(
