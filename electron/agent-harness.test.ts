@@ -371,6 +371,58 @@ test("parseMarkdownAgentHarness turns opencode command files into workflows", ()
   assert.equal(result.workflows[0]?.steps[0]?.agentId, "build");
 });
 
+test("discoverAgentHarness resolves command agent references to agent ids", async () => {
+  const root = mkdtempSync(join(tmpdir(), "devdeck-command-agent-"));
+  const repoPath = join(root, "repo");
+  const agentDir = join(repoPath, ".opencode", "agent");
+  const commandDir = join(repoPath, ".opencode", "command");
+  mkdirSync(agentDir, { recursive: true });
+  mkdirSync(commandDir, { recursive: true });
+
+  writeFileSync(
+    join(agentDir, "build.md"),
+    ["---", "description: Implements scoped changes.", "---", "You build."].join("\n"),
+    "utf8",
+  );
+  writeFileSync(
+    join(commandDir, "debug.md"),
+    [
+      "---",
+      "description: Troubleshooting workflow.",
+      "agent: build",
+      "---",
+      "Walk the debugging phases.",
+    ].join("\n"),
+    "utf8",
+  );
+
+  try {
+    const result = await withEmptyGlobalConfig(() =>
+      discoverAgentHarness({
+        projects: [{ id: "repo", localPath: repoPath, name: "Repo" }],
+      }),
+    );
+
+    const buildAgent = result.agents.find((agent) => agent.name === "build");
+    assert.ok(buildAgent, "expected the build agent to be discovered");
+
+    const debugWorkflow = result.workflows.find(
+      (workflow) => workflow.name === "/debug",
+    );
+    assert.ok(debugWorkflow, "expected the debug command to become a workflow");
+
+    // The command says `agent: build`; the agent file is identified by its
+    // path. The step has to point at the id the agent actually got.
+    assert.equal(debugWorkflow?.steps[0]?.agentId, buildAgent?.id);
+    assert.doesNotMatch(
+      result.sources.flatMap((source) => source.errors).join("\n"),
+      /unknown agent/,
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
 test("discoverAgentHarness scans the global opencode config directory", async () => {
   const home = mkdtempSync(join(tmpdir(), "devdeck-global-home-"));
   const xdg = join(home, ".config");

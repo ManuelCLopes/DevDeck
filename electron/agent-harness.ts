@@ -1007,6 +1007,79 @@ async function listExistingHarnessFiles(projectPath: string) {
   return uniqueStrings(files);
 }
 
+/**
+ * Agents referenced by name, resolved to the id the agent was actually given.
+ *
+ * An OpenCode command says `agent: build`, and the matching definition lives
+ * in `.opencode/agent/build.md` — which DevDeck ids by its path, so the raw
+ * reference matches nothing. Left alone, validation reports a phantom
+ * "unknown agent", the launcher cannot preselect the command's agent, and the
+ * run is tracked without one. Agents defined in JSON already carry their
+ * command-facing key as their id, so those references resolve untouched.
+ *
+ * Lookup prefers an agent from the same project, then a global one, so a
+ * command in one repository never binds to a similarly named agent in
+ * another.
+ */
+function buildAgentReferenceResolver(agents: AgentDefinition[]) {
+  const knownIds = new Set(agents.map((agent) => agent.id));
+  const byProject = new Map<string, string>();
+
+  const addAlias = (projectKey: string, alias: string | null, agentId: string) => {
+    if (!alias) {
+      return;
+    }
+
+    const key = `${projectKey}\u0000${alias.trim().toLowerCase()}`;
+    if (!byProject.has(key)) {
+      byProject.set(key, agentId);
+    }
+  };
+
+  for (const agent of agents) {
+    const projectKey = agent.projectId ?? "";
+    const fileStem = path.basename(agent.sourcePath).replace(/\.[^.]+$/, "");
+
+    for (const alias of [agent.name, slugify(agent.name), fileStem]) {
+      addAlias(projectKey, alias, agent.id);
+    }
+  }
+
+  return (reference: string | null, projectId: string | null) => {
+    if (!reference || knownIds.has(reference)) {
+      return reference;
+    }
+
+    const normalized = reference.trim().toLowerCase();
+    return (
+      byProject.get(`${projectId ?? ""}\u0000${normalized}`) ??
+      byProject.get(`\u0000${normalized}`) ??
+      reference
+    );
+  };
+}
+
+function resolveAgentReferences(
+  agents: AgentDefinition[],
+  workflows: WorkflowDefinition[],
+) {
+  const resolve = buildAgentReferenceResolver(agents);
+
+  for (const workflow of workflows) {
+    for (const step of workflow.steps) {
+      step.agentId = resolve(step.agentId, workflow.projectId);
+    }
+  }
+
+  for (const agent of agents) {
+    agent.handoffTargets = uniqueStrings(
+      agent.handoffTargets.map(
+        (target) => resolve(target, agent.projectId) ?? target,
+      ),
+    );
+  }
+}
+
 function appendSourceValidationErrors(
   sources: AgentHarnessSource[],
   agents: AgentDefinition[],
@@ -1201,6 +1274,10 @@ export async function discoverAgentHarness(
       }
     }
   }
+
+  // Names become ids only once every source has been read, so this has to run
+  // after the scan and before validation reports on the references.
+  resolveAgentReferences(agents, workflows);
 
   return {
     agents,
