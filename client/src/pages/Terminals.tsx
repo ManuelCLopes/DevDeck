@@ -1253,9 +1253,9 @@ export default function Terminals() {
                       {/* Sessions Inventory */}
                       <div className="space-y-2">
                         <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
-                          Active Sessions
+                          OpenCode Sessions
                         </span>
-                        
+
                         {/* Shared Terminal Workspace Link */}
                         <button
                           onClick={() => handleSessionChange(GLOBAL_TERMINAL_WORKSPACE_SCOPE)}
@@ -1272,10 +1272,11 @@ export default function Terminals() {
                           </div>
                         </button>
 
-                        {/* Active Sessions List */}
+                        {/* Sessions OpenCode knows about; a green dot marks the
+                            ones running in a pane on this page. */}
                         {activeSessions.length === 0 ? (
                           <div className="py-6 text-center text-muted-foreground text-[11px] bg-secondary/20 dark:bg-secondary/5 rounded-lg border border-dashed border-border/40">
-                            No active OpenCode sessions. Use the launcher grid to start one.
+                            No OpenCode sessions yet. Start one with “New OpenCode workspace”.
                           </div>
                         ) : (
                           <div className="space-y-1.5">
