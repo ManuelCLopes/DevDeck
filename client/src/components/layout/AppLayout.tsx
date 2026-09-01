@@ -90,9 +90,16 @@ function getProjectColors(name: string) {
 
 interface AppLayoutProps {
   children: ReactNode;
+  /**
+   * Reading pages are capped at a comfortable measure and centred. Pages that
+   * are a workspace rather than a document — the terminals grid above all —
+   * pass `fullBleed` so they get the whole window instead of a 1200px column
+   * floating in the middle of a wide display.
+   */
+  fullBleed?: boolean;
 }
 
-export default function AppLayout({ children }: AppLayoutProps) {
+export default function AppLayout({ children, fullBleed = false }: AppLayoutProps) {
   const [location, setLocation] = useLocation();
   const search = useSearch();
   const [isAddProjectsOpen, setIsAddProjectsOpen] = useState(false);
@@ -665,8 +672,18 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </header>
 
           {/* Scrollable Content */}
-          <div className="flex-1 overflow-x-hidden overflow-y-auto bg-background p-4 sm:p-6 lg:p-8 no-drag">
-            <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1200px] flex-col">
+          <div
+            className={`flex-1 overflow-x-hidden bg-background no-drag ${
+              fullBleed
+                ? "overflow-y-hidden p-3"
+                : "overflow-y-auto p-4 sm:p-6 lg:p-8"
+            }`}
+          >
+            <div
+              className={`flex h-full min-h-0 w-full min-w-0 flex-col ${
+                fullBleed ? "" : "mx-auto max-w-[1200px]"
+              }`}
+            >
               {children}
             </div>
           </div>
