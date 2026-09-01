@@ -529,22 +529,29 @@ test("terminal launcher exposes agent-aware OpenCode setup before launch", async
       page.locator("main").getByRole("heading", { name: "alpha", exact: true }),
     ).toBeVisible();
 
-    await expect(page.getByText("Task Title", { exact: true })).toBeVisible();
-    await expect(page.getByText("Workflow", { exact: true })).toBeVisible();
-    await expect(page.getByText("Agent", { exact: true })).toBeVisible();
-    await expect(page.getByText("Feature Build", { exact: true })).toBeVisible();
-    await expect(page.locator('input[value="handoff/feature-builder"]')).toBeVisible();
+    // The task is the only thing the launcher asks for up front; the branch,
+    // workflow and agent it resolved are summarised and editable behind the
+    // "Change branch, agent or workflow" disclosure.
     await expect(page.locator('input[value="Continue implementation"]')).toBeVisible();
+    await expect(page.getByText("Feature Build", { exact: true })).toBeVisible();
     await expect(
       page.locator("main").getByText("Builder Agent", { exact: true }).first(),
     ).toBeVisible();
     await expect(
+      page.getByRole("button", { name: "Launch OpenCode Workspace", exact: true }),
+    ).toBeVisible();
+
+    await page
+      .getByRole("button", { name: "Change branch, agent or workflow" })
+      .click();
+
+    await expect(page.getByText("Workflow", { exact: true })).toBeVisible();
+    await expect(page.getByText("Agent", { exact: true })).toBeVisible();
+    await expect(page.locator('input[value="handoff/feature-builder"]')).toBeVisible();
+    await expect(
       page
         .locator("main")
         .getByText(/Implement scoped changes \| Run focused verification/),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Launch OpenCode Workspace", exact: true }),
     ).toBeVisible();
   } finally {
     await electronApp.close();

@@ -10,6 +10,7 @@ import {
   PlusSquare,
   TerminalSquare,
   X,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Edit2,
@@ -143,6 +144,7 @@ const DEFAULT_QUICK_SHELLS: Array<{
 const DEVDECK_OPENCODE_SESSION_ID_ENV = "DEVDECK_OPENCODE_SESSION_ID";
 const DEVDECK_AGENT_LAUNCH_SUMMARY_ENV = "DEVDECK_AGENT_LAUNCH_SUMMARY";
 const ARCHIVED_OPENCODE_SESSIONS_STORAGE_KEY = "devdeck:archived-opencode-session-ids";
+const NO_PANES: TerminalPaneConfig[] = [];
 
 function buildInitialPanes(options: {
   defaultCwd?: string;
@@ -258,6 +260,7 @@ export default function Terminals() {
   const [selectedAgentId, setSelectedAgentId] = useState("none");
   const [selectedWorkflowId, setSelectedWorkflowId] = useState("none");
   const [launchTaskTitle, setLaunchTaskTitle] = useState("");
+  const [showLaunchAdvanced, setShowLaunchAdvanced] = useState(false);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
@@ -405,7 +408,7 @@ export default function Terminals() {
   );
   const [panes, setPanes] = usePersistentState<TerminalPaneConfig[]>(
     buildTerminalPanesStorageKey(storageScopeKey),
-    initialPanesPlaceholder(),
+    NO_PANES,
     {
       deserialize: (value) => normalizeTerminalPanes(JSON.parse(value)),
     },
@@ -634,13 +637,16 @@ export default function Terminals() {
     setSelectedAgentId("none");
     setSelectedWorkflowId("none");
     setLaunchTaskTitle("");
+    setShowLaunchAdvanced(false);
     setAppliedLaunchRequestKey(null);
     setAppliedAutomaticLaunchDefaultsKey(null);
 
-    if (requestedLaunch === "opencode" && requestedProjectId) {
+    // `?launch=opencode` is what keeps the launcher on screen, so it has to go
+    // whether or not a specific project was requested with it.
+    if (requestedLaunch === "opencode") {
       navigateInApp("/terminals", setLocation);
     }
-  }, [requestedLaunch, requestedProjectId, setLocation]);
+  }, [requestedLaunch, setLocation]);
 
   const handleWorkflowSelection = (workflowId: string) => {
     setSelectedWorkflowId(workflowId);
@@ -818,59 +824,74 @@ export default function Terminals() {
       ),
     [codingToolAvailability.opencode.available, ptyAvailability?.availableCommands],
   );
-  const initialPanes = useMemo(
-    () =>
-      isRepositoryLaunchRequest
-        ? []
-        : buildInitialPanes({
-            defaultCwd,
-            opencodeSessionId: selectedSession?.id,
-            preferredTool,
-            selectedSession,
-            shouldStartInOpenCode:
-              Boolean(selectedSession) &&
-              (preferredTool === "opencode" || requestedLaunch === "opencode") &&
-              codingToolAvailability.opencode.available,
-          }),
-    [
-      codingToolAvailability.opencode.available,
-      defaultCwd,
-      isRepositoryLaunchRequest,
-      preferredTool,
-      requestedLaunch,
-      selectedSession,
-    ],
-  );
-
-  useEffect(() => {
-    setActivePaneId((currentId) => currentId ?? initialPanes[0]?.id ?? null);
-  }, [storageScopeKey, initialPanes]);
-
   const ptyAvailabilityPending = ptyAvailability === null;
   const ptyBlocked = Boolean(ptyAvailability && !ptyAvailability.available);
   const shouldForceOpenCodeLauncher =
     selectedSession === null &&
     (Boolean(selectedRepoForLaunch) || requestedLaunch === "opencode");
   const sanitizedPanes = useMemo(() => {
+    const storedPanes = normalizeTerminalPanes(panes);
+
     if (ptyAvailabilityPending || codingToolLoading) {
-      return normalizeTerminalPanes(panes).length > 0 ? normalizeTerminalPanes(panes) : initialPanes;
+      return storedPanes;
     }
 
-    return sanitizeUnavailableTerminalPanes(
-      normalizeTerminalPanes(panes).length > 0 ? normalizeTerminalPanes(panes) : initialPanes,
-      {
-        availableCommands: ptyAvailability?.availableCommands ?? [],
-        opencodeAvailable: codingToolAvailability.opencode.available,
-      },
-    );
+    return sanitizeUnavailableTerminalPanes(storedPanes, {
+      availableCommands: ptyAvailability?.availableCommands ?? [],
+      opencodeAvailable: codingToolAvailability.opencode.available,
+    });
   }, [
     ptyAvailabilityPending,
     codingToolLoading,
     codingToolAvailability.opencode.available,
-    initialPanes,
     panes,
     ptyAvailability?.availableCommands,
   ]);
+
+  // The pane list in local storage is the only source of truth for what is
+  // running. Deriving a pane during render instead would mint a fresh id on
+  // every mount, which orphans the PTY the previous visit started — that is
+  // how leaving the page and coming back used to throw away the session.
+  useEffect(() => {
+    if (
+      ptyAvailabilityPending ||
+      ptyBlocked ||
+      codingToolLoading ||
+      shouldForceOpenCodeLauncher ||
+      panes.length > 0
+    ) {
+      return;
+    }
+
+    setPanes(
+      buildInitialPanes({
+        defaultCwd,
+        opencodeSessionId: selectedSession?.id,
+        preferredTool,
+        selectedSession,
+        shouldStartInOpenCode:
+          Boolean(selectedSession) &&
+          (preferredTool === "opencode" || requestedLaunch === "opencode") &&
+          codingToolAvailability.opencode.available,
+      }),
+    );
+  }, [
+    codingToolAvailability.opencode.available,
+    codingToolLoading,
+    defaultCwd,
+    panes.length,
+    preferredTool,
+    ptyAvailabilityPending,
+    ptyBlocked,
+    requestedLaunch,
+    selectedSession,
+    setPanes,
+    shouldForceOpenCodeLauncher,
+  ]);
+
+  useEffect(() => {
+    setActivePaneId((currentId) => currentId ?? sanitizedPanes[0]?.id ?? null);
+  }, [storageScopeKey, sanitizedPanes]);
 
   const isSessionRunningInAnyPane = useCallback(
     (sessionId: string) => {
@@ -883,8 +904,10 @@ export default function Terminals() {
     },
     [sanitizedPanes],
   );
-  const shouldShowOpenCodeLauncher =
-    shouldForceOpenCodeLauncher || (selectedSession === null && sanitizedPanes.length === 0);
+  // The launcher is a deliberate destination now, not an empty state: the
+  // seeding effect always leaves at least one pane behind, so falling back to
+  // it whenever the pane list looked empty only made the page flicker.
+  const shouldShowOpenCodeLauncher = shouldForceOpenCodeLauncher;
   const openCodeFallbackWarningKey =
     selectedSession &&
     requestedLaunch === "opencode" &&
@@ -992,11 +1015,7 @@ export default function Terminals() {
       return;
     }
 
-    const currentPanes =
-      normalizeTerminalPanes(sanitizedPanes).length > 0
-        ? normalizeTerminalPanes(sanitizedPanes)
-        : initialPanes;
-    const panesAtRisk = currentPanes
+    const panesAtRisk = sanitizedPanes
       .slice(nextCapacity)
       .filter((pane) => {
         const runtime = paneRuntimeStates[pane.id];
@@ -1013,28 +1032,37 @@ export default function Terminals() {
   };
 
   return (
-    <AppLayout>
+    <AppLayout fullBleed>
       <div className="flex h-full min-h-0 min-w-0 flex-col">
         {!isFocusMode ? (
-        <header className="flex flex-col gap-4 pb-4">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <TerminalSquare className="h-4 w-4" />
-                </div>
-                <div>
-                  <h1 className="text-sm font-semibold">Terminals</h1>
-                  <p className="text-[11px] text-muted-foreground">
-                    {selectedSession
-                      ? "This terminal workspace is pinned to one active session and remembers its own pane layout."
-                      : "Up to four embedded PTY sessions — resize, relaunch, and personalize."}
-                  </p>
-                </div>
+        <header className="flex flex-col gap-2 pb-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <TerminalSquare className="h-3.5 w-3.5" />
               </div>
+              <h1 className="text-sm font-semibold">Terminals</h1>
+              {selectedSession ? (
+                <span className="min-w-0 truncate rounded-md border border-primary/20 bg-primary/5 px-2 py-0.5 text-[11px] text-primary">
+                  {selectedSession.title}
+                </span>
+              ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 xl:min-w-[360px] xl:justify-end">
+            <div className="flex flex-wrap items-center gap-2">
+              {codingToolAvailability.opencode.available ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 gap-2 text-[12px]"
+                  onClick={() =>
+                    navigateInApp("/terminals?launch=opencode", setLocation)
+                  }
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  New OpenCode workspace
+                </Button>
+              ) : null}
               <LayoutPicker layout={layout} onChange={requestLayoutChange} />
               <TerminalPersonalization
                 iconOnly
@@ -1156,7 +1184,7 @@ export default function Terminals() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-1 min-h-0 min-w-0 gap-4">
+          <div className="flex flex-1 min-h-0 min-w-0 gap-2">
             {/* 1. Collapsible Sidebar */}
             {!isFocusMode && (
               <aside className={cn(
@@ -1454,9 +1482,9 @@ export default function Terminals() {
             {/* Main Content Pane Area */}
             <div
               className={cn(
-                "flex flex-1 min-h-[420px] min-w-0 flex-col",
+                "flex min-h-0 min-w-0 flex-1 flex-col",
                 isFocusMode &&
-                  "fixed inset-0 z-[90] min-h-0 bg-[#fbfbfb] dark:bg-[#121212] p-3 sm:p-4 lg:p-5",
+                  "fixed inset-0 z-[90] bg-[#fbfbfb] dark:bg-[#121212] p-3",
               )}
             >
               {isFocusMode &&
@@ -1501,168 +1529,213 @@ export default function Terminals() {
                         </Button>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                        <div className="space-y-2">
-                          <Label className="text-[11px] text-muted-foreground block font-medium">New Worktree Branch Name</Label>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={newBranchName}
-                              onChange={(e) => setNewBranchName(e.target.value)}
-                              placeholder="e.g. feature/opencode-hub"
-                              className="h-9 w-full bg-white dark:bg-background border border-black/10 dark:border-white/10 rounded-md pl-3 pr-8 focus:outline-none focus:border-primary/50 text-[12px]"
-                            />
-                            <GitBranch className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground/60" />
+                      <div className="space-y-2">
+                        <Label className="text-[11px] text-muted-foreground block font-medium">
+                          What are you working on?{" "}
+                          <span className="font-normal">(optional)</span>
+                        </Label>
+                        <input
+                          type="text"
+                          value={launchTaskTitle}
+                          onChange={(e) => setLaunchTaskTitle(e.target.value)}
+                          placeholder="e.g. Implement agent-aware OpenCode launch"
+                          className="h-9 w-full bg-white dark:bg-background border border-black/10 dark:border-white/10 rounded-md px-3 focus:outline-none focus:border-primary/50 text-[12px]"
+                        />
+                        {launchTaskTemplates.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {launchTaskTemplates.slice(0, 3).map((template) => (
+                              <button
+                                key={template.id}
+                                type="button"
+                                onClick={() => setLaunchTaskTitle(template.title)}
+                                className="rounded-md border border-black/10 bg-white px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground dark:border-white/10 dark:bg-background"
+                              >
+                                {template.title}
+                              </button>
+                            ))}
                           </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-[11px] text-muted-foreground block font-medium">Base Ref / Branch</Label>
-                          <Select value={baseRef} onValueChange={setBaseRef}>
-                            <SelectTrigger className="h-9 w-full bg-white text-[12px]">
-                              <SelectValue placeholder="Choose base branch" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {baseRef &&
-                              baseRef !== selectedRepoForLaunch.defaultBranch &&
-                              baseRef !== selectedRepoForLaunch.currentBranch &&
-                              baseRef !== "HEAD" ? (
-                                <SelectItem value={baseRef}>
-                                  {baseRef} (Handoff)
-                                </SelectItem>
-                              ) : null}
-                              <SelectItem value={selectedRepoForLaunch.defaultBranch}>
-                                {selectedRepoForLaunch.defaultBranch} (Default)
-                              </SelectItem>
-                              {selectedRepoForLaunch.currentBranch !== selectedRepoForLaunch.defaultBranch && (
-                                <SelectItem value={selectedRepoForLaunch.currentBranch}>
-                                  {selectedRepoForLaunch.currentBranch} (Active)
-                                </SelectItem>
-                              )}
-                              <SelectItem value="HEAD">HEAD</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        ) : null}
                       </div>
 
-                      <div className="space-y-4 border-t border-black/10 dark:border-white/10 pt-4">
-                        <div className="rounded-lg border border-primary/15 bg-primary/[0.04] p-3 text-[11px] leading-5 text-muted-foreground">
-                          <span className="font-semibold text-foreground">Automatic tracking:</span>{" "}
-                          DevDeck will create the agent run, attach the OpenCode workspace,
-                          turn on trace capture, and roll token usage into the Agents page.
-                        </div>
+                      <div className="rounded-lg border border-black/10 dark:border-white/10 bg-secondary/30 dark:bg-white/[0.03] p-3 text-[11px] leading-5 text-muted-foreground">
+                        <p>
+                          Starts OpenCode on a fresh worktree{" "}
+                          <span className="font-mono text-foreground">
+                            {newBranchName || "a new branch"}
+                          </span>{" "}
+                          off{" "}
+                          <span className="font-mono text-foreground">
+                            {baseRef || selectedRepoForLaunch.defaultBranch}
+                          </span>
+                          {selectedAgent ? (
+                            <>
+                              {" "}
+                              with the{" "}
+                              <span className="text-foreground">{selectedAgent.name}</span>{" "}
+                              agent
+                            </>
+                          ) : null}
+                          {selectedWorkflow ? (
+                            <>
+                              {" "}
+                              running{" "}
+                              <span className="text-foreground">{selectedWorkflow.name}</span>
+                            </>
+                          ) : null}
+                          . Token usage and traces roll up to the Agents page.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setShowLaunchAdvanced((value) => !value)}
+                          className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-foreground/80 transition-colors hover:text-foreground"
+                          aria-expanded={showLaunchAdvanced}
+                        >
+                          {showLaunchAdvanced ? (
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          )}
+                          {showLaunchAdvanced ? "Hide options" : "Change branch, agent or workflow"}
+                        </button>
+                      </div>
 
-                        <div className="space-y-2">
-                          <Label className="text-[11px] text-muted-foreground block font-medium">
-                            Task Title
-                          </Label>
-                          <input
-                            type="text"
-                            value={launchTaskTitle}
-                            onChange={(e) => setLaunchTaskTitle(e.target.value)}
-                            placeholder="e.g. Implement agent-aware OpenCode launch"
-                            className="h-9 w-full bg-white dark:bg-background border border-black/10 dark:border-white/10 rounded-md px-3 focus:outline-none focus:border-primary/50 text-[12px]"
-                          />
-                          {launchTaskTemplates.length > 0 ? (
-                            <div className="flex flex-wrap gap-1.5">
-                              {launchTaskTemplates.slice(0, 4).map((template) => (
-                                <button
-                                  key={template.id}
-                                  type="button"
-                                  onClick={() => setLaunchTaskTitle(template.title)}
-                                  className="rounded-md border border-black/10 bg-white px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground dark:border-white/10 dark:bg-background"
-                                >
-                                  {template.title}
-                                </button>
-                              ))}
+                      {showLaunchAdvanced ? (
+                        <div className="space-y-4 border-t border-black/10 dark:border-white/10 pt-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                            <div className="space-y-2">
+                              <Label className="text-[11px] text-muted-foreground block font-medium">Branch</Label>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={newBranchName}
+                                  onChange={(e) => setNewBranchName(e.target.value)}
+                                  placeholder="e.g. feature/opencode-hub"
+                                  className="h-9 w-full bg-white dark:bg-background border border-black/10 dark:border-white/10 rounded-md pl-3 pr-8 focus:outline-none focus:border-primary/50 text-[12px]"
+                                />
+                                <GitBranch className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground/60" />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label className="text-[11px] text-muted-foreground block font-medium">Base branch</Label>
+                              <Select value={baseRef} onValueChange={setBaseRef}>
+                                <SelectTrigger className="h-9 w-full bg-white text-[12px]">
+                                  <SelectValue placeholder="Choose base branch" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {baseRef &&
+                                  baseRef !== selectedRepoForLaunch.defaultBranch &&
+                                  baseRef !== selectedRepoForLaunch.currentBranch &&
+                                  baseRef !== "HEAD" ? (
+                                    <SelectItem value={baseRef}>
+                                      {baseRef} (Handoff)
+                                    </SelectItem>
+                                  ) : null}
+                                  <SelectItem value={selectedRepoForLaunch.defaultBranch}>
+                                    {selectedRepoForLaunch.defaultBranch} (Default)
+                                  </SelectItem>
+                                  {selectedRepoForLaunch.currentBranch !== selectedRepoForLaunch.defaultBranch && (
+                                    <SelectItem value={selectedRepoForLaunch.currentBranch}>
+                                      {selectedRepoForLaunch.currentBranch} (Active)
+                                    </SelectItem>
+                                  )}
+                                  <SelectItem value="HEAD">HEAD</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-4 text-xs md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
+                                <Workflow className="h-3.5 w-3.5" />
+                                Workflow
+                              </Label>
+                              <Select
+                                value={selectedWorkflowId}
+                                onValueChange={handleWorkflowSelection}
+                              >
+                                <SelectTrigger className="h-9 w-full bg-white text-[12px]">
+                                  <SelectValue placeholder="Choose workflow" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">No workflow</SelectItem>
+                                  {launchWorkflows.map((workflow) => (
+                                    <SelectItem key={workflow.id} value={workflow.id}>
+                                      {workflow.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {launchWorkflows.length === 0 ? (
+                                <p className="text-[10px] text-muted-foreground">
+                                  No OpenCode commands found in this project.
+                                </p>
+                              ) : null}
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
+                                <Bot className="h-3.5 w-3.5" />
+                                Agent
+                              </Label>
+                              <Select
+                                value={selectedAgentId}
+                                onValueChange={setSelectedAgentId}
+                              >
+                                <SelectTrigger className="h-9 w-full bg-white text-[12px]">
+                                  <SelectValue placeholder="Choose agent" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">Unassigned OpenCode</SelectItem>
+                                  {launchAgents.map((agent) => (
+                                    <SelectItem key={agent.id} value={agent.id}>
+                                      {agent.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {launchAgents.length === 0 ? (
+                                <p className="text-[10px] text-muted-foreground">
+                                  No OpenCode agents found in this project.
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          {selectedAgent ? (
+                            <div className="border-l-2 border-primary/50 pl-3 text-[11px] leading-5 text-muted-foreground">
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="flex min-w-0 items-center gap-2 font-semibold text-foreground">
+                                  <span className="truncate">{selectedAgent.name}</span>
+                                  {selectedAgentIsRecommended ? (
+                                    <span className="rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] uppercase text-primary">
+                                      Recommended
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-2">
+                                <p className="line-clamp-1">{agentRecommendationText}</p>
+                                {!selectedAgentIsRecommended && recommendedAgent.agent ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedAgentId(recommendedAgent.agent!.id)}
+                                    className="rounded-md border border-black/10 bg-white px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground dark:border-white/10 dark:bg-background"
+                                  >
+                                    Use recommendation
+                                  </button>
+                                ) : null}
+                              </div>
+                              {selectedAgent.responsibilities.length > 0 ? (
+                                <p className="mt-1 line-clamp-2">
+                                  {selectedAgent.responsibilities.slice(0, 3).join(" | ")}
+                                </p>
+                              ) : null}
                             </div>
                           ) : null}
                         </div>
-
-                        <div className="grid grid-cols-1 gap-4 text-xs md:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
-                              <Workflow className="h-3.5 w-3.5" />
-                              Workflow
-                            </Label>
-                            <Select
-                              value={selectedWorkflowId}
-                              onValueChange={handleWorkflowSelection}
-                            >
-                              <SelectTrigger className="h-9 w-full bg-white text-[12px]">
-                                <SelectValue placeholder="Choose workflow" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">No workflow</SelectItem>
-                                {launchWorkflows.map((workflow) => (
-                                  <SelectItem key={workflow.id} value={workflow.id}>
-                                    {workflow.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
-                              <Bot className="h-3.5 w-3.5" />
-                              Agent
-                            </Label>
-                            <Select
-                              value={selectedAgentId}
-                              onValueChange={setSelectedAgentId}
-                            >
-                              <SelectTrigger className="h-9 w-full bg-white text-[12px]">
-                                <SelectValue placeholder="Choose agent" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">Unassigned OpenCode</SelectItem>
-                                {launchAgents.map((agent) => (
-                                  <SelectItem key={agent.id} value={agent.id}>
-                                    {agent.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-
-                        {selectedAgent ? (
-                          <div className="border-l-2 border-primary/50 pl-3 text-[11px] leading-5 text-muted-foreground">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="flex min-w-0 items-center gap-2 font-semibold text-foreground">
-                                <span className="truncate">{selectedAgent.name}</span>
-                                {selectedAgentIsRecommended ? (
-                                  <span className="rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] uppercase text-primary">
-                                    Recommended
-                                  </span>
-                                ) : null}
-                              </span>
-                            </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-2">
-                              <p className="line-clamp-1">{agentRecommendationText}</p>
-                              {!selectedAgentIsRecommended && recommendedAgent.agent ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedAgentId(recommendedAgent.agent!.id)}
-                                  className="rounded-md border border-black/10 bg-white px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground dark:border-white/10 dark:bg-background"
-                                >
-                                  Use recommendation
-                                </button>
-                              ) : null}
-                            </div>
-                            {selectedAgent.responsibilities.length > 0 ? (
-                              <p className="mt-1 line-clamp-2">
-                                {selectedAgent.responsibilities.slice(0, 3).join(" | ")}
-                              </p>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <div className="border-l-2 border-amber-400 pl-3 text-[11px] leading-5 text-amber-900 dark:text-amber-200">
-                            No harness agent is selected. DevDeck will still track this as an unassigned OpenCode run.
-                          </div>
-                        )}
-                      </div>
+                      ) : null}
 
                       <div className="flex items-center justify-end gap-3 pt-2">
                         <Button 
@@ -1751,15 +1824,16 @@ export default function Terminals() {
                       )}
 
                       <div className="text-center pt-2">
-                        <Button 
-                          variant="ghost" 
+                        <Button
+                          variant="ghost"
                           size="sm"
                           className="text-[11px] text-muted-foreground hover:text-foreground"
                           onClick={() => {
                             addPaneWithShell(DEFAULT_QUICK_SHELLS[2]!);
+                            clearSelectedLaunchRepository();
                           }}
                         >
-                          Or open a standard local terminal
+                          Or open a plain shell instead
                         </Button>
                       </div>
                     </div>
@@ -1771,12 +1845,11 @@ export default function Terminals() {
                   availableShells={availableShells}
                   availableCommands={ptyAvailability?.availableCommands ?? []}
                   defaultCwd={defaultCwd}
-                  initialPanes={initialPanes}
                   layout={layout}
                   onLayoutRequestChange={requestLayoutChange}
                   onPaneRuntimeStateChange={handlePaneRuntimeStateChange}
                   opencodeAvailable={codingToolAvailability.opencode.available}
-                  panes={sanitizedPanes.length > 0 ? sanitizedPanes : initialPanes}
+                  panes={sanitizedPanes}
                   preferences={terminalPreferences}
                   requestedLaunch={requestedLaunch}
                   requestedSessionId={selectedSession?.id ?? null}
@@ -1841,7 +1914,8 @@ export default function Terminals() {
         activePaneId={activePaneId}
         activePaneCwd={
           (activePaneId ? paneRuntimeStates[activePaneId]?.info?.cwd : null) ??
-          (panes.find((pane) => pane.id === activePaneId) ?? panes[0] ?? initialPanes[0])?.cwd ??
+          (sanitizedPanes.find((pane) => pane.id === activePaneId) ??
+            sanitizedPanes[0])?.cwd ??
           defaultCwd ??
           null
         }
@@ -1876,7 +1950,6 @@ interface TerminalWorkspaceProps {
   availableCommands: string[];
   availableShells: Array<{ label: string; command: string; args?: string[] }>;
   defaultCwd?: string;
-  initialPanes: TerminalPaneConfig[];
   layout: TerminalLayout;
   onLayoutRequestChange: (layout: TerminalLayout) => void;
   onPaneRuntimeStateChange: (paneId: string, state: TerminalPaneRuntimeState) => void;
@@ -1900,7 +1973,6 @@ function TerminalWorkspace({
   availableCommands,
   availableShells,
   defaultCwd,
-  initialPanes,
   layout,
   onLayoutRequestChange,
   onPaneRuntimeStateChange,
@@ -2008,7 +2080,7 @@ function TerminalWorkspace({
     env?: Record<string, string>;
   }) => {
     const activePane =
-      panes.find((pane) => pane.id === activePaneId) ?? panes[0] ?? initialPanes[0];
+      panes.find((pane) => pane.id === activePaneId) ?? panes[0];
     const activePaneCwd =
       (activePaneId ? paneRuntimeStates[activePaneId]?.info?.cwd : null) ??
       activePane?.cwd ??
@@ -2050,7 +2122,7 @@ function TerminalWorkspace({
   };
 
   return (
-    <div className="relative flex h-full min-h-[420px] min-w-0 flex-1 flex-col">
+    <div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
       {isFocusMode && (
         <div className="flex items-center justify-end gap-2 pb-2.5 pr-1">
           {!selectedSession && (
@@ -2235,32 +2307,6 @@ function TerminalWorkspace({
   );
 }
 
-function initialPanesPlaceholder() {
-  return [] as TerminalPaneConfig[];
-}
-
-function areTerminalPanesEqual(
-  left: TerminalPaneConfig[],
-  right: TerminalPaneConfig[],
-) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((pane, index) => {
-    const candidate = right[index];
-    return (
-      pane.id === candidate.id &&
-      pane.label === candidate.label &&
-      pane.command === candidate.command &&
-      pane.cwd === candidate.cwd &&
-      pane.accent === candidate.accent &&
-      pane.theme === candidate.theme &&
-      JSON.stringify(pane.args ?? []) === JSON.stringify(candidate.args ?? []) &&
-      JSON.stringify(pane.env ?? {}) === JSON.stringify(candidate.env ?? {})
-    );
-  });
-}
 
 interface QuickShellActionsProps {
   availableShells: Array<{
