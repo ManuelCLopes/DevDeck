@@ -16,6 +16,40 @@ const baseContext = {
   sourcePath: "/tmp/repo/agents.json",
 };
 
+/**
+ * `discoverAgentHarness` always walks the global config directories, so any
+ * test that asserts on the *total* set of discovered agents or sources has to
+ * point HOME at an empty directory first — otherwise it picks up whatever
+ * OpenCode, Codex and Claude config the machine running the suite happens to
+ * have and fails for reasons that have nothing to do with the code.
+ */
+async function withEmptyGlobalConfig<T>(run: () => Promise<T>): Promise<T> {
+  const home = mkdtempSync(join(tmpdir(), "devdeck-empty-home-"));
+  const xdg = join(home, ".config");
+  mkdirSync(xdg, { recursive: true });
+
+  const previousHome = process.env.HOME;
+  const previousXdg = process.env.XDG_CONFIG_HOME;
+  process.env.HOME = home;
+  process.env.XDG_CONFIG_HOME = xdg;
+
+  try {
+    return await run();
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    if (previousXdg === undefined) {
+      delete process.env.XDG_CONFIG_HOME;
+    } else {
+      process.env.XDG_CONFIG_HOME = previousXdg;
+    }
+    rmSync(home, { force: true, recursive: true });
+  }
+}
+
 test("parseJsonAgentHarness normalizes agents and workflows", () => {
   const result = parseJsonAgentHarness(
     JSON.stringify({
@@ -111,9 +145,11 @@ test("discoverAgentHarness scans configured project paths", async () => {
   );
 
   try {
-    const result = await discoverAgentHarness({
-      projects: [{ id: "repo", localPath: repoPath, name: "Repo" }],
-    });
+    const result = await withEmptyGlobalConfig(() =>
+      discoverAgentHarness({
+        projects: [{ id: "repo", localPath: repoPath, name: "Repo" }],
+      }),
+    );
 
     assert.equal(result.sources.length, 1);
     assert.equal(result.sources[0]?.agentCount, 1);
@@ -168,9 +204,11 @@ test("discoverAgentHarness picks up opencode agent folder markdown files", async
   );
 
   try {
-    const result = await discoverAgentHarness({
-      projects: [{ id: "repo", localPath: repoPath, name: "Repo" }],
-    });
+    const result = await withEmptyGlobalConfig(() =>
+      discoverAgentHarness({
+        projects: [{ id: "repo", localPath: repoPath, name: "Repo" }],
+      }),
+    );
 
     const sourcePaths = result.sources.map((source) => source.sourcePath);
     assert.ok(
@@ -224,6 +262,113 @@ test("parseMarkdownAgentHarness reads opencode-style YAML frontmatter", () => {
   assert.equal(agent?.description, "Reviews code changes for correctness.");
   assert.equal(agent?.defaultModel, "anthropic/claude-sonnet-4-5");
   assert.deepEqual(agent?.defaultTools.sort(), ["bash", "read"]);
+});
+
+test("parseJsonAgentHarness reads opencode agent and command maps", () => {
+  const result = parseJsonAgentHarness(
+    JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      agent: {
+        build: {
+          description: "Implements scoped changes.",
+          mode: "primary",
+          model: "anthropic/claude-sonnet-4-5",
+        },
+        plan: { description: "Plans before touching code." },
+      },
+      command: {
+        dev: {
+          agent: "build",
+          description: "Development workflow - recon, plan, implement.",
+          template: "Work the task end to end.",
+        },
+        review: { description: "Review the current diff." },
+      },
+      mcp: { linear: { type: "remote", url: "https://example.test" } },
+      permission: { bash: "ask" },
+    }),
+    { ...baseContext, sourcePath: "/tmp/repo/opencode.json" },
+  );
+
+  assert.deepEqual(
+    result.agents.map((agent) => agent.name).sort(),
+    ["build", "plan"],
+  );
+  assert.equal(result.agents[0]?.defaultModel, "anthropic/claude-sonnet-4-5");
+  assert.deepEqual(
+    result.workflows.map((workflow) => workflow.name).sort(),
+    ["/dev", "/review"],
+  );
+  assert.equal(result.workflows[0]?.steps[0]?.agentId, "build");
+});
+
+test("parseJsonAgentHarness ignores unrelated opencode config sections", () => {
+  const result = parseJsonAgentHarness(
+    JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      command: { dev: { description: "Development workflow." } },
+      mcp: { linear: { type: "remote" } },
+      permission: { bash: "ask" },
+      provider: { anthropic: { models: {} } },
+    }),
+    { ...baseContext, sourcePath: "/tmp/repo/opencode.json" },
+  );
+
+  assert.deepEqual(result.agents, []);
+  assert.deepEqual(
+    result.workflows.map((workflow) => workflow.name),
+    ["/dev"],
+  );
+});
+
+test("parseMarkdownAgentHarness ignores prose headings in project docs", () => {
+  const result = parseMarkdownAgentHarness(
+    [
+      "# Notes for AI Agents",
+      "",
+      "## Java / build environment",
+      "Use Maven 3.9 and JDK 21 for every module in this repository.",
+      "",
+      "## Before considering a change done",
+      "Run the verification recipe and update the changelog.",
+      "",
+      "## Tips for Agents",
+      "Prefer small commits and keep the diff readable.",
+    ].join("\n"),
+    {
+      ...baseContext,
+      sourceFormat: "markdown",
+      sourcePath: "/tmp/repo/CLAUDE.md",
+    },
+  );
+
+  assert.deepEqual(result.agents, []);
+});
+
+test("parseMarkdownAgentHarness turns opencode command files into workflows", () => {
+  const result = parseMarkdownAgentHarness(
+    [
+      "---",
+      "description: Troubleshooting workflow - symptom capture first.",
+      "agent: build",
+      "---",
+      "Walk the five debugging phases in order.",
+    ].join("\n"),
+    {
+      ...baseContext,
+      sourceFormat: "markdown",
+      sourcePath: "/tmp/repo/.opencode/command/debug.md",
+    },
+  );
+
+  assert.deepEqual(result.agents, []);
+  assert.equal(result.workflows.length, 1);
+  assert.equal(result.workflows[0]?.name, "/debug");
+  assert.equal(
+    result.workflows[0]?.description,
+    "Troubleshooting workflow - symptom capture first.",
+  );
+  assert.equal(result.workflows[0]?.steps[0]?.agentId, "build");
 });
 
 test("discoverAgentHarness scans the global opencode config directory", async () => {

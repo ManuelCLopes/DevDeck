@@ -347,6 +347,60 @@ function getRecordArray(value: unknown) {
   return [];
 }
 
+/**
+ * Turns an OpenCode `command` entry into a workflow. Commands are what the
+ * user actually types as `/dev`, `/review`, … inside OpenCode, so they are
+ * named with the leading slash to match what the CLI shows them.
+ */
+function normalizeCommandRecord(
+  rawCommand: Record<string, unknown>,
+  context: HarnessSourceContext,
+  index: number,
+): WorkflowDefinition {
+  const key =
+    normalizeString(getRecordValue(rawCommand, ["id", "name", "slug", "key"])) ??
+    `command-${index + 1}`;
+  const name = key.startsWith("/") ? key : `/${key}`;
+  const description = normalizeString(
+    getRecordValue(rawCommand, ["description", "summary"]),
+  );
+  const agentId = normalizeString(
+    getRecordValue(rawCommand, ["agent", "agentId", "subtask"]),
+  );
+  const id = [
+    context.projectId ?? context.projectName ?? "workspace",
+    "command",
+    slugify(key),
+  ].join(":");
+
+  return {
+    description,
+    id,
+    name,
+    projectId: context.projectId,
+    projectName: context.projectName,
+    sourceFormat: context.sourceFormat,
+    sourcePath: context.sourcePath,
+    steps: [
+      {
+        agentId,
+        expectedOutput: null,
+        id: `${id}:step:1`,
+        name: description ?? name,
+        nextStepIds: [],
+        verificationCommandIds: [],
+      },
+    ],
+  };
+}
+
+/**
+ * OpenCode's own config uses the singular `agent` and `command` maps. Older
+ * DevDeck harness files use plural `agents`/`workflows`. Both are read here;
+ * the bare-`parsed` fallback only applies to files that carry none of these
+ * keys, otherwise every top-level section of an opencode.json (`provider`,
+ * `mcp`, `permission`, …) would be imported as if it were an agent.
+ */
 export function parseJsonAgentHarness(
   content: string,
   context: HarnessSourceContext,
@@ -356,8 +410,23 @@ export function parseJsonAgentHarness(
     parsed && typeof parsed === "object"
       ? (parsed as Record<string, unknown>)
       : { agents: parsed };
-  const agentRecords = getRecordArray(root.agents ?? root.agentDefinitions ?? parsed);
-  const workflowRecords = getRecordArray(root.workflows ?? root.workflowDefinitions);
+
+  const rawAgents = getRecordValue(root, [
+    "agents",
+    "agentDefinitions",
+    "agent",
+  ]);
+  const rawWorkflows = getRecordValue(root, [
+    "workflows",
+    "workflowDefinitions",
+  ]);
+  const rawCommands = getRecordValue(root, ["command", "commands"]);
+
+  const agentRecords = getRecordArray(
+    rawAgents ?? (rawWorkflows === undefined && rawCommands === undefined ? parsed : undefined),
+  );
+  const workflowRecords = getRecordArray(rawWorkflows);
+  const commandRecords = getRecordArray(rawCommands);
 
   return {
     agents: agentRecords
@@ -365,9 +434,14 @@ export function parseJsonAgentHarness(
       .filter((agent): agent is AgentDefinition => Boolean(agent)),
     errors: [],
     format: "json",
-    workflows: workflowRecords.map((rawWorkflow, index) =>
-      normalizeWorkflowRecord(rawWorkflow, context, index),
-    ),
+    workflows: [
+      ...workflowRecords.map((rawWorkflow, index) =>
+        normalizeWorkflowRecord(rawWorkflow, context, index),
+      ),
+      ...commandRecords.map((rawCommand, index) =>
+        normalizeCommandRecord(rawCommand, context, index),
+      ),
+    ],
   };
 }
 
@@ -407,20 +481,28 @@ function splitMarkdownSections(content: string, fallbackName: string) {
     return [{ body: content, name: fallbackName }];
   }
 
-  const likelyAgentSections = sections.filter((section) => {
-    const body = section.body.toLowerCase();
-    const name = section.name.toLowerCase();
-    return (
-      name.includes("agent") ||
-      body.includes("responsibil") ||
-      body.includes("handoff") ||
-      body.includes("tools") ||
-      body.includes("skills")
-    );
-  });
-
-  return likelyAgentSections.length > 0 ? likelyAgentSections : sections;
+  // AGENTS.md and CLAUDE.md are mostly prose. Every heading in them used to
+  // become an "agent", which is why the launcher offered things like
+  // "Java / build environment" and "Before considering a change done".
+  // A section only describes an agent if it is named like one or carries the
+  // labelled lists an agent definition uses — and if none does, this file
+  // simply defines no agents.
+  return sections.filter(
+    (section) =>
+      AGENT_SECTION_NAME_PATTERN.test(section.name) ||
+      AGENT_SECTION_LABEL_PATTERN.test(section.body),
+  );
 }
+
+/** Matches headings such as "Builder Agent" or "Reviewer subagent". */
+const AGENT_SECTION_NAME_PATTERN = /\b(?:sub)?agent\s*$/i;
+
+/**
+ * Matches the labelled lists an agent definition carries, e.g. a line reading
+ * `Responsibilities:` or `**Boundaries**:`.
+ */
+const AGENT_SECTION_LABEL_PATTERN =
+  /^\s*(?:[-*]\s*)?(?:\*\*)?(?:responsibilit(?:y|ies)|boundaries|constraints|handoffs?|owns|tools|skills)(?:\*\*)?\s*:/im;
 
 function getMarkdownListForLabels(body: string, labels: string[]) {
   const values: string[] = [];
@@ -616,12 +698,44 @@ export function parseMarkdownAgentHarness(
   const { body: bodyAfterFrontmatter, frontmatter } = extractFrontmatter(content);
 
   const parentDirName = path.basename(path.dirname(context.sourcePath)).toLowerCase();
+  const isCommandFile =
+    parentDirName === "command" || parentDirName === "commands";
+
+  // `.opencode/command/<name>.md` defines a slash command, not an agent. It is
+  // the same thing OpenCode lists as `/dev`, `/review`, … so DevDeck surfaces
+  // it as a workflow rather than adding it to the agent roster.
+  if (isCommandFile) {
+    return {
+      agents: [],
+      errors: [],
+      format: "markdown",
+      workflows: [
+        normalizeCommandRecord(
+          {
+            agent: frontmatter
+              ? getRecordValue(frontmatter, ["agent", "subtask"])
+              : undefined,
+            description:
+              (frontmatter
+                ? getRecordValue(frontmatter, ["description", "summary"])
+                : undefined) ?? getMarkdownDescription(bodyAfterFrontmatter),
+            id:
+              normalizeString(
+                frontmatter ? getRecordValue(frontmatter, ["name", "title"]) : null,
+              ) ?? fallbackName,
+          },
+          { ...context, sourceFormat: "markdown" },
+          0,
+        ),
+      ],
+    };
+  }
+
   const isSingleAgentFile =
     frontmatter !== null ||
     parentDirName === "agent" ||
     parentDirName === "agents" ||
-    parentDirName === "prompts" ||
-    parentDirName === "commands";
+    parentDirName === "prompts";
 
   if (isSingleAgentFile) {
     const firstHeadingMatch = bodyAfterFrontmatter.match(/^\s*#\s+(.+)$/m);
