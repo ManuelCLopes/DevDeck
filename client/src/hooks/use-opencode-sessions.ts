@@ -9,6 +9,8 @@ export interface OpenCodeSessionView extends OpenCodeSessionRecord {
   resolvedProjectName: string | null;
 }
 
+const OPEN_CODE_SESSION_POLL_INTERVAL_MS = 15_000;
+
 export function useOpenCodeSessions() {
   const desktopApi = getDesktopApi();
   const { availability } = useCodingTool();
@@ -40,11 +42,30 @@ export function useOpenCodeSessions() {
   useEffect(() => {
     void refresh();
 
+    // Each poll spawns two HTTP calls against the OpenCode server DevDeck
+    // starts on the user's behalf. Sessions are created by hand, so there is
+    // nothing to see several times a minute — and there is nothing at all to
+    // see while the window is in the background.
     const interval = setInterval(() => {
-      void refresh();
-    }, 3000);
+      if (document.visibilityState === "hidden") {
+        return;
+      }
 
-    return () => clearInterval(interval);
+      void refresh();
+    }, OPEN_CODE_SESSION_POLL_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refresh();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [refresh]);
 
   const mappedSessions = useMemo(() => {

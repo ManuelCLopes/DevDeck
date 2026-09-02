@@ -86,6 +86,23 @@ function writeAgentHarness(repositoryPath: string) {
   );
 }
 
+/**
+ * Timestamps for the telemetry fixtures, anchored a couple of hours in the
+ * past. The Agents page shows "Last 30 days" by default, so fixed calendar
+ * dates only work until the day the window moves past them.
+ */
+function buildRecentTelemetryTimestamps() {
+  const hourMs = 60 * 60 * 1000;
+  const now = Date.now();
+
+  return {
+    runStartedAt: new Date(now - 2 * hourMs).toISOString(),
+    usageCreatedAt: new Date(now - 1.5 * hourMs).toISOString(),
+    traceCreatedAt: new Date(now - 1.4 * hourMs).toISOString(),
+    runEndedAt: new Date(now - hourMs).toISOString(),
+  };
+}
+
 function createTestWorkspace() {
   const tempDir = mkdtempSync(join(tmpdir(), "devdeck-e2e-"));
   const rootDir = join(tempDir, "workspace");
@@ -360,12 +377,16 @@ test("agent productivity insights summarize persisted telemetry", async () => {
   const alphaPath = join(workspace.rootDir, "alpha");
   const traceDirectory = join(alphaPath, ".devdeck", "traces");
   mkdirSync(traceDirectory, { recursive: true });
+  // The Agents page filters telemetry to "Last 30 days" by default, so these
+  // timestamps have to be relative to now. Hardcoded dates make the test pass
+  // until wall-clock time walks past the window, and then fail forever.
+  const telemetry = buildRecentTelemetryTimestamps();
   writeFileSync(
     join(traceDirectory, "run-insights.jsonl"),
     `${JSON.stringify({
       agentRunId: "run-insights",
       commandsRun: ["npm test"],
-      createdAt: "2026-08-01T10:40:00.000Z",
+      createdAt: telemetry.traceCreatedAt,
       errors: ["Type check failed once"],
       filesTouched: ["client/src/pages/Agents.tsx"],
       handoffTargetAgentId: "builder",
@@ -382,22 +403,22 @@ test("agent productivity insights summarize persisted telemetry", async () => {
   );
 
   try {
-    await page.evaluate(async (worktreePath) => {
+    await page.evaluate(async (fixture) => {
       const desktopApi = (window as any).devdeck;
       await desktopApi.saveAgentRuns([
         {
           agentId: "builder",
           branchName: "feature/insights",
-          endedAt: "2026-08-01T11:00:00.000Z",
+          endedAt: fixture.runEndedAt,
           id: "run-insights",
           opencodeSessionId: "ses_insights",
           projectId: "alpha",
-          startedAt: "2026-08-01T10:00:00.000Z",
+          startedAt: fixture.runStartedAt,
           status: "completed",
           taskTitle: "Build insight panel",
           terminalPaneId: "pane-insights",
           workflowRunId: "feature",
-          worktreePath,
+          worktreePath: fixture.worktreePath,
         },
       ]);
       await desktopApi.saveTokenUsageEvents([
@@ -406,7 +427,7 @@ test("agent productivity insights summarize persisted telemetry", async () => {
           agentRunId: "run-insights",
           cacheReadTokens: 10,
           cacheWriteTokens: 0,
-          createdAt: "2026-08-01T10:30:00.000Z",
+          createdAt: fixture.usageCreatedAt,
           estimatedCost: 0.42,
           id: "usage-insights",
           inputTokens: 700,
@@ -423,7 +444,7 @@ test("agent productivity insights summarize persisted telemetry", async () => {
         window.localStorage.getItem("devdeck_workspace_selection") ?? "null",
       );
       await desktopApi.ingestAgentTaskTraces({ selection: persistedSelection });
-    }, alphaPath);
+    }, { ...telemetry, worktreePath: alphaPath });
 
     await page.getByRole("button", { name: "Agents", exact: true }).click();
     await expect(page.getByText("OpenCode Launch", { exact: true })).toBeVisible();
@@ -529,22 +550,29 @@ test("terminal launcher exposes agent-aware OpenCode setup before launch", async
       page.locator("main").getByRole("heading", { name: "alpha", exact: true }),
     ).toBeVisible();
 
-    await expect(page.getByText("Task Title", { exact: true })).toBeVisible();
-    await expect(page.getByText("Workflow", { exact: true })).toBeVisible();
-    await expect(page.getByText("Agent", { exact: true })).toBeVisible();
-    await expect(page.getByText("Feature Build", { exact: true })).toBeVisible();
-    await expect(page.locator('input[value="handoff/feature-builder"]')).toBeVisible();
+    // The task is the only thing the launcher asks for up front; the branch,
+    // workflow and agent it resolved are summarised and editable behind the
+    // "Change branch, agent or workflow" disclosure.
     await expect(page.locator('input[value="Continue implementation"]')).toBeVisible();
+    await expect(page.getByText("Feature Build", { exact: true })).toBeVisible();
     await expect(
       page.locator("main").getByText("Builder Agent", { exact: true }).first(),
     ).toBeVisible();
     await expect(
+      page.getByRole("button", { name: "Launch OpenCode Workspace", exact: true }),
+    ).toBeVisible();
+
+    await page
+      .getByRole("button", { name: "Change branch, agent or workflow" })
+      .click();
+
+    await expect(page.getByText("Workflow", { exact: true })).toBeVisible();
+    await expect(page.getByText("Agent", { exact: true })).toBeVisible();
+    await expect(page.locator('input[value="handoff/feature-builder"]')).toBeVisible();
+    await expect(
       page
         .locator("main")
         .getByText(/Implement scoped changes \| Run focused verification/),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Launch OpenCode Workspace", exact: true }),
     ).toBeVisible();
   } finally {
     await electronApp.close();

@@ -57,9 +57,21 @@ interface PersistentTerminalExit {
   signal: number | null;
 }
 
+interface TerminalDimensions {
+  cols: number;
+  rows: number;
+}
+
 interface PersistentTerminalSession extends PersistentTerminalRuntime {
   buffer: string;
   dataDisposer: (() => void) | null;
+  /**
+   * Size the pane last asked for. It is recorded even while the PTY is still
+   * spawning so the real geometry can be applied the moment it exists —
+   * otherwise the process would stay stuck at the fallback 80x24 and full
+   * screen TUIs (opencode, claude) would draw into a small box.
+   */
+  dimensions: TerminalDimensions | null;
   exitDisposer: (() => void) | null;
   key: string;
   lastExit: PersistentTerminalExit | null;
@@ -79,6 +91,13 @@ interface PersistentTerminalSubscriber {
 const persistedTerminalSessions = new Map<string, PersistentTerminalSession>();
 const MAX_BUFFER_LENGTH = 200_000;
 
+/**
+ * Identifies what a session *runs*. Two configs with the same signature can
+ * share one PTY; a change to it means the old process is no longer what the
+ * pane asked for and has to be replaced. The label is deliberately excluded —
+ * it is only a display name, and renaming a pane should never kill the shell
+ * running inside it.
+ */
 function buildSessionSignature(options: UseEmbeddedTerminalOptions) {
   const envPairs = options.env
     ? Object.entries(options.env)
@@ -91,7 +110,6 @@ function buildSessionSignature(options: UseEmbeddedTerminalOptions) {
     command: options.command ?? null,
     cwd: options.cwd ?? null,
     env: envPairs,
-    label: options.label ?? null,
   });
 }
 
@@ -102,6 +120,7 @@ function createPersistentSession(
   return {
     buffer: "",
     dataDisposer: null,
+    dimensions: null,
     error: null,
     exitDisposer: null,
     info: null,
@@ -114,6 +133,61 @@ function createPersistentSession(
     status: "idle",
     subscribers: new Set(),
   };
+}
+
+/**
+ * Records the pane geometry and pushes it to the PTY when one is running.
+ * The size is remembered even while the PTY is still spawning so it can be
+ * applied as soon as the process exists.
+ */
+function applySessionDimensions(
+  session: PersistentTerminalSession,
+  dimensions: TerminalDimensions,
+) {
+  const changed =
+    session.dimensions?.cols !== dimensions.cols ||
+    session.dimensions?.rows !== dimensions.rows;
+
+  session.dimensions = dimensions;
+
+  const ptyId = session.ptyId;
+  if (!ptyId || !changed) {
+    return;
+  }
+
+  const desktopApi = getDesktopApi();
+  void desktopApi?.terminal
+    ?.resize({ id: ptyId, cols: dimensions.cols, rows: dimensions.rows })
+    .catch(() => undefined);
+}
+
+/**
+ * Asks a running process to repaint by shrinking the PTY by one row and
+ * restoring it. The kernel only raises SIGWINCH when the geometry actually
+ * changes, so re-sending the same size would do nothing. This is what brings
+ * a full screen TUI back after the terminals page was unmounted: the replayed
+ * scrollback alone leaves whatever the app last drew, and the nudge makes it
+ * redraw against the current viewport.
+ */
+function requestSessionRepaint(session: PersistentTerminalSession) {
+  const desktopApi = getDesktopApi();
+  const ptyId = session.ptyId;
+  const dimensions = session.dimensions;
+
+  if (!desktopApi?.terminal || !ptyId || !dimensions || dimensions.rows <= 1) {
+    return;
+  }
+
+  void desktopApi.terminal
+    .resize({ id: ptyId, cols: dimensions.cols, rows: dimensions.rows - 1 })
+    .then(() =>
+      desktopApi.terminal.resize({
+        id: ptyId,
+        cols: dimensions.cols,
+        rows: dimensions.rows,
+      }),
+    )
+    .catch(() => undefined);
 }
 
 function notifyRuntime(session: PersistentTerminalSession) {
@@ -215,6 +289,7 @@ async function writeToPersistentSession(
 async function spawnPersistentSession(
   session: PersistentTerminalSession,
   request: UseEmbeddedTerminalOptions,
+  dimensions: TerminalDimensions | null,
 ) {
   const desktopApi = getDesktopApi();
   if (!desktopApi?.terminal) {
@@ -223,6 +298,10 @@ async function spawnPersistentSession(
       "Embedded terminals require the DevDeck desktop app with the node-pty binding built.";
     notifyRuntime(session);
     return;
+  }
+
+  if (dimensions) {
+    applySessionDimensions(session, dimensions);
   }
 
   if (session.spawnPromise || session.ptyId) {
@@ -238,19 +317,38 @@ async function spawnPersistentSession(
 
   session.spawnPromise = (async () => {
     try {
+      const requestedDimensions = session.dimensions ?? FALLBACK_DIMENSIONS;
       const result = await desktopApi.terminal.spawn({
         command: request.command,
         args: request.args,
         cwd: request.cwd,
         env: request.env,
         label: request.label,
-        ...readRequestedDimensions(),
+        cols: requestedDimensions.cols,
+        rows: requestedDimensions.rows,
       });
 
       session.ptyId = result.id;
       session.status = "ready";
       session.info = result;
       notifyRuntime(session);
+
+      // The pane may have been measured (or resized) while the spawn was in
+      // flight — push the latest geometry now that there is a process to
+      // resize.
+      if (
+        session.dimensions &&
+        (session.dimensions.cols !== requestedDimensions.cols ||
+          session.dimensions.rows !== requestedDimensions.rows)
+      ) {
+        await desktopApi.terminal
+          .resize({
+            id: result.id,
+            cols: session.dimensions.cols,
+            rows: session.dimensions.rows,
+          })
+          .catch(() => undefined);
+      }
 
       if (session.pendingWrites.length > 0) {
         for (const chunk of session.pendingWrites) {
@@ -303,13 +401,12 @@ async function restartPersistentSession(
   session: PersistentTerminalSession,
   request: UseEmbeddedTerminalOptions,
 ) {
+  const dimensions = session.dimensions;
   await disposeSessionProcess(session, { preserveRuntime: false });
-  await spawnPersistentSession(session, request);
+  await spawnPersistentSession(session, request, dimensions);
 }
 
-function readRequestedDimensions() {
-  return { cols: 80, rows: 24 };
-}
+const FALLBACK_DIMENSIONS: TerminalDimensions = { cols: 80, rows: 24 };
 
 /**
  * Wires an xterm.js Terminal to a node-pty process owned by the electron
@@ -362,6 +459,14 @@ export function useEmbeddedTerminal(
         fitAddonRef.current?.fit();
       } catch {
         // ignored — terminal may be detached momentarily
+        return;
+      }
+
+      // A different font size means a different column/row count, so the
+      // process needs to hear about it too.
+      const session = sessionRef.current;
+      if (session) {
+        applySessionDimensions(session, readTerminalDimensions(terminal));
       }
     });
   }, [xtermOptions]);
@@ -475,6 +580,8 @@ export function useEmbeddedTerminal(
 
     session.subscribers.add(subscriber);
 
+    const wasAlreadyRunning = Boolean(session.ptyId);
+
     setStatus(session.status);
     setError(session.error);
     setInfo(session.info);
@@ -482,32 +589,44 @@ export function useEmbeddedTerminal(
       terminal.write(session.buffer);
     }
 
-    void spawnPersistentSession(session, options);
+    void spawnPersistentSession(
+      session,
+      options,
+      readTerminalDimensions(terminal),
+    );
+
+    if (wasAlreadyRunning) {
+      // Re-attaching to a process that kept running while this page was
+      // unmounted. The replayed scrollback restores the history; the nudge
+      // makes a full screen TUI redraw its current state into the viewport.
+      requestSessionRepaint(session);
+    }
 
     const xtermDisposer = terminal.onData((data) => {
       void writeToPersistentSession(session, data);
     });
 
-    const resizeObserver = new ResizeObserver(() => {
+    const fitToContainer = () => {
       try {
         fitAddon.fit();
       } catch {
         return;
       }
 
-      const ptyId = session.ptyId;
-      if (!ptyId) {
-        return;
-      }
+      applySessionDimensions(session, readTerminalDimensions(terminal));
+    };
 
-      const { cols, rows } = readTerminalDimensions(terminal);
-      void desktopApi.terminal.resize({ id: ptyId, cols, rows });
-    });
+    // The container is usually still settling on the first frame, so the fit
+    // above can measure a collapsed box. Re-measure once layout has run.
+    const initialFitFrame = requestAnimationFrame(fitToContainer);
+
+    const resizeObserver = new ResizeObserver(fitToContainer);
 
     resizeObserver.observe(container);
     resizeObserverRef.current = resizeObserver;
 
     return () => {
+      cancelAnimationFrame(initialFitFrame);
       resizeObserver.disconnect();
       session.subscribers.delete(subscriber);
       xtermDisposer.dispose();
@@ -530,13 +649,13 @@ export function useEmbeddedTerminal(
       }
     };
     // We deliberately re-run when these inputs change so the PTY respawns
-    // with the new command/cwd. preference changes flow through the
-    // separate mutation effect above so the shell keeps running.
+    // with the new command/cwd. Preference and label changes are excluded:
+    // they flow through the mutation effect above (or affect nothing but the
+    // header) so the shell keeps running.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     options.cwd,
     options.command,
-    options.label,
     options.persistenceKey,
     options.args ? options.args.join("\u0000") : "",
     options.env
